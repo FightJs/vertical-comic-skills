@@ -92,6 +92,7 @@ python3 tools/sync_skills.py
 python3 tools/check_bundle.py
 python3 -B -m unittest discover -s skills/vertical-comic-preproduction/tests
 python3 -B -m unittest discover -s tests
+node skills/vertical-comic-preproduction/tests/test_async_generation.js
 ```
 
 GitHub Actions会在push和pull request后执行这些检查。测试使用隔离合成输入，不发起真实生图调用。

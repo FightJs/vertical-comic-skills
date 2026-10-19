@@ -12,9 +12,11 @@ jobs:
     runs-on: ${{ matrix.os }}
     env:
       PYTHONUTF8: '0'
-      CODEX_HOME: ${{ runner.temp }}/comic-ci-home
     steps:
       - uses: actions/checkout@v4
+      - name: Isolate local user state
+        shell: bash
+        run: echo "CODEX_HOME=$RUNNER_TEMP/comic-ci-home" >> "$GITHUB_ENV"
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
@@ -45,9 +47,11 @@ jobs:
     runs-on: ${{ matrix.os }}
     env:
       PYTHONUTF8: '0'
-      CODEX_HOME: ${{ runner.temp }}/comic-ci-home
     steps:
       - uses: actions/checkout@v4
+      - name: Isolate local user state
+        shell: bash
+        run: echo "CODEX_HOME=$RUNNER_TEMP/comic-ci-home" >> "$GITHUB_ENV"
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'

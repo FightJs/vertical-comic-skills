@@ -10,7 +10,8 @@ from platform_io import atomic_json, file_lock, configure_stdio
 CORE = ('comic_start', 'usage_config', 'init_preproduction', 'production_runtime',
         'episode_dispatch_queue', 'slot_leases', 'worker_watchdog', 'runtime_snapshot',
         'handoff_zip', 'handoff_delivery', 'make_generation_qa', 'repair_input_guard',
-        'repair_prompt_package', 'repair_prompt_package_v2', 'rule_contributions')
+        'repair_prompt_package', 'repair_prompt_package_v2', 'rule_contributions',
+        'update_skills', 'installation_state')
 
 
 def check(*, probe_root=None, require_svg=False):

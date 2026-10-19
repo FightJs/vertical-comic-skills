@@ -21,6 +21,10 @@ description: Coordinate a staged vertical-comic workflow from approved scripts a
 
 规则记忆默认随本Skill内置，四个阶段共用assets/rule-memory；用户增补与内置规则分开。维护/导出/可选GitHub同步读[内置规则维护](references/builtin-rule-maintenance.md)；不需要GitHub账号才能生产或本地更新。明确外置来源和旧RV保持原冻结来源，不静默改库。
 
+## 安装更新
+
+用户要求检查、更新五件套或恢复旧版时，读[安装更新](references/installation-update.md)，用当前安装的scripts/update_skills.py处理。默认免账号稳定版；只检查不安装，明确要求更新则无冲突直接执行。个人改动需处理差异，保留用户增补，旧生产RV不热升级。
+
 ## 选择任务模式
 
 先读[任务来源与历史范围](references/task-origin.md)，再选职责。明确重新制作/仅根据脚本和资产时建立独立任务，只读取本次输入，不追索同书同话其他任务的调用、旧图、QA或预算。恢复/接包保留原任务，复用仅限用户指定成果。分工制作不等于续做；任务来源必须写入新运行与交接索引。

@@ -1,0 +1,43 @@
+name: Publish stable Skill release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+jobs:
+  verify:
+    uses: ./.github/workflows/check.yml
+  publish:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements.txt
+      - name: Verify tag and build immutable installer
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          test "$(cat VERSION)" = "$RELEASE_TAG"
+          python -B tools/check_bundle.py
+          python -B tools/build_release.py
+      - name: Publish after all platform checks pass
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo 'Release already exists; refusing to overwrite.'
+            exit 1
+          fi
+          cat > /tmp/release-notes.md <<'EOF'
+          下载下方 vertical-comic-skills-版本.zip 安装包。普通用户无需Git或GitHub账号。
+          已安装新版更新入口的用户可说：检查并更新条漫Skill五件套到最新稳定版。
+          用户增补和项目配置保留，正在生产的RV保持原冻结版本。
+          更新说明及高级操作见包内README和installation-update.md。
+          EOF
+          gh release create "$RELEASE_TAG" dist/*.zip dist/*.sha256 --verify-tag --latest --title "$RELEASE_TAG · 条漫Skill五件套" --notes-file /tmp/release-notes.md

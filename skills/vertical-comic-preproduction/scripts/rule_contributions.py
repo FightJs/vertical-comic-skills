@@ -4,6 +4,8 @@
 No login is required for update/export. No credentials are included in a bundle.
 """
 from pathlib import Path
+from contextlib import nullcontext
+from installation_state import installation_lock
 from platform_io import portable_relative, atomic_json
 import argparse,base64,copy,hashlib,json,os,re,shutil,subprocess,sys,tempfile,uuid,zipfile
 from builtin_memory import ROOT,read,digest,resolve,source,codex_home
@@ -57,6 +59,12 @@ def enqueue(library_root=None,state_root=None):
 
 
 def update(rule_file,body_file,review_file,*,library_root=None,state_root=None):
+    root=Path(library_root or ROOT).resolve();home=root.parents[3] if len(root.parents)>3 else None
+    managed=(home is not None and root==home/"skills/vertical-comic-preproduction/assets/rule-memory" and (home/"skill-bundles/vertical-comic-skills/installed.json").is_file())
+    with installation_lock(home) if managed else nullcontext():
+        return _update(rule_file,body_file,review_file,library_root=root,state_root=state_root)
+
+def _update(rule_file,body_file,review_file,*,library_root=None,state_root=None):
     root=Path(library_root or ROOT).resolve();user=root/'用户增补';rule=read(rule_file);review=read(review_file);body=Path(body_file).read_text(encoding='utf-8-sig')
     if (review.get('source_kind')!='user_message' or not review.get('source_locator') or not review.get('authorization') or
         review.get('portable') is not True or review.get('contains_story_facts') is not False):raise ValueError('缺真实维护授权及通用性审查；生产不得自动回写')

@@ -6,6 +6,7 @@ import argparse,datetime,hashlib,json,os,shutil,subprocess,sys,tempfile
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'skills/vertical-comic-preproduction/scripts'))
 from platform_io import portable_relative, check_destination_paths
+from installation_state import installation_lock,begin_backup,complete_backup
 NAME='vertical-comic-skills'
 USER_ADDITIONS='skills/vertical-comic-preproduction/assets/rule-memory/用户增补'
 USER_RULES=USER_ADDITIONS+'/'
@@ -63,9 +64,16 @@ def inspect(home,data):
     elif any(t.exists() for t in targets):conflicts.append('Existing installation is not managed by this updater')
     changes=[n for n,h in expected.items() if not safe(home,n).is_file() or digest(safe(home,n))!=h]
     if old:changes.extend(n for n in old['files'] if n not in expected and not user_rule(n))
+    if old and old.get('version')!=(ROOT/'VERSION').read_text(encoding='utf-8').strip():changes.append('VERSION')
+    if old and (ROOT/'release-origin.json').is_file() and old.get('source')!=json.loads((ROOT/'release-origin.json').read_text(encoding='utf-8')):changes.append('release-origin.json')
     return managed,expected,targets,conflicts,changes
 
 def install(home,*,check=False,replace_existing=False):
+    home=Path(home).expanduser().resolve()
+    if check:return _install(home,check=True,replace_existing=replace_existing)
+    with installation_lock(home):return _install(home,replace_existing=replace_existing)
+
+def _install(home,*,check=False,replace_existing=False):
     home=Path(home).expanduser().resolve();data=bundle()
     managed,expected,targets,conflicts,changes=inspect(home,data)
     if check:return {'status':'LOCAL_CHANGES' if conflicts else 'UPDATE_AVAILABLE' if changes else 'UP_TO_DATE','changed_files':len(changes),'conflicts':conflicts}
@@ -81,6 +89,8 @@ def install(home,*,check=False,replace_existing=False):
             dest=safe(stage,mapped(row['path']));dest.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(ROOT/row['path'],dest)
             if digest(dest)!=row['sha256']:raise ValueError('Staged file changed')
         source_user=safe(home,USER_RULES.rstrip('/'));staged_user=safe(stage,USER_RULES.rstrip('/'))
+        if (source_user.parent/'.update-lock').exists():raise ValueError('规则维护进行中或有待恢复记录，未改变安装')
+        before={}
         if source_user.exists():
             if any(p.is_symlink() for p in source_user.rglob('*')):raise ValueError('Refusing symlink user rules')
             before={p.relative_to(source_user).as_posix():digest(p) for p in tree_files(source_user)}
@@ -96,13 +106,16 @@ def install(home,*,check=False,replace_existing=False):
         if (scripts/'builtin_memory.py').exists():
             code="import sys;from pathlib import Path;sys.path.insert(0,sys.argv[1]);from builtin_memory import resolve;resolve(library_root=Path(sys.argv[2]),cache_root=Path(sys.argv[3]))"
             subprocess.run([sys.executable, '-X', 'utf8','-B','-c',code,str(scripts),str(staged_user.parent),str(stage/'.validation-cache')],check=True,capture_output=True,text=True, encoding='utf-8')
+        if source_user.exists() and before!={p.relative_to(source_user).as_posix():digest(p) for p in tree_files(source_user)}:raise ValueError('User rules changed before activation; retry after maintenance')
+        backup_metadata=begin_backup(home,backups)
         for target in targets:
             if target.is_symlink():raise ValueError('Refusing symlink installation')
             rel=target.relative_to(home);saved=backups/rel
             if target.exists():saved.parent.mkdir(parents=True,exist_ok=True);os.replace(target,saved);moved.append((saved,target))
             staged=stage/rel;target.parent.mkdir(parents=True,exist_ok=True);os.replace(staged,target);activated.append(target)
         commit=subprocess.run(['git','-C',str(ROOT),'rev-parse','HEAD'],capture_output=True,text=True, encoding='utf-8') if shutil.which('git') and (ROOT/'.git').exists() else None
-        marker={'policy':'vertical_comic_install_v1','repository':'FightJs/'+NAME,'commit':commit.stdout.strip() if commit and commit.returncode==0 else None,'bundle_sha256':digest(ROOT/'bundle.json'),'version':(ROOT/'VERSION').read_text(encoding='utf-8').strip(),'files':expected,'memory_root':str(managed/'memory'),'python':sys.executable,'runtime_status':'PASS'}
+        marker={'policy':'vertical_comic_install_v1','repository':'FightJs/'+NAME,'commit':commit.stdout.strip() if commit and commit.returncode==0 else None,'bundle_sha256':digest(ROOT/'bundle.json'),'version':(ROOT/'VERSION').read_text(encoding='utf-8').strip(),'files':expected,'memory_root':str(managed/'memory'),'python':sys.executable,'runtime_status':'PASS','source':json.loads((ROOT/'release-origin.json').read_text(encoding='utf-8')) if (ROOT/'release-origin.json').is_file() else {'channel':'local'}}
+        complete_backup(backups,backup_metadata)
         tmp=stage/'installed.json';tmp.write_text(json.dumps(marker,ensure_ascii=False,indent=2)+'\n', encoding='utf-8', newline='\n');os.replace(tmp,managed/'installed.json')
     except Exception:
         for target in reversed(activated):

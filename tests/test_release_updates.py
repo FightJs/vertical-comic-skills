@@ -148,8 +148,7 @@ class ReleaseUpdateTests(unittest.TestCase):
                 self.assertFalse((self.root/'never-created').exists())
     def test_custom_installed_entry_detects_home_without_environment(self):
         sync.install(self.home);script=self.home/'skills/vertical-comic-preproduction/scripts/update_skills.py'
-        code='import sys;sys.path.insert(0,sys.argv[1]);import update_skills as u
-from urllib.error import HTTPError;print(u.home_path())'
+        code='import sys;sys.path.insert(0,sys.argv[1]);import update_skills as u;print(u.home_path())'
         env=os.environ.copy();env.pop('CODEX_HOME',None)
         result=subprocess.run([sys.executable,'-X','utf8','-B','-c',code,str(script.parent)],capture_output=True,text=True,encoding='utf-8',env=env)
         self.assertEqual(result.returncode,0,result.stderr);self.assertEqual(Path(result.stdout.strip()),self.home.resolve())

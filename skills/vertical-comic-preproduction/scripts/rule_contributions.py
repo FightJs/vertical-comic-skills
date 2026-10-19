@@ -5,10 +5,10 @@ No login is required for update/export. No credentials are included in a bundle.
 """
 from pathlib import Path
 import argparse,base64,copy,hashlib,json,os,re,shutil,subprocess,sys,tempfile,uuid,zipfile
-from builtin_memory import ROOT,read,digest,resolve,source
+from builtin_memory import ROOT,read,digest,resolve,source,codex_home
 from rule_memory import source_index
 
-STATE=Path.home()/'.codex/comic/rule-contributions'
+STATE=codex_home()/'comic/rule-contributions'
 
 
 def write(p,value):

@@ -8,6 +8,7 @@ import sync_skills as sync
 import build_release
 sys.path.insert(0,str(ROOT/'skills/vertical-comic-preproduction/scripts'))
 import update_skills as u
+from urllib.error import HTTPError
 import installation_state as state
 
 class ReleaseUpdateTests(unittest.TestCase):
@@ -45,6 +46,12 @@ class ReleaseUpdateTests(unittest.TestCase):
         release=self.remote();release['assets']=[]
         with patch.object(u,'json_request',return_value=release):
             with self.assertRaisesRegex(ValueError,'尚无统一更新包'):u.check(self.home)
+    def test_anonymous_api_limit_falls_back_to_public_release_without_login(self):
+        fallback={**self.remote(),'metadata_source':'public_release_redirect'}
+        with patch.object(u,'json_request',side_effect=HTTPError('https://api.github.com',403,'rate limit',{},None)),patch.object(u,'public_latest_release',return_value=fallback):
+            result=u.check(self.home)
+        self.assertEqual(result['status'],'UPDATE_AVAILABLE');self.assertEqual(result['available']['metadata_source'],'public_release_redirect');self.assertFalse(self.home.exists())
+
     def test_preview_uses_exact_commit(self):
         with patch.object(u,'json_request',return_value={'sha':'a'*40}) as call:
             result=u.remote_version('preview')
@@ -141,7 +148,8 @@ class ReleaseUpdateTests(unittest.TestCase):
                 self.assertFalse((self.root/'never-created').exists())
     def test_custom_installed_entry_detects_home_without_environment(self):
         sync.install(self.home);script=self.home/'skills/vertical-comic-preproduction/scripts/update_skills.py'
-        code='import sys;sys.path.insert(0,sys.argv[1]);import update_skills as u;print(u.home_path())'
+        code='import sys;sys.path.insert(0,sys.argv[1]);import update_skills as u
+from urllib.error import HTTPError;print(u.home_path())'
         env=os.environ.copy();env.pop('CODEX_HOME',None)
         result=subprocess.run([sys.executable,'-X','utf8','-B','-c',code,str(script.parent)],capture_output=True,text=True,encoding='utf-8',env=env)
         self.assertEqual(result.returncode,0,result.stderr);self.assertEqual(Path(result.stdout.strip()),self.home.resolve())

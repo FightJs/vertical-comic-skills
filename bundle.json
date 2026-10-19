@@ -235,8 +235,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/references/installation-update.md",
-      "sha256": "35f1d823615622c155ea321f9e8bac6bd1d3c4d0d14b74603b3d5eb400dc45a1",
-      "bytes": 4006
+      "sha256": "56b88310188ba1ce3c37efbee48371f898d21dee4da0a46de24fa07068ee9eb2",
+      "bytes": 4127
     },
     {
       "path": "skills/vertical-comic-preproduction/references/legacy-package-repair.md",
@@ -695,8 +695,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/update_skills.py",
-      "sha256": "b5fbae41acacc7d7785a003774e16351c5a5bb39c96331208d5bd6677598e822",
-      "bytes": 10482
+      "sha256": "2630199a7b5aa844030fb048dbfe236edfe375ad02879485110145bc738b2dd1",
+      "bytes": 11761
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/usage_config.py",

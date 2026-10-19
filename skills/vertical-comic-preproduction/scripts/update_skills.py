@@ -25,12 +25,30 @@ def json_request(url):
     if len(content)>2*1024*1024:raise ValueError('版本元数据过大')
     return json.loads(content)
 
+def public_latest_release():
+    """GitHub's public latest redirect avoids the anonymous API rate limit."""
+    url='https://github.com/'+REPOSITORY+'/releases/latest'
+    request=urllib.request.Request(url,headers={'User-Agent':'vertical-comic-skills-updater'})
+    with urllib.request.urlopen(request,timeout=20) as response:final=urlparse(response.geturl())
+    prefix='/'+REPOSITORY+'/releases/tag/'
+    if final.scheme!='https' or final.hostname!='github.com' or not final.path.startswith(prefix):raise ValueError('公开发布页面未定位到稳定版本')
+    version=final.path[len(prefix):]
+    if not re.fullmatch(r'v\d{4}\.\d{2}\.\d{2}\.\d+',version):raise ValueError('无效公开稳定版本')
+    filename='vertical-comic-skills-'+version+'.zip';base='https://github.com/'+REPOSITORY+'/releases/download/'+version+'/'
+    return {'tag_name':version,'draft':False,'prerelease':False,'html_url':final.geturl(),
+            'metadata_source':'public_release_redirect','assets':[{'name':name,'browser_download_url':base+name} for name in (filename,filename+'.sha256')]}
+
+
 def remote_version(channel='stable'):
     if channel=='preview':
         value=json_request(API+'/commits/main');commit=value['sha']
         if not re.fullmatch('[a-f0-9]{40}',commit):raise ValueError('无效预览提交')
         return {'channel':channel,'identity':commit,'url':'https://github.com/'+REPOSITORY+'/archive/'+commit+'.zip','commit':commit}
-    release=json_request(API+'/releases/latest');version=release['tag_name']
+    try:release=json_request(API+'/releases/latest')
+    except urllib.error.HTTPError as exc:
+        if exc.code not in {403,429}:raise
+        release=public_latest_release()
+    version=release['tag_name']
     if release.get('draft') or release.get('prerelease') or not re.fullmatch(r'v\d{4}\.\d{2}\.\d{2}\.\d+',version):raise ValueError('没有可用稳定发布')
     filename='vertical-comic-skills-'+version+'.zip'
     assets={a['name']:a['browser_download_url'] for a in release.get('assets',[])}
@@ -39,7 +57,7 @@ def remote_version(channel='stable'):
     for key in (filename,filename+'.sha256'):
         if urlparse(assets[key]).scheme!='https' or urlparse(assets[key]).hostname!='github.com' or not urlparse(assets[key]).path.startswith('/'+REPOSITORY+'/releases/download/'):
             raise ValueError('发布下载来源不符')
-    return {'channel':'stable','identity':version,'version':version,'url':assets[filename],'checksum_url':assets[filename+'.sha256'],'filename':filename,'release_url':release['html_url']}
+    return {'channel':'stable','identity':version,'version':version,'url':assets[filename],'checksum_url':assets[filename+'.sha256'],'filename':filename,'release_url':release['html_url'],'metadata_source':release.get('metadata_source','github_api')}
 
 def installed_status(home):
     marker=Path(home)/'skill-bundles'/NAME/'installed.json'

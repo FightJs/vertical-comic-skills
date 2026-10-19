@@ -1,10 +1,17 @@
 """One built-in rule library plus preserved user additions; immutable resolved cache."""
 from pathlib import Path
-from platform_io import codex_home
 import hashlib,json,os,shutil,tempfile
 from rule_memory import POLICY,LOADING_POLICY,source_index
 
 ROOT=Path(__file__).resolve().parents[1]/'assets/rule-memory'
+
+def codex_home():
+    configured=os.environ.get('CODEX_HOME')
+    if configured:return Path(configured).expanduser().resolve()
+    # --codex-home installations remain self-contained even outside ~/.codex.
+    installed=ROOT.parents[3]
+    if (installed/'skill-bundles/vertical-comic-skills/installed.json').is_file():return installed
+    return Path.home()/'.codex'
 
 def digest(p):return hashlib.sha256(Path(p).read_bytes()).hexdigest()
 def read(p):return json.loads(Path(p).read_text(encoding='utf-8-sig'))

@@ -105,12 +105,12 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/assets/rule-memory/内置规则/规则记忆输入与增添规范.md",
-      "sha256": "16f67b09de8d7ad7bb3fc8aa31ffd8b309b45d10a5f7dbc3e123c1eb424a230b",
-      "bytes": 17104
+      "sha256": "c6bf2dfa0be28eb10c8e148e4862d0721ce9e0188d2a44db33071f294a17fd28",
+      "bytes": 17116
     },
     {
       "path": "skills/vertical-comic-preproduction/assets/rule-memory/内置规则/记忆索引.json",
-      "sha256": "ab072c66c4d101e4638e630b8dff54c7a2e26b147de0b711a24125bc7389d3a4",
+      "sha256": "2a57a948e3ba21d05318a0841ce0432c6f33cf55d5eea1a9d25784ca9ada89d7",
       "bytes": 24348
     },
     {
@@ -440,8 +440,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/builtin_memory.py",
-      "sha256": "4649b26f141dcfd9c8e49ec554123d6f8d6e8e15f69925d3b1fbad4b87564893",
-      "bytes": 3097
+      "sha256": "17175943efd89e345a68203e032b48fa6f879c7b8ed41d84a05a5f0642e5a460",
+      "bytes": 3429
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/calibration_repair.py",
@@ -615,8 +615,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/rule_contributions.py",
-      "sha256": "d721e2b961189fa8e5c81c5cebf5c5ba59e0c53c80958461fee5d44febe5c39a",
-      "bytes": 17372
+      "sha256": "89ada0a02b92b8df50ad50ec4455a42582f1ca44faf0ef54f5cbbee700b2f6d2",
+      "bytes": 17371
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/rule_exception.py",
@@ -685,8 +685,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/usage_config.py",
-      "sha256": "fdde96cbf16d423a4ccf5394f074ddef495a7f8c24f63efae8aeb9852b281237",
-      "bytes": 14004
+      "sha256": "635b4d84776069e287722e769199d6d36dd41a42ff65ec9dee3a9e2f13e062a3",
+      "bytes": 14434
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/validate_preproduction.py",
@@ -750,8 +750,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/tests/test_easy_start.py",
-      "sha256": "55df9ef7cf9fc6d37c091a86d19ac8217992b6016b31c063522a20b178d00140",
-      "bytes": 11062
+      "sha256": "e3f32591be42fef57fa78b8676d8f29187a0c8f0e24c737f1141364c412aa799",
+      "bytes": 12532
     },
     {
       "path": "skills/vertical-comic-preproduction/tests/test_episode_async.py",
@@ -975,12 +975,12 @@
     },
     {
       "path": "memory/规则记忆输入与增添规范.md",
-      "sha256": "16f67b09de8d7ad7bb3fc8aa31ffd8b309b45d10a5f7dbc3e123c1eb424a230b",
-      "bytes": 17104
+      "sha256": "c6bf2dfa0be28eb10c8e148e4862d0721ce9e0188d2a44db33071f294a17fd28",
+      "bytes": 17116
     },
     {
       "path": "memory/记忆索引.json",
-      "sha256": "ab072c66c4d101e4638e630b8dff54c7a2e26b147de0b711a24125bc7389d3a4",
+      "sha256": "2a57a948e3ba21d05318a0841ce0432c6f33cf55d5eea1a9d25784ca9ada89d7",
       "bytes": 24348
     }
   ]

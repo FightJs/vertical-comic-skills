@@ -14,7 +14,12 @@ def read_config(path, *, frozen_memory_source=None):
     if config.get("policy") != POLICY:
         raise ValueError("配置policy必须是comic_usage_v1")
     inputs = config.get("inputs", {})
-    if config.get('memory',{}).get('source')=='builtin' or not inputs.get('memory_root'):
+    # A prepared run already records its resolved origin. From its snapshot,
+    # validate the frozen rules instead of resolving a different cache location.
+    pinned_origin=(frozen_memory_source is not None and inputs.get('memory_root')
+                   and config.get('memory',{}).get('index_sha256')
+                   and config['memory']['index_sha256']==frozen_memory_source.get('index_sha256'))
+    if not pinned_origin and (config.get('memory',{}).get('source')=='builtin' or not inputs.get('memory_root')):
         from builtin_memory import resolve
         resolved=resolve()
         config.setdefault('inputs',{})['memory_root']=resolved['root']

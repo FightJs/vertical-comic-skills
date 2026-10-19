@@ -4,9 +4,9 @@
 No login is required for update/export. No credentials are included in a bundle.
 """
 from pathlib import Path
-from platform_io import codex_home, portable_relative, atomic_json
+from platform_io import portable_relative, atomic_json
 import argparse,base64,copy,hashlib,json,os,re,shutil,subprocess,sys,tempfile,uuid,zipfile
-from builtin_memory import ROOT,read,digest,resolve,source
+from builtin_memory import ROOT,read,digest,resolve,source,codex_home
 from rule_memory import source_index
 
 STATE=codex_home()/'comic/rule-contributions'

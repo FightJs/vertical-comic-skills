@@ -4,18 +4,26 @@
 
 仓库是使用者同步来源：`main`提供最新提交，Release/tag提供固定版本。整套更新，避免五个Skill及规则库版本混用。生产RV按其已冻结版本继续，更新不会迁移旧RV或授予新的生图/返修权限。
 
-## 首次安装
+## 首次安装（公开下载无需GitHub账号）
 
-支持原生 Windows 10/11、macOS 和 Linux 的本地文件系统，需要Codex和Python 3.12+。Git仅用于仓库安装/更新，ZIP安装无需Git。生成图片还需要当前Codex环境实际可用的生图工具；安装本仓库不自动提供工具权限。GitHub CLI用于访问私有仓库；使用者须先获仓库访问权限。
+支持原生 Windows 10/11、macOS 和 Linux 的本地文件系统，需要Codex和Python 3.12+。图片生成还需要当前Codex环境实际可用的生图工具；安装不会自动提供工具权限。下面命令适用于macOS/Linux；Windows请使用下方PowerShell步骤。Git仅供Git下载及更新使用，Download ZIP安装不需要Git或GitHub CLI。
+
+先下载，任选一种方式：
+
+- **Git**：运行`git clone https://github.com/FightJs/vertical-comic-skills.git`，再`cd vertical-comic-skills`。
+- **ZIP**：在[仓库](https://github.com/FightJs/vertical-comic-skills)选择Code → Download ZIP，解压后进入包含`README.md`和`tools`的目录。
+
+然后建立独立Python环境并安装完整五件套：
 
 ```sh
-gh auth login
-gh repo clone FightJs/vertical-comic-skills
-cd vertical-comic-skills
-python3 -m pip install -r requirements.txt
-python3 tools/check_environment.py
-python3 tools/sync_skills.py
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python tools/check_environment.py
+.venv/bin/python tools/check_bundle.py
+.venv/bin/python tools/sync_skills.py
 ```
+
+也可以把解压后的目录交给Codex，说“请按README创建虚拟环境并安装完整条漫五件套”。不要直接向系统Python安装依赖；Homebrew等环境会拒绝此操作。后续命令继续使用此虚拟环境的Python，无需激活环境或修改系统Python设置。
 
 ### Windows 首次安装（PowerShell）
 
@@ -43,36 +51,49 @@ $comicPython = "$env:LOCALAPPDATA\ComicSkills\venv\Scripts\python.exe"
 若检测到已有安装或本地修改，会保留现场并停止。先查看差异：
 
 ```sh
-python3 tools/sync_skills.py --check
+.venv/bin/python tools/sync_skills.py --check
 ```
 
 确定使用仓库版本时显式执行以下命令。旧文件会先备份，备份位置由工具输出，不自动删除：
 
 ```sh
-python3 tools/sync_skills.py --replace-existing
+.venv/bin/python tools/sync_skills.py --replace-existing
 ```
 
-自定义Codex目录使用`--codex-home /实际目录`。安装完成后在新的Codex轮次/任务中使用Skill；已经冻结的生产任务仍使用原快照。
+自定义Codex目录使用`--codex-home /实际目录`，检查和后续更新也沿用该参数。内置规则缓存和本机规则增补状态跟随`CODEX_HOME`；未设置环境变量时，工具识别受管理安装目录。安装完成后在新的Codex轮次/任务中使用Skill；已经冻结的生产任务仍使用原快照。
 
 ## 更新到最新版本
 
-在本仓库目录执行：
+以下Shell示例用于macOS/Linux；Windows请继续使用首次安装时的`$comicPython`，把`.venv/bin/python`替换为`& $comicPython`，并按PowerShell步骤安装依赖。
+
+**Git下载版**：在原仓库目录执行：
 
 ```sh
-python3 tools/sync_skills.py --update
+.venv/bin/python tools/sync_skills.py --update
 ```
 
 它先执行`git pull --ff-only`，再验证整套文件哈希并更新五个Skill和规则。仓库工作区或安装目录有本地改动时不会静默覆盖。更新前的安装保留备份，当前运行中的RV、源剧本、资产、项目使用配置和批准记录不属于更新目标。本机用户规则增补独立保留，不上传到共享发布版，也不被更新覆盖。
 
-需要保持固定版本时，先切换对应tag，再运行安装工具，不使用`--update`：
+**ZIP下载版**：重新下载新版ZIP，解压到新目录。在新目录建立虚拟环境，检查后安装到原来的Codex目录：
+
+```sh
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python tools/sync_skills.py --check
+.venv/bin/python tools/sync_skills.py
+```
+
+ZIP版不使用`--update`；误用时工具会提示以上路径。已有安装由同一工具管理且没有代码改动时会直接更新；存在本地代码改动时先检查，再按明确选择使用`--replace-existing`。用户增补保留，旧版本备份；不要手工覆盖`skills`目录。
+
+需要保持固定版本时，从GitHub下载对应tag的ZIP，或在Git副本中切换tag，再安装，不使用`--update`。以下仅演示已有旧tag；Windows兼容修复尚未创建tag，请使用main，不要切回旧tag：
 
 ```sh
 git fetch --tags
-git checkout v2026.10.19.5
-python3 tools/sync_skills.py
+git checkout v2026.10.19.2
+.venv/bin/python tools/sync_skills.py
 ```
 
-同步由使用者主动运行；本仓库未创建后台自动更新任务。可在GitHub设置Watch/Releases接收新版本通知。私有仓库使用者需要被所有者邀请；变更仓库可见性由所有者决定。
+同步由使用者主动运行；本仓库未创建后台自动更新任务。可在GitHub设置Watch/Releases接收新版本通知。只有访问私有副本或明确选择规则贡献上传时才需要相应账号和权限，公开下载及本地制作无需GitHub登录。
 
 ## 首次使用：让Skill引导配置
 
@@ -137,9 +158,9 @@ Skill会先检查本项目已有配置，再一次收集缺少的书名、源脚
 本仓库不包含实际项目脚本、角色资产、批准消息、生产结果或个人配置。Skill内示例插图属于方法示例，不能替代本书批准素材。索引通过不等于图片质量通过，必须保留实际看图审查。
 
 ```sh
-python3 tools/check_bundle.py
-python3 -B -m unittest discover -s skills/vertical-comic-preproduction/tests
-python3 -B -m unittest discover -s tests
+.venv/bin/python tools/check_bundle.py
+.venv/bin/python -B -m unittest discover -s skills/vertical-comic-preproduction/tests
+.venv/bin/python -B -m unittest discover -s tests
 node skills/vertical-comic-preproduction/tests/test_async_generation.js
 ```
 
@@ -150,10 +171,10 @@ GitHub Actions在push和pull request后运行Windows、macOS、Linux × Python 3
 推荐在本仓库维护，再测试、提交和推送。若仍先维护本机安装版，可用以下工具导出新副本；它不修改源安装目录，不复制其他项目目录，并将测试中的本机配置依赖替换成隔离夹具：
 
 ```sh
-python3 tools/export_bundle.py --skills-root /实际/skills目录
-python3 tools/check_bundle.py
-python3 -B -m unittest discover -s skills/vertical-comic-preproduction/tests
-python3 -B -m unittest discover -s tests
+.venv/bin/python tools/export_bundle.py --skills-root /实际/skills目录
+.venv/bin/python tools/check_bundle.py
+.venv/bin/python -B -m unittest discover -s skills/vertical-comic-preproduction/tests
+.venv/bin/python -B -m unittest discover -s tests
 git add skills memory bundle.json
 git commit -m "Update comic Skill bundle"
 git push origin main

@@ -102,7 +102,7 @@ def install(home,*,check=False,replace_existing=False):
             if target.exists():saved.parent.mkdir(parents=True,exist_ok=True);os.replace(target,saved);moved.append((saved,target))
             staged=stage/rel;target.parent.mkdir(parents=True,exist_ok=True);os.replace(staged,target);activated.append(target)
         commit=subprocess.run(['git','-C',str(ROOT),'rev-parse','HEAD'],capture_output=True,text=True, encoding='utf-8') if shutil.which('git') and (ROOT/'.git').exists() else None
-        marker={'policy':'vertical_comic_install_v1','repository':'FightJs/'+NAME,'commit':commit.stdout.strip() if commit and commit.returncode==0 else None,'files':expected,'memory_root':str(managed/'memory'),'python':sys.executable,'runtime_status':'PASS'}
+        marker={'policy':'vertical_comic_install_v1','repository':'FightJs/'+NAME,'commit':commit.stdout.strip() if commit and commit.returncode==0 else None,'bundle_sha256':digest(ROOT/'bundle.json'),'version':(ROOT/'VERSION').read_text(encoding='utf-8').strip(),'files':expected,'memory_root':str(managed/'memory'),'python':sys.executable,'runtime_status':'PASS'}
         tmp=stage/'installed.json';tmp.write_text(json.dumps(marker,ensure_ascii=False,indent=2)+'\n', encoding='utf-8', newline='\n');os.replace(tmp,managed/'installed.json')
     except Exception:
         for target in reversed(activated):
@@ -112,12 +112,19 @@ def install(home,*,check=False,replace_existing=False):
     finally:shutil.rmtree(stage,ignore_errors=True)
     return {'status':'INSTALLED','runtime_status':'PASS','python':sys.executable,'skills':data['skills'],'memory_root':str(managed/'memory'),'backup':str(backups) if moved else None,'next_step':'在新的Codex轮次说：使用 $vertical-comic-preproduction。第一次使用，请引导我配置，进行前期制作。原冻结生产RV不升级；生图服务权限须在实际工具中核验。'}
 
+def update_repository():
+    if not (ROOT/'.git').exists():
+        raise ValueError('当前目录是ZIP解压版，不能执行Git更新。请从 https://github.com/FightJs/vertical-comic-skills 下载新版ZIP并解压到新目录；在新目录使用虚拟环境中的Python运行 tools/sync_skills.py --check，再运行 tools/sync_skills.py（自定义安装需沿用 --codex-home）。本地改动会保留并停止；明确替换时使用 --replace-existing，旧文件先备份，用户增补继续保留。')
+    if not shutil.which('git'):
+        raise ValueError('Git副本更新需要Git。请安装Git后重试，或下载新版ZIP并按README的ZIP更新步骤安装。')
+    dirty=subprocess.run(['git','-C',str(ROOT),'status','--porcelain'],capture_output=True,text=True,check=True,encoding="utf-8")
+    if dirty.stdout.strip():raise ValueError('Repository has local changes; commit or preserve them before updating')
+    subprocess.run(['git','-C',str(ROOT),'pull','--ff-only'],check=True)
+
 def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--codex-home',default=os.environ.get('CODEX_HOME',str(Path.home()/'.codex')));p.add_argument('--check',action='store_true');p.add_argument('--update',action='store_true');p.add_argument('--replace-existing',action='store_true');a=p.parse_args()
     if a.update:
-        dirty=subprocess.run(['git','-C',str(ROOT),'status','--porcelain'],capture_output=True,text=True,check=True, encoding='utf-8')
-        if dirty.stdout.strip():raise ValueError('Repository has local changes; commit or preserve them before updating')
-        subprocess.run(['git','-C',str(ROOT),'pull','--ff-only'],check=True)
+        update_repository()
         args=[x for x in sys.argv[1:] if x!='--update'];os.execv(sys.executable,[sys.executable, '-X', 'utf8',str(Path(__file__).resolve()),*args])
     result=install(a.codex_home,check=a.check,replace_existing=a.replace_existing);print(json.dumps(result,ensure_ascii=False,indent=2))
 

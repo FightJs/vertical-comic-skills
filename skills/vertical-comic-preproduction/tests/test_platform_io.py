@@ -52,6 +52,38 @@ for _ in range(30):
             self.assertEqual(child.returncode, 0, stderr.decode('utf-8'))
         self.assertEqual(json.loads(state.read_bytes()), {'n': 60})
 
+    def test_competing_dispatchers_cannot_reserve_same_attempt(self):
+        import test_batch_runtime as fixtures
+        from codex_reference_contract import digest
+        case = fixtures.LeaseTests('test_local_reservation_never_writes_control_and_respects_slot')
+        self.addCleanup(case.doCleanups)
+        case.setUp()
+        state, control = case.h.state_path, case.h.control_path
+        code = """from pathlib import Path
+import json
+sys.path.insert(0,str(Path(sys.argv[1]).parent/'tests'))
+from unittest.mock import patch
+from test_batch_runtime import LeaseTests
+from episode_dispatch_queue import reserve_ready
+try:
+    with patch('scoped_episode_workflow.evaluate_episode',side_effect=LeaseTests.gate):
+        result=reserve_ready(sys.argv[2],sys.argv[3],sys.argv[4])
+    print(json.dumps(result))
+except ValueError as exc:
+    print(json.dumps({'status':'STALE_STATE','reason':str(exc)}))
+"""
+        sha_state, sha_control = digest(state), digest(control)
+        children = [self.spawn(code, state, sha_state, sha_control) for _ in range(2)]
+        results = []
+        for child in children:
+            stdout, stderr = child.communicate(timeout=30)
+            self.assertEqual(child.returncode, 0, stderr.decode('utf-8'))
+            results.append(json.loads(stdout))
+        self.assertEqual(sum(len(x.get('reserved', [])) for x in results), 1)
+        self.assertEqual(sum(x['status'] == 'STALE_STATE' for x in results), 1)
+        self.assertEqual(len(json.loads(state.read_bytes())['dispatch_ledger']), 1)
+        self.assertEqual(digest(control), sha_control)
+
     def test_timeout_and_killed_owner_release_without_deleting_lock(self):
         lock = self.root / 'shared.lock'
         ready = self.root / 'ready'

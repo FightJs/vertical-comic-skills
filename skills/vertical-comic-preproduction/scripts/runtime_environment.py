@@ -18,10 +18,16 @@ def check(*, probe_root=None, require_svg=False):
     dependencies = {}
     if sys.version_info < (3, 12):
         errors.append('Python 3.12+ required')
-    for name in ('PIL', 'yaml', 'openpyxl'):
+    for name, minimum, upper in (('PIL', (10, 0), (13, 0)), ('yaml', (6, 0), (7, 0)),
+                                 ('openpyxl', (3, 1), (4, 0))):
         try:
             module = importlib.import_module(name)
             dependencies[name] = getattr(module, '__version__', 'available')
+            import re
+            numbers = re.findall(r'\d+', dependencies[name])
+            version = tuple(int(n) for n in (numbers + ['0'])[:2])
+            if not minimum <= version < upper:
+                errors.append(f'{name}: unsupported version {dependencies[name]}')
         except (ImportError, OSError) as exc:
             errors.append(f'{name}: {exc}')
     for name in CORE:
@@ -58,6 +64,7 @@ def check(*, probe_root=None, require_svg=False):
             'python': sys.executable, 'python_version': platform.python_version(),
             'platform': platform.platform(), 'dependencies': dependencies,
             'svg': svg, 'errors': errors, 'image_calls': 0,
+            'requirements': str(Path(__file__).resolve().parents[1] / 'assets/templates/runtime-requirements.txt'),
             'scope': 'local runtime only; image-service access and visual QA are not tested'}
 
 

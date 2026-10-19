@@ -494,9 +494,11 @@ def main() -> int:
     output = json.dumps(result, ensure_ascii=False, indent=2) + "\n"
     print(output, end="")
     if args.report:
-        Path(args.report).write_text(output, encoding="utf-8")
+        Path(args.report).write_text(output, encoding="utf-8", newline='\n')
     return 1 if result["status"] == "HOLD" else 0
 
 
 if __name__ == "__main__":
+    from platform_io import configure_stdio
+    configure_stdio()
     raise SystemExit(main())

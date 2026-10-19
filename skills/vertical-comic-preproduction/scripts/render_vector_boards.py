@@ -88,11 +88,13 @@ def main() -> int:
     for state in data.get("states", []):
         name = f"{state.get('state_id', 'state')}.svg"
         path = output / name
-        path.write_text(station_svg(state), encoding="utf-8")
+        path.write_text(station_svg(state), encoding="utf-8", newline='\n')
         written.append(str(path))
     print(json.dumps({"status": "PASS", "spatial_proof": False, "written": written}, ensure_ascii=False, indent=2))
     return 0
 
 
 if __name__ == "__main__":
+    from platform_io import configure_stdio
+    configure_stdio()
     raise SystemExit(main())

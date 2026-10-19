@@ -39,7 +39,7 @@ class StagedTests(unittest.TestCase):
         self.panel["style_execution_block"] = style_block(self.panel["style_contract"])
         self.panel["reference_usage_block"] = reference_usage_block(self.panel["reference_bindings"], self.panel["reference_images"])
         self.panel["prompt"] = self.panel["reference_usage_block"] + "\n" + self.panel["style_execution_block"] + "\n" + self.panel["negative_prompt"]
-        (self.root / "P001/prompt.txt").write_text(self.panel["prompt"])
+        (self.root / "P001/prompt.txt").write_text(self.panel["prompt"], encoding='utf-8', newline='\n')
 
     def test_actual_style_input_is_exported(self):
         errors, submission = validate_panel(self.panel, self.root)
@@ -55,7 +55,7 @@ class StagedTests(unittest.TestCase):
         self.assertTrue(validate_style(self.panel, self.root))
 
     def test_style_evidence_hash_change_blocks(self):
-        (self.root / "style_approval.json").write_text("{}")
+        (self.root / "style_approval.json").write_text("{}", encoding='utf-8', newline='\n')
         self.assertTrue(validate_style(self.panel, self.root))
 
     def test_failed_candidate_cannot_be_style_authority(self):
@@ -134,12 +134,12 @@ class StagedTests(unittest.TestCase):
 
     def test_changed_approved_artifact_is_not_reused(self):
         state = self.state()
-        (self.root / "shots.json").write_text("{}")
+        (self.root / "shots.json").write_text("{}", encoding='utf-8', newline='\n')
         self.assertEqual(evaluate(state, self.root)["status"], "HOLD")
 
     def test_new_style_basis_invalidates_old_execution_copy(self):
         state = self.state()
-        basis = json.loads((self.root / state["visual_basis"]["path"]).read_text())
+        basis = json.loads((self.root / state["visual_basis"]["path"]).read_text(encoding='utf-8-sig'))
         self.assertEqual(basis_errors(self.panel, basis), [])
         basis["style"]["traits"]["shading"] = "CHANGED"
         self.assertTrue(basis_errors(self.panel, basis))
@@ -188,7 +188,7 @@ class StagedTests(unittest.TestCase):
 
     def test_source_snapshot_mismatch_blocks(self):
         state = self.state()
-        data = json.loads((self.root / "snapshot.json").read_text())
+        data = json.loads((self.root / "snapshot.json").read_text(encoding='utf-8-sig'))
         data["locked_scripts"]["P001"] = {"event_text": "rewritten"}
         state["source_snapshot"] = self.f.write("snapshot.json", data)
         state["gates"]["visual_basis"] = self.approve([state["source_script"], state["source_snapshot"], state["visual_basis"]])
@@ -231,7 +231,7 @@ class StagedTests(unittest.TestCase):
         self.panel["content_execution_block"] = content_block(self.panel, self.panel)
         self.panel["identity_execution_block"] = execution_block(self.panel, registry)
         self.panel["prompt"] = "\n\n".join(self.panel[k] for k in ("camera_execution_block", "content_execution_block", "identity_execution_block", "reference_usage_block", "style_execution_block", "negative_prompt"))
-        (self.root / "P001/prompt.txt").write_text(self.panel["prompt"])
+        (self.root / "P001/prompt.txt").write_text(self.panel["prompt"], encoding='utf-8', newline='\n')
         self.f.write("P001/提示词.json", self.panel)
         state = self.state(1)
         # The canonical shot includes the registry, while per-panel design is

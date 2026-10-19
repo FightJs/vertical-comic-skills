@@ -15,8 +15,8 @@ def run():
  with tempfile.TemporaryDirectory() as tmp:
   root=Path(tmp);fixtures=[]; packets=[];bases=[]
   def write(base,name,data):
-   path=base/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_text(json.dumps(data,ensure_ascii=False));return {'path':name,'sha256':digest(path)}
-  def ep_ref(base,ref):return {**ref,'path':str((base/ref['path']).relative_to(root))}
+   path=base/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_text(json.dumps(data,ensure_ascii=False), encoding='utf-8', newline='\n');return {'path':name,'sha256':digest(path)}
+  def ep_ref(base,ref):return {**ref,'path':(base/ref['path']).relative_to(root).as_posix()}
   def approve(artifacts):return {'status':'APPROVED','source_kind':'user_message','source_locator':'synthetic://not-real','quote':'SYNTHETIC APPROVAL ONLY','book_id':'UNIT','episode_id':'E000','artifacts':artifacts}
   try:
    for i in (1,2):
@@ -26,8 +26,8 @@ def run():
     if i==2:(dest/'P001').rename(dest/'P002')
     panel.update(generation_dependencies=[],requires_state_review=False)
     manifest.update(execution_mode='half_episode_async_v1',optimization_policy=POLICY,round_context={'batch_id':bid,'round_id':1,'attempt_id':pid+'-r1'})
-    (dest/pid/'prompt.txt').write_text(panel['prompt']);write(dest,f'{pid}/提示词.json',panel);write(dest,'全话提示词索引.json',manifest)
-    basis=json.loads((h.root/old['visual_basis']['path']).read_text().replace('P001',pid));basis['reference_files']=[ep_ref(dest,r) for r in basis['reference_files']]
+    (dest/pid/'prompt.txt').write_text(panel['prompt'], encoding='utf-8', newline='\n');write(dest,f'{pid}/提示词.json',panel);write(dest,'全话提示词索引.json',manifest)
+    basis=json.loads((h.root/old['visual_basis']['path']).read_text(encoding='utf-8-sig').replace('P001',pid));basis['reference_files']=[ep_ref(dest,r) for r in basis['reference_files']]
     packets.append((dest,pid,bid,manifest));bases.append(basis)
    source=write(root,'source.json',{'SYNTHETIC':'2-panel-source'})
    snap=write(root,'snapshot.json',{'source_sha256':source['sha256'],'panel_ids':['P001','P002'],'locked_scripts':{pid:m['panels'][0]['locked_script'] for d,pid,b,m in packets}})
@@ -36,18 +36,18 @@ def run():
     br=write(root,bid+'-basis.json',basis);shots=copy.deepcopy(m);sr=write(root,bid+'-shots.json',shots)
     s['half_inputs'][bid]={'visual_basis':br,'shot_manifest':sr};s['half_gates'][bid]={'visual_basis':approve([source,snap,br]),'shot_design':approve([br,sr])}
     s['panels'].append({'panel_id':pid,'status':'PENDING','round_id':1,'attempt_id':pid+'-r1','package_manifest':ep_ref(dest,{'path':'全话提示词索引.json','sha256':digest(dest/'全话提示词索引.json')}),'shot_subset':write(root,bid+'-subset.json',shots)})
-   plan=build_plan(s,json.loads((root/'snapshot.json').read_text()));s['batch_plan']=write(root,'plan.json',plan)
+   plan=build_plan(s,json.loads((root/'snapshot.json').read_text(encoding='utf-8-sig')));s['batch_plan']=write(root,'plan.json',plan)
    for i,(dest,pid,bid,m) in enumerate(packets):
     pre=evaluate(s,root,'generate',pid);assert pre['status']=='PASS'
     panel=m['panels'][0];errs,submission=validate_panel(panel,dest);assert not errs;images=dest/'images';images.mkdir();out=images/(pid+'.png');Image.new('RGB',(90,160),'white').save(out)
     req={'attempt_id':pid+'-r1','backend_id':'codex_builtin_imagegen','panel_id':pid,**submission,'source_kind':'observed_tool_call','source_locator':'synthetic://not-real'}
-    res={'attempt_id':pid+'-r1','status':'COMPLETED','outputs':[{'path':str(out.relative_to(dest)),'sha256':digest(out)}],'source_kind':'observed_tool_result','source_locator':'synthetic://not-real'}
+    res={'attempt_id':pid+'-r1','status':'COMPLETED','outputs':[{'path':out.relative_to(dest).as_posix(),'sha256':digest(out)}],'source_kind':'observed_tool_result','source_locator':'synthetic://not-real'}
     panel['generation_execution']={'status':'COMPLETED','attempt_id':pid+'-r1','request_evidence':write(dest,'request.json',req),'response_evidence':write(dest,'response.json',res)};mr=write(dest,'全话提示词索引.json',m)
-    qdir=dest/'qa';p=subprocess.run([sys.executable,str(SCRIPT/'make_generation_qa.py'),'--package',str(dest),'--images',str(images),'--output',str(qdir)],capture_output=True,text=True);assert p.returncode==0,p.stderr
-    qa=json.loads((qdir/'生成图QA报告.json').read_text());item=qa['panels'][0]
+    qdir=dest/'qa';p=subprocess.run([sys.executable, '-X', 'utf8',str(SCRIPT/'make_generation_qa.py'),'--package',str(dest),'--images',str(images),'--output',str(qdir)],capture_output=True,text=True, encoding='utf-8');assert p.returncode==0,p.stderr
+    qa=json.loads((qdir/'生成图QA报告.json').read_text(encoding='utf-8-sig'));item=qa['panels'][0]
     for rv in [*item['dimension_review'].values(),item['style_review']]:rv.update(status='PASS',reviewer='SYNTHETIC',evidence='TEST ONLY')
     for k in ('camera_match','shot_scale_match','background_view_match','body_crop_match','required_visible_information_preserved','no_extra_offscreen_characters'):item[k]=True
-    r=s['panels'][i];r.update(status='VISUAL_PASS',package_manifest=ep_ref(dest,mr),output=ep_ref(dest,{'path':str(out.relative_to(dest)),'sha256':digest(out)}),qa_report=ep_ref(dest,write(dest,'reviewed-qa.json',qa)))
+    r=s['panels'][i];r.update(status='VISUAL_PASS',package_manifest=ep_ref(dest,mr),output=ep_ref(dest,{'path':out.relative_to(dest).as_posix(),'sha256':digest(out)}),qa_report=ep_ref(dest,write(dest,'reviewed-qa.json',qa)))
     assert not qa_errors(root,r)
     from review_reuse import fingerprint
     fingerprint(root,r)

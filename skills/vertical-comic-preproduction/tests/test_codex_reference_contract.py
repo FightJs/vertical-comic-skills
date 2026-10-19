@@ -33,7 +33,7 @@ class ReferenceTests(unittest.TestCase):
             path = self.root / "P001" / "参考图" / f"{name}.png"
             path.parent.mkdir(parents=True, exist_ok=True)
             Image.new("RGB", (90, 160), {"composition": "grey", "scene": "white", "character": "blue"}[name]).save(path)
-            self.refs.append({"alias": alias, "path": str(path.relative_to(self.root)), "sha256": digest(path), "role": "camera_composition" if name == "composition" else name, "version": "UNIT_FIXTURE_ONLY", "subject_ids": ["A"] if name == "character" else [], "subject_states": {"A": {"identity": "ID_A", "costume": "D_A"}} if name == "character" else {}})
+            self.refs.append({"alias": alias, "path": path.relative_to(self.root).as_posix(), "sha256": digest(path), "role": "camera_composition" if name == "composition" else name, "version": "UNIT_FIXTURE_ONLY", "subject_ids": ["A"] if name == "character" else [], "subject_states": {"A": {"identity": "ID_A", "costume": "D_A"}} if name == "character" else {}})
         def binding(alias, purpose, targets, allowed):
             return {"alias": alias, "purpose": purpose, "subject_ids": targets, "allowed_transfer": allowed, "forbidden_transfer": ["unrelated_content"]}
         bindings = [binding("@COMP_P001", "framing", ["P001"], ["composition", "crop"]), binding("@SCENE", "scene_view", ["S"], ["geometry", "materials", "lighting"]), binding("@A", "identity", ["A"], ["face", "hair"]), binding("@A", "costume_state", ["A"], ["clothing"])]
@@ -45,13 +45,13 @@ class ReferenceTests(unittest.TestCase):
         self.panel["composition_reference"] = {"mode": "REUSE", "reason": "synthetic protocol fixture", "alias": "@COMP_P001", "review_evidence": self.write("P001/review.json", review)}
         self.panel["reference_usage_block"] = reference_usage_block(bindings, self.refs)
         self.panel["prompt"] = final_prompt("测试构图\n" + self.panel["reference_usage_block"], self.panel["negative_prompt"])
-        (self.root / "P001/prompt.txt").write_text(self.panel["prompt"])
+        (self.root / "P001/prompt.txt").write_text(self.panel["prompt"], encoding='utf-8', newline='\n')
         self.manifest = {"control_policy": "structural_guidance_v1", "continuity_policy": "reference_continuity_v1", "reference_input_policy": POLICY, "generation_backend": {"backend_id": BACKEND, "mode": "reference_guided", "structural_controls": [], "evidence": self.write("capability.json", {"source": "SYNTHETIC_PROTOCOL_FIXTURE_ONLY"})}, "panels": [self.panel]}
 
     def write(self, name, value):
         path = self.root / name
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(value, ensure_ascii=False, indent=2))
+        path.write_text(json.dumps(value, ensure_ascii=False, indent=2), encoding='utf-8', newline='\n')
         return {"path": name, "sha256": digest(path)}
 
     def report(self):
@@ -73,12 +73,12 @@ class ReferenceTests(unittest.TestCase):
         if not same_path:
             target=self.root/'P001/参考图'/f'detail-{index}.png'
             target.write_bytes((self.root/ref['path']).read_bytes())
-            ref['path']=str(target.relative_to(self.root));ref['sha256']=digest(target)
+            ref['path']=target.relative_to(self.root).as_posix();ref['sha256']=digest(target)
         self.refs.append(ref)
         self.panel['reference_bindings'].append({'alias':ref['alias'],'purpose':'pose_interaction','subject_ids':['A'],'allowed_transfer':['pose'],'forbidden_transfer':['identity','clothing']})
         self.panel['reference_usage_block']=reference_usage_block(self.panel['reference_bindings'],self.refs)
         self.panel['prompt']=final_prompt(self.panel['reference_usage_block'],self.panel['negative_prompt'])
-        (self.root/'P001/prompt.txt').write_text(self.panel['prompt'])
+        (self.root/'P001/prompt.txt').write_text(self.panel['prompt'], encoding='utf-8', newline='\n')
 
     def test_exactly_five_paths_can_be_exported(self):
         self.add_detail_reference(1);self.add_detail_reference(2)
@@ -132,7 +132,7 @@ class ReferenceTests(unittest.TestCase):
 
     def test_wrong_camera_review_is_hold(self):
         evidence = self.panel["composition_reference"]["review_evidence"]
-        review = json.loads((self.root / evidence["path"]).read_text())
+        review = json.loads((self.root / evidence["path"]).read_text(encoding='utf-8-sig'))
         review["camera_view_id"] = "CAM_WRONG"
         self.panel["composition_reference"]["review_evidence"] = self.write(evidence["path"], review)
         self.hold("批准机位/裁切/比例")
@@ -146,7 +146,7 @@ class ReferenceTests(unittest.TestCase):
         Image.new("RGB", (90, 150), "grey").save(path)
         self.refs[0]["sha256"] = digest(path)
         evidence = self.panel["composition_reference"]["review_evidence"]
-        review = json.loads((self.root / evidence["path"]).read_text())
+        review = json.loads((self.root / evidence["path"]).read_text(encoding='utf-8-sig'))
         review["reference_sha256"] = digest(path)
         self.panel["composition_reference"]["review_evidence"] = self.write(evidence["path"], review)
         self.hold("实际比例")
@@ -157,7 +157,7 @@ class ReferenceTests(unittest.TestCase):
 
     def test_text_screenshot_review_cannot_claim_clean_view(self):
         evidence = self.panel["composition_reference"]["review_evidence"]
-        review = json.loads((self.root / evidence["path"]).read_text())
+        review = json.loads((self.root / evidence["path"]).read_text(encoding='utf-8-sig'))
         review["clean_camera_view"] = False
         self.panel["composition_reference"]["review_evidence"] = self.write(evidence["path"], review)
         self.hold("干净的摄影机视角")
@@ -168,7 +168,7 @@ class ReferenceTests(unittest.TestCase):
         self.panel["reference_bindings"] = [b for b in self.panel["reference_bindings"] if b["alias"] != "@COMP_P001"]
         self.panel["reference_usage_block"] = reference_usage_block(self.panel["reference_bindings"], self.panel["reference_images"])
         self.panel["prompt"] = final_prompt(self.panel["reference_usage_block"], self.panel["negative_prompt"])
-        (self.root / "P001/prompt.txt").write_text(self.panel["prompt"])
+        (self.root / "P001/prompt.txt").write_text(self.panel["prompt"], encoding='utf-8', newline='\n')
 
     def test_optional_composition_can_reuse_sufficient_basis(self):
         self.use_no_composition_reference()
@@ -181,12 +181,12 @@ class ReferenceTests(unittest.TestCase):
         Image.new("RGB", (90, 160), "white").save(images / "P001.png")
         output = self.root / "qa_unit_fixture"
         result = subprocess.run(
-            [sys.executable, str(SCRIPTS / "make_generation_qa.py"),
+            [sys.executable, '-X', 'utf8', str(SCRIPTS / "make_generation_qa.py"),
              "--package", str(self.root), "--images", str(images), "--output", str(output)],
             capture_output=True, text=True,
-        )
+        encoding='utf-8')
         self.assertEqual(result.returncode, 0, result.stderr)
-        return json.loads((output / "生成图QA报告.json").read_text()), output
+        return json.loads((output / "生成图QA报告.json").read_text(encoding='utf-8-sig')), output
 
     def test_no_optional_images_needs_no_review_files_or_qa_comparison(self):
         self.use_no_composition_reference()
@@ -254,7 +254,7 @@ class ReferenceTests(unittest.TestCase):
 
     def test_negative_constraints_must_reach_prompt(self):
         self.panel["prompt"] = "missing avoid block"
-        (self.root / "P001/prompt.txt").write_text(self.panel["prompt"])
+        (self.root / "P001/prompt.txt").write_text(self.panel["prompt"], encoding='utf-8', newline='\n')
         self.hold("负向约束")
 
     def test_numbered_reference_roles_match_input_order(self):
@@ -348,18 +348,18 @@ class ReferenceTests(unittest.TestCase):
     def test_export_cli_emits_only_plan_and_supported_arguments(self):
         self.write("全话提示词索引.json", self.manifest)
         output = self.root / "plan.json"
-        result = subprocess.run([sys.executable, str(SCRIPTS / "codex_reference_contract.py"), "--package-root", str(self.root), "--output", str(output)], capture_output=True, text=True)
+        result = subprocess.run([sys.executable, '-X', 'utf8', str(SCRIPTS / "codex_reference_contract.py"), "--package-root", str(self.root), "--output", str(output)], capture_output=True, text=True, encoding='utf-8')
         self.assertEqual(result.returncode, 0, result.stderr)
-        plan = json.loads(output.read_text())["plans"][0]
+        plan = json.loads(output.read_text(encoding='utf-8-sig'))["plans"][0]
         self.assertEqual(plan["status"], "NOT_RUN")
         self.assertEqual(set(plan["arguments"]), {"prompt", "referenced_image_paths", "transparent_background"})
         self.assertTrue(all(Path(p).is_absolute() for p in plan["arguments"]["referenced_image_paths"]))
 
     def test_initializer_keeps_unverified_backend_on_hold(self):
         output = self.root / "initialized"
-        result = subprocess.run([sys.executable, str(SCRIPTS / "init_preproduction.py"), "--output", str(output), "--book", "UNIT_ONLY", "--episode", "E000", "--backend", BACKEND], capture_output=True, text=True)
+        result = subprocess.run([sys.executable, '-X', 'utf8', str(SCRIPTS / "init_preproduction.py"), "--output", str(output), "--book", "UNIT_ONLY", "--episode", "E000", "--backend", BACKEND], capture_output=True, text=True, encoding='utf-8')
         self.assertEqual(result.returncode, 0, result.stderr)
-        manifest = json.loads((output / "04_B提示词包_CANDIDATE/全话提示词索引.json").read_text())
+        manifest = json.loads((output / "04_B提示词包_CANDIDATE/全话提示词索引.json").read_text(encoding='utf-8-sig'))
         self.assertEqual(manifest["status"], "PROMPT_PACKAGE_HOLD")
         self.assertEqual(validate_manifest(manifest, output)["status"], "HOLD")
 
@@ -369,9 +369,9 @@ class ReferenceTests(unittest.TestCase):
         # Synthetic unit image is not a returned generation or acceptance.
         Image.new("RGB", (90, 159), "white").save(images / "P001.png")
         output = self.root / "qa"
-        result = subprocess.run([sys.executable, str(SCRIPTS / "make_generation_qa.py"), "--package", str(self.root), "--images", str(images), "--output", str(output)], capture_output=True, text=True)
+        result = subprocess.run([sys.executable, '-X', 'utf8', str(SCRIPTS / "make_generation_qa.py"), "--package", str(self.root), "--images", str(images), "--output", str(output)], capture_output=True, text=True, encoding='utf-8')
         self.assertEqual(result.returncode, 0, result.stderr)
-        report = json.loads((output / "生成图QA报告.json").read_text())
+        report = json.loads((output / "生成图QA报告.json").read_text(encoding='utf-8-sig'))
         item = report["panels"][0]
         self.assertEqual(item["ratio_check"], "FAIL")
         self.assertEqual(report["status"], "HOLD_UNREVIEWED")
@@ -380,13 +380,13 @@ class ReferenceTests(unittest.TestCase):
         baseline = os.environ.get("COMIC_SKILL_BASELINE")
         if baseline:
             before = self.root / "qa_before"
-            result = subprocess.run([sys.executable, str(Path(baseline) / "scripts/make_generation_qa.py"), "--package", str(self.root), "--images", str(images), "--output", str(before)], capture_output=True, text=True)
+            result = subprocess.run([sys.executable, '-X', 'utf8', str(Path(baseline) / "scripts/make_generation_qa.py"), "--package", str(self.root), "--images", str(images), "--output", str(before)], capture_output=True, text=True, encoding='utf-8')
             self.assertEqual(result.returncode, 0, result.stderr)
-            previous = json.loads((before / "生成图QA报告.json").read_text())
+            previous = json.loads((before / "生成图QA报告.json").read_text(encoding='utf-8-sig'))
             self.assertEqual(previous["panels"][0]["ratio_check"], "PASS")
             destination = os.environ.get("COMIC_VERIFICATION_OUTPUT")
             if destination:
-                Path(destination, "比例验收前后对比.json").write_text(json.dumps({"fixture_kind": "SYNTHETIC_NOT_GENERATED_IMAGE", "expected_ratio": "9:16", "actual_pixels": [90, 159], "before_fixed_tolerance": 0.05, "before_ratio_check": "PASS", "after_requested_tolerance": 0, "after_ratio_check": item["ratio_check"], "both_image_acceptance": "UNREVIEWED"}, ensure_ascii=False, indent=2))
+                Path(destination, "比例验收前后对比.json").write_text(json.dumps({"fixture_kind": "SYNTHETIC_NOT_GENERATED_IMAGE", "expected_ratio": "9:16", "actual_pixels": [90, 159], "before_fixed_tolerance": 0.05, "before_ratio_check": "PASS", "after_requested_tolerance": 0, "after_ratio_check": item["ratio_check"], "both_image_acceptance": "UNREVIEWED"}, ensure_ascii=False, indent=2), encoding='utf-8', newline='\n')
 
     def test_both_repair_clis_keep_new_reference_and_reset_execution(self):
         # Confirmed fields here are synthetic protocol fixtures, never actual
@@ -404,21 +404,21 @@ class ReferenceTests(unittest.TestCase):
         self.panel.update({"script_character_labels": ["测试甲"], "character_bindings": [{"source_label": "测试甲", "canonical_name": "测试甲", "character_id": "A", "on_screen": True, "appearance_state_id": "AP", "asset_exemption": exemption}], "scene_binding": {"scene_id": "S", "scene_state_id": "SS", "background_visible": True, "asset_exemption": exemption}, "script_shot_id": "E000-S001", "station_id": "ST001", "station_state_id": "ST001", "camera_position": {"x": 1, "y": 2, "z": 1.6}, "facing_direction": "朝向桌边人物", "camera_height": "eye_level", "camera_angle_family": "three_quarter_left", "shot_scale": "medium_close", "visible_region": "画面左测试甲胸以上，手在桌边，背景窗", "view_check": "PASS", "camera_execution_status": "EXPLICIT_AND_PROVEN", "script_lock_check": "PASS", "locked_script": {"dialogue": "", "inner_voice": "", "narration": "", "sfx_text": "", "event_text": "测试甲在桌边抬手。"}, "visual_analysis": {}, "characters_visible": [{"character_id": "A", "name": "测试甲", "screen_position": "画面左", "depth_order": "中景", "body_orientation_and_visible_face": "面向桌右，露左侧脸", "head_orientation_and_gaze": "看向手", "expression": "平静", "action": "抬手", "contact_occlusion": "桌沿遮下身"}], "occlusion_relations": "桌沿遮下身", "background_anchors_visible": ["后方窗"], "hold_reasons": []})
         self.panel["framing"].update({"focus": "抬手", "focus_subjects": ["A"], "crop_reason": "手势与胸以上即可"})
         evidence = self.panel["composition_reference"]["review_evidence"]
-        review = json.loads((self.root / evidence["path"]).read_text())
+        review = json.loads((self.root / evidence["path"]).read_text(encoding='utf-8-sig'))
         review["framing"] = self.panel["framing"]
         self.panel["composition_reference"]["review_evidence"] = self.write(evidence["path"], review)
         self.panel["identity_execution_block"] = identity_block(self.panel, registry)
         self.panel["prompt"] += "\n\n" + self.panel["identity_execution_block"]
-        (self.root / "P001/prompt.txt").write_text(self.panel["prompt"])
+        (self.root / "P001/prompt.txt").write_text(self.panel["prompt"], encoding='utf-8', newline='\n')
         self.execution_fixture()
         self.write("全话提示词索引.json", self.manifest)
         self.write("P001/提示词.json", self.panel)
         for script in ("repair_prompt_package.py", "repair_prompt_package_v2.py"):
             with self.subTest(script=script):
                 output = self.root / script.removesuffix(".py")
-                result = subprocess.run([sys.executable, str(SCRIPTS / script), "--source", str(self.root), "--identity-root", str(self.root), "--output", str(output)], capture_output=True, text=True)
+                result = subprocess.run([sys.executable, '-X', 'utf8', str(SCRIPTS / script), "--source", str(self.root), "--identity-root", str(self.root), "--output", str(output)], capture_output=True, text=True, encoding='utf-8')
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-                repaired = json.loads((output / "全话提示词索引.json").read_text())
+                repaired = json.loads((output / "全话提示词索引.json").read_text(encoding='utf-8-sig'))
                 panel = repaired["panels"][0]
                 self.assertEqual(panel["generation_execution"]["status"], "NOT_RUN")
                 self.assertTrue(panel["generation_execution_history"])
@@ -443,14 +443,14 @@ class ReferenceTests(unittest.TestCase):
             before_records = []
             for script in ("repair_prompt_package.py", "repair_prompt_package_v2.py"):
                 output = self.root / ("before_" + script.removesuffix(".py"))
-                result = subprocess.run([sys.executable, str(Path(baseline) / "scripts" / script), "--source", str(self.root), "--identity-root", str(self.root), "--output", str(output)], capture_output=True, text=True)
+                result = subprocess.run([sys.executable, '-X', 'utf8', str(Path(baseline) / "scripts" / script), "--source", str(self.root), "--identity-root", str(self.root), "--output", str(output)], capture_output=True, text=True, encoding='utf-8')
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-                before = json.loads((output / "全话提示词索引.json").read_text())["panels"][0]
+                before = json.loads((output / "全话提示词索引.json").read_text(encoding='utf-8-sig'))["panels"][0]
                 self.assertEqual(before["generation_execution"]["status"], "COMPLETED")
                 before_records.append({"script": script, "before_execution_status": "COMPLETED", "after_execution_status": "NOT_RUN", "before_review_evidence_copied": (output / before["composition_reference"]["review_evidence"]["path"]).exists(), "after_review_evidence_copied": True})
             destination = os.environ.get("COMIC_VERIFICATION_OUTPUT")
             if destination:
-                Path(destination, "修复流程前后对比.json").write_text(json.dumps({"fixture_kind": "SYNTHETIC_NOT_REAL_APPROVAL_OR_EXECUTION", "records": before_records}, ensure_ascii=False, indent=2))
+                Path(destination, "修复流程前后对比.json").write_text(json.dumps({"fixture_kind": "SYNTHETIC_NOT_REAL_APPROVAL_OR_EXECUTION", "records": before_records}, ensure_ascii=False, indent=2), encoding='utf-8', newline='\n')
 
 
 if __name__ == "__main__":

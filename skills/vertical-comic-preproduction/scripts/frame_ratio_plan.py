@@ -54,7 +54,7 @@ def plan_errors(data,root,source=None):
     try:
         if not enabled(data):raise ValueError('未知画幅分布合同')
         plan=read_plan(data,root)
-        if source is None:source=json.loads(checked_file(Path(root),data['source_snapshot']).read_text())
+        if source is None:source=json.loads(checked_file(Path(root),data['source_snapshot']).read_text(encoding='utf-8-sig'))
         expected={'policy':POLICY,'book_id':data['book_id'],'episode_id':data['episode_id'],'source_snapshot':data['source_snapshot'],'panel_ids':source['panel_ids']}
         if any(plan.get(k)!=v for k,v in expected.items()):raise ValueError('全话比例计划的书话/源稿版本/源序不一致')
         rows=plan.get('panels',[])
@@ -111,10 +111,10 @@ def template(data,source):
 def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--state',required=True);p.add_argument('--write-template');p.add_argument('--actual',action='store_true');a=p.parse_args()
     try:
-        path=Path(a.state).resolve();root=path.parent.parent;data=json.loads(path.read_text());source=json.loads(checked_file(root,data['source_snapshot']).read_text())
+        path=Path(a.state).resolve();root=path.parent.parent;data=json.loads(path.read_text(encoding='utf-8-sig'));source=json.loads(checked_file(root,data['source_snapshot']).read_text(encoding='utf-8-sig'))
         if a.write_template:
             dest=Path(a.write_template).resolve();dest.relative_to(root)
-            with dest.open('x',encoding='utf-8') as f:json.dump(template(data,source),f,ensure_ascii=False,indent=2)
+            with dest.open('x',encoding='utf-8', newline='\n') as f:json.dump(template(data,source),f,ensure_ascii=False,indent=2)
             print(json.dumps({'status':'UNPLANNED_NOT_APPROVED','path':str(dest)},ensure_ascii=False));return 0
         if not enabled(data):raise ValueError('本任务未启用新画幅合同；旧RV须明确恢复/迁移')
         errors=plan_errors(data,root,source)
@@ -124,4 +124,7 @@ def main():
         print(json.dumps(value,ensure_ascii=False));return bool(errors)
     except (OSError,ValueError,TypeError,KeyError,AttributeError) as exc:print(json.dumps({'status':'HOLD','errors':[str(exc)]},ensure_ascii=False));return 1
 
-if __name__=='__main__':raise SystemExit(main())
+if __name__=='__main__':
+    from platform_io import configure_stdio
+    configure_stdio()
+    raise SystemExit(main())

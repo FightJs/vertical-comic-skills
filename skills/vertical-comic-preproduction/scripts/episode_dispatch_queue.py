@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import argparse
 import copy
-import fcntl
+from platform_io import file_lock, atomic_json
 import json
 import os
 import tempfile
@@ -21,18 +21,7 @@ from codex_reference_contract import checked_file, digest, read_json
 
 
 def _atomic_json(path, value):
-    path = Path(path)
-    with tempfile.NamedTemporaryFile('w', encoding='utf-8', dir=path.parent, delete=False) as stream:
-        json.dump(value, stream, ensure_ascii=False, indent=2)
-        stream.write('\n')
-        stream.flush()
-        os.fsync(stream.fileno())
-        temp = Path(stream.name)
-    try:
-        os.replace(temp, path)
-    finally:
-        if temp.exists():
-            temp.unlink()
+    atomic_json(path, value)
 
 
 def reserve_ready(state_path, expected_state_sha256, expected_control_sha256, max_count=None):
@@ -54,8 +43,7 @@ def reserve_ready(state_path, expected_state_sha256, expected_control_sha256, ma
     lock_paths = sorted((state_path.with_suffix('.runtime.lock'), control_path.with_suffix('.dispatch.lock')))
     with ExitStack() as stack:
         for lock_path in lock_paths:
-            lock = stack.enter_context(lock_path.open('a'))
-            fcntl.flock(lock, fcntl.LOCK_EX)
+            stack.enter_context(file_lock(lock_path))
         if digest(state_path) != expected_state_sha256 or digest(control_path) != expected_control_sha256:
             raise ValueError('STATE_OR_CONTROL_CHANGED')
         state = read_json(state_path)
@@ -126,7 +114,7 @@ def reserve_ready(state_path, expected_state_sha256, expected_control_sha256, ma
                 new_path = original.with_name(original.stem + '.dispatch-' + permit_id + original.suffix)
                 _atomic_json(new_path, packet)
                 created.append(new_path)
-                row['package_manifest'] = {'path': str(new_path.relative_to(root)), 'sha256': digest(new_path)}
+                row['package_manifest'] = {'path': new_path.relative_to(root).as_posix(), 'sha256': digest(new_path)}
                 new_control['permits'].append(permit)
                 reserved.append({'panel_id': pid, 'permit_id': permit_id, 'receipt': receipt,
                                  'package_manifest': row['package_manifest']})
@@ -162,4 +150,6 @@ def main():
 
 
 if __name__ == '__main__':
+    from platform_io import configure_stdio
+    configure_stdio()
     raise SystemExit(main())

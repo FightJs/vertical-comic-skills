@@ -24,7 +24,7 @@ DIRS = (
 def write_if_missing(path: Path, value: object) -> None:
     if path.exists():
         return
-    path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline='\n')
 
 
 def main() -> int:
@@ -140,13 +140,13 @@ def main() -> int:
     if mode == 'episode_async_v1':
         from task_context import fresh, validate as validate_task, ORIGIN_FILE
         if (root/'00_输入审计/生产流程.json').exists():
-            existing=json.loads((root/'00_输入审计/生产流程.json').read_text())
-            if args.task_context and json.loads(Path(args.task_context).read_text())!=existing.get('task_context'):
+            existing=json.loads((root/'00_输入审计/生产流程.json').read_text(encoding='utf-8-sig'))
+            if args.task_context and json.loads(Path(args.task_context).read_text(encoding='utf-8-sig'))!=existing.get('task_context'):
                 parser.error('已有生产流程不能换任务或重置预算；从原冻结入口恢复')
             print(json.dumps({'status':'EXISTING_STATE_PRESERVED','root':str(root),
                               'image_calls':0,'next':'原文件未修改；恢复从原冻结入口执行'},ensure_ascii=False))
             return 0
-        task = validate_task(json.loads(Path(args.task_context).read_text())) if args.task_context else fresh(args.book, config['production']['episodes'] if config else [args.episode])
+        task = validate_task(json.loads(Path(args.task_context).read_text(encoding='utf-8-sig'))) if args.task_context else fresh(args.book, config['production']['episodes'] if config else [args.episode])
         if task['book_id'] != args.book or args.episode not in task['episode_ids']:
             parser.error('任务来源与本书/本话失配')
         extra['task_context'] = task
@@ -166,7 +166,7 @@ def main() -> int:
         index_path=root/"00_输入审计"/"批准索引.json"
         write_if_missing(index_path,{"policy":"approval_index_v1","book_id":args.book,"entries":[]})
         from codex_reference_contract import digest
-        extra["approval_index"]={"path":str(index_path.relative_to(root)),"sha256":digest(index_path)}
+        extra["approval_index"]={"path":index_path.relative_to(root).as_posix(),"sha256":digest(index_path)}
 
     identity = {
         "identity_policy": IDENTITY_POLICY,
@@ -263,4 +263,6 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    from platform_io import configure_stdio
+    configure_stdio()
     raise SystemExit(main())

@@ -30,7 +30,7 @@ def load_json(path: Path) -> dict[str, Any]:
 
 
 def write_json(path: Path, value: Any) -> None:
-    path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline='\n')
 
 
 def records(data: dict[str, Any]) -> list[dict[str, Any]]:
@@ -417,8 +417,8 @@ def main() -> int:
         normalized.append(repaired)
         panel_dir = output / pid
         panel_dir.mkdir(parents=True, exist_ok=True)
-        (panel_dir / "prompt.txt").write_text(repaired_prompt + "\n", encoding="utf-8")
-        (panel_dir / "negative_prompt.txt").write_text(repaired["negative_prompt"] + "\n", encoding="utf-8")
+        (panel_dir / "prompt.txt").write_text(repaired_prompt + "\n", encoding="utf-8", newline='\n')
+        (panel_dir / "negative_prompt.txt").write_text(repaired["negative_prompt"] + "\n", encoding="utf-8", newline='\n')
         write_json(
             panel_dir / "camera_execution.json",
             {
@@ -507,10 +507,12 @@ def main() -> int:
         "来源包保留。镜头、比例及身体裁切写入实际 `prompt.txt`；新构图不与旧宽景正文混用，旧正文保留在审计字段中。保留空间证明和构图/旧正文迁移的复核HOLD。\n\n"
         "使用本包前，先处理 `修复门禁报告.json` 中的所有HOLD。B返回底图后运行 `make_generation_qa.py`，核对实际裁切与必显信息，并通过P001–P003相邻三格审查后才能进入排版。\n",
         encoding="utf-8",
-    )
+    newline='\n')
     print(json.dumps({"status": "CREATED", "output": str(output), "panel_count": len(normalized)}, ensure_ascii=False, indent=2))
     return 0
 
 
 if __name__ == "__main__":
+    from platform_io import configure_stdio
+    configure_stdio()
     raise SystemExit(main())

@@ -23,7 +23,7 @@ def decision_errors(proof, root, book, episode):
     delegation. No wildcard phases/panels or automatic extra repair budget.
     """
     try:
-        grant = json.loads(checked_file(Path(root), proof['authority']).read_text())
+        grant = json.loads(checked_file(Path(root), proof['authority']).read_text(encoding='utf-8-sig'))
         text = lambda v: isinstance(v, str) and bool(v.strip())
         ids = proof.get('panel_ids')
         if (proof.get('status') != DECIDED or proof.get('source_kind') != 'agent_decision'
@@ -77,7 +77,7 @@ def delegated_decisions(review, selected_ids, authority_ref, reviewer, evidence,
     expected = proposal(review['book_id'], review['episode_id'], review['items'], root)
     if review != expected or not isinstance(selected_ids, list) or not selected_ids or len(set(selected_ids)) != len(selected_ids) or not set(selected_ids) <= {i['item_id'] for i in review['items']}:
         raise ValueError('决定事项或版本不符')
-    grant = json.loads(checked_file(Path(root), authority_ref).read_text())
+    grant = json.loads(checked_file(Path(root), authority_ref).read_text(encoding='utf-8-sig'))
     proofs = []
     for item in review['items']:
         if item['item_id'] not in selected_ids: continue
@@ -152,7 +152,7 @@ def question_action(review, pending):
 def bundle_proposal(state, root, bundle_ref):
     """Bind the already-written package; no circular self-hash in the package."""
     from execution_contract import extra_basis_refs
-    packet=json.loads(checked_file(Path(root),bundle_ref).read_text())
+    packet=json.loads(checked_file(Path(root),bundle_ref).read_text(encoding='utf-8-sig'))
     if packet.get('policy')!='generation_review_package_v1' or packet.get('scope')!='episode':
         raise ValueError('须为整话候选生图包')
     if any(packet.get(k)!=state.get(k) for k in ('book_id','episode_id','visual_basis','shot_manifest')):
@@ -190,14 +190,14 @@ def main():
     p.add_argument('--reviewer');p.add_argument('--evidence')
     a=p.parse_args()
     if a.bundle:
-        state=json.loads(Path(a.state).read_text());bundle_path=Path(a.root)/a.bundle
+        state=json.loads(Path(a.state).read_text(encoding='utf-8-sig'));bundle_path=Path(a.root)/a.bundle
         from codex_reference_contract import digest
         review=bundle_proposal(state,a.root,{'path':a.bundle,'sha256':digest(bundle_path)})
-    else:review=json.loads(Path(a.proposal).read_text())
+    else:review=json.loads(Path(a.proposal).read_text(encoding='utf-8-sig'))
     checked=proposal(review['book_id'],review['episode_id'],review['items'],a.root)
     if a.selection:
         if review!=checked:raise ValueError('须使用已展示的准确event_id')
-        selection=json.loads(Path(a.selection).read_text())
+        selection=json.loads(Path(a.selection).read_text(encoding='utf-8-sig'))
         if a.authority:
             from codex_reference_contract import digest
             ref={'path':a.authority,'sha256':digest(Path(a.root)/a.authority)}
@@ -205,9 +205,12 @@ def main():
         else:
             result={'proofs':approvals(review,selection['accepted_item_ids'],selection['message'],a.root)}
     else:
-        pending=json.loads(Path(a.pending).read_text()) if a.pending else []
+        pending=json.loads(Path(a.pending).read_text(encoding='utf-8-sig')) if a.pending else []
         result={'proposal':checked,**question_action(checked,pending)}
     print(json.dumps(result,ensure_ascii=False,indent=2))
 
 
-if __name__=='__main__':main()
+if __name__=='__main__':
+    from platform_io import configure_stdio
+    configure_stdio()
+    main()

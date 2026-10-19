@@ -4,17 +4,60 @@ permissions:
   contents: read
 jobs:
   test:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python: ['3.12', '3.14']
+    runs-on: ${{ matrix.os }}
+    env:
+      PYTHONUTF8: '0'
     steps:
       - uses: actions/checkout@v4
+      - name: Isolate local user state
+        shell: bash
+        run: echo "CODEX_HOME=$RUNNER_TEMP/comic-ci-home" >> "$GITHUB_ENV"
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: ${{ matrix.python }}
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
       - run: python -m pip install -r requirements.txt
+      - run: python -B tools/check_environment.py
       - run: python -B tools/check_bundle.py
       - run: python -B -m unittest discover -s skills/vertical-comic-preproduction/tests
       - run: node skills/vertical-comic-preproduction/tests/test_async_generation.js
       - run: python -B -m unittest discover -s tests
+      - if: matrix.python == '3.12'
+        run: python -B tools/cross_platform_handoff.py produce --path exchange/synthetic.zip
+      - if: matrix.python == '3.12'
+        uses: actions/upload-artifact@v4
+        with:
+          name: handoff-${{ matrix.os }}
+          path: exchange/synthetic.zip
+          retention-days: 3
+  exchange:
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        source: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      PYTHONUTF8: '0'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Isolate local user state
+        shell: bash
+        run: echo "CODEX_HOME=$RUNNER_TEMP/comic-ci-home" >> "$GITHUB_ENV"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements.txt
+      - uses: actions/download-artifact@v4
+        with:
+          name: handoff-${{ matrix.source }}
+          path: exchange
+      - run: python -B tools/cross_platform_handoff.py consume --path exchange/synthetic.zip

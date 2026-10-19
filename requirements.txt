@@ -1,2 +1,1 @@
-Pillow>=10,<13
-PyYAML>=6,<7
+-r skills/vertical-comic-preproduction/assets/templates/runtime-requirements.txt

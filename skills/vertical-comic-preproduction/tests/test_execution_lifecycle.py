@@ -20,15 +20,15 @@ def observe(name,actual,expected=None):
 
 def write(root,name,value):
     path=root/name;path.parent.mkdir(parents=True,exist_ok=True)
-    path.write_text(json.dumps(value,ensure_ascii=False,indent=2))
+    path.write_text(json.dumps(value,ensure_ascii=False,indent=2), encoding='utf-8', newline='\n')
     return {'path':name,'sha256':digest(path)}
-def read(root,ref):return json.loads((root/ref['path']).read_text())
-def cli(*args):return subprocess.run([sys.executable,*map(str,args)],capture_output=True,text=True)
+def read(root,ref):return json.loads((root/ref['path']).read_text(encoding='utf-8-sig'))
+def cli(*args):return subprocess.run([sys.executable, '-X', 'utf8',*map(str,args)],capture_output=True,text=True, encoding='utf-8')
 def approve(refs):return {'status':'APPROVED','source_kind':'user_message','source_locator':'synthetic://NOT-REAL-USER','quote':'SYNTHETIC TEST ONLY','book_id':'UNIT','episode_id':'E000','artifacts':refs}
 
 def build_calibration(root):
   h=fixtures.StagedTests();h.setUp();h.real_input();shutil.copytree(h.root,root);h.doCleanups()
-  m=json.loads((root/'全话提示词索引.json').read_text());p=m['panels'][0]
+  m=json.loads((root/'全话提示词索引.json').read_text(encoding='utf-8-sig'));p=m['panels'][0]
   p.update(generation_dependencies=[],requires_state_review=False,calibration_anchor=True,state_review_policy='merge_into_C',source_panel_id='E000-P001')
   m.update(execution_mode='half_episode_async_v1',optimization_policy=POLICY,execution_contract=EXEC,round_context={'batch_id':'H001','round_id':1,'attempt_id':'P001-r1'})
   source=write(root,'source.json',{'SYNTHETIC':'locked source'});ids=['P001','P002','P003','P004']
@@ -41,7 +41,7 @@ def build_calibration(root):
   expand_scope(m['identity_registry'])
   raw={'source_sha256':source['sha256'],'panel_ids':['E000-'+pid for pid in ids],'locked_scripts':{'E000-'+pid:copy.deepcopy(p['locked_script']) for pid in ids}}
   raw_ref=write(root,'raw-snapshot.json',raw);snap=write(root,'snapshot.json',adapted(raw,'E000',raw_ref))
-  original_basis=json.loads((root/'basis.json').read_text());basis=write(root,'H001-basis.json',original_basis)
+  original_basis=json.loads((root/'basis.json').read_text(encoding='utf-8-sig'));basis=write(root,'H001-basis.json',original_basis)
   p2=copy.deepcopy(p);p2.update(panel_id='P002',source_panel_id='E000-P002',calibration_anchor=False,camera_view_id='CAM2',adjacent_face_comparison={'A':{'face_comparable':True,'evidence':'synthetic visible faces'}})
   p2['continuity_contract']['scene'].update(mode='same_scene_new_view',previous_panel_id='P001')
   p2['continuity_contract']['qa_requirements']['framing']['subject_ids']=['P002']
@@ -68,7 +68,7 @@ def build_calibration(root):
 def create_return(root,s,m,p,status,round_id):
   pid=p['panel_id'];attempt=f'{pid}-r{round_id}';m['round_context']={'batch_id':'H001','round_id':round_id,'attempt_id':attempt}
   errors,plan=validate_panel(p,root);assert not errors,errors
-  image_dir=root/f'images-r{round_id}';image_dir.mkdir();out=image_dir/(pid+'.png');Image.new('RGB',(90,160),'white' if round_id==1 else 'yellow').save(out);out_ref={'path':str(out.relative_to(root)),'sha256':digest(out)}
+  image_dir=root/f'images-r{round_id}';image_dir.mkdir();out=image_dir/(pid+'.png');Image.new('RGB',(90,160),'white' if round_id==1 else 'yellow').save(out);out_ref={'path':out.relative_to(root).as_posix(),'sha256':digest(out)}
   req={'attempt_id':attempt,'backend_id':'codex_builtin_imagegen','panel_id':pid,**plan,'source_kind':'observed_tool_call','source_locator':'synthetic://fake-call'}
   res={'attempt_id':attempt,'status':'COMPLETED','outputs':[out_ref],'source_kind':'observed_tool_result','source_locator':'synthetic://fake-result'}
   p['generation_execution']={'status':'COMPLETED','attempt_id':attempt,'request_evidence':write(root,f'request-r{round_id}.json',req),'response_evidence':write(root,f'response-r{round_id}.json',res)}
@@ -76,7 +76,7 @@ def create_return(root,s,m,p,status,round_id):
   # CLI package uses conventional filename; copy the exact manifest as a stable version.
   write(root,'全话提示词索引.json',m)
   qdir=root/f'qa-r{round_id}';r=cli(BASE/'scripts/make_generation_qa.py','--package',root,'--images',image_dir,'--output',qdir);assert r.returncode==0,r.stdout+r.stderr
-  q=json.loads((qdir/'生成图QA报告.json').read_text());q['source_manifest_sha256']=mr['sha256'];it=q['panels'][0]
+  q=json.loads((qdir/'生成图QA报告.json').read_text(encoding='utf-8-sig'));q['source_manifest_sha256']=mr['sha256'];it=q['panels'][0]
   for rv in [*it['dimension_review'].values(),it['style_review']]:
     if rv['status']=='UNREVIEWED':rv.update(status='PASS',reviewer='SYNTHETIC',evidence='synthetic QA only')
   for k in ('camera_match','shot_scale_match','background_view_match','body_crop_match','required_visible_information_preserved','no_extra_offscreen_characters'):it[k]=True
@@ -92,7 +92,7 @@ def tests_calibration(root):
   create_return(root,s,m,p,'VISUAL_FAIL',1);observe('first fail actual six-dimension attempt check',attempt_errors(half_view(s,'H001'),root,r),[])
   before=evaluate(s,root);observe('first fail before calibration report',before['next_action'])
   write(root,'00_输入审计/生产流程.json',s);qpath=root/'calibration-review.json';cmd=cli(BASE/'scripts/calibration_repair.py','--state',root/'00_输入审计/生产流程.json','--panel','P001','--write',qpath);observe('CLI creates only unreviewed calibration candidate',cmd.returncode,0);assert cmd.returncode==0,cmd.stdout+cmd.stderr
-  cal=json.loads(qpath.read_text());cal.update(status='REVIEWED',reviewer='SYNTHETIC',evidence='Synthetic review only',diagnosis={'reviewer':'SYNTHETIC','evidence':'Only missing hand gesture; preserve all else','earliest_layer':'action_interaction','requires_basis_change':False,'repair_constraints':{'P001':['仅恢复原稿抬手动作；保留身份、衣装、画风、空间和镜头。']}})
+  cal=json.loads(qpath.read_text(encoding='utf-8-sig'));cal.update(status='REVIEWED',reviewer='SYNTHETIC',evidence='Synthetic review only',diagnosis={'reviewer':'SYNTHETIC','evidence':'Only missing hand gesture; preserve all else','earliest_layer':'action_interaction','requires_basis_change':False,'repair_constraints':{'P001':['仅恢复原稿抬手动作；保留身份、衣装、画风、空间和镜头。']}})
   cref=write(root,'calibration-review.json',cal);s['calibration_reviews']['P001']=cref
   observe('calibration report unlocks prepare while P002 stays pending',evaluate(s,root)['next_action'],'PREPARE_CALIBRATION_CORRECTION')
   r['attempt_history']=[snapshot(r)];r.update(status='REPAIR_AUTHORIZED',round_id=2,attempt_id='P001-r2')
@@ -102,7 +102,7 @@ def tests_calibration(root):
   p['reference_bindings'].append({'alias':'@FAILED_P001','purpose':'pose_interaction','subject_ids':['A'],'allowed_transfer':['pose'],'forbidden_transfer':['identity','clothing','style']})
   old_usage=p['reference_usage_block'];p['reference_usage_block']=reference_usage_block(p['reference_bindings'],p['reference_images']);p['prompt']=p['prompt'].replace(old_usage,p['reference_usage_block'])+'\n'+cal['diagnosis']['repair_constraints']['P001'][0]
   stage=root.parent/'repair-stage';shutil.copytree(root,stage);repair_root=root/'attempt2';stage.rename(repair_root)
-  (repair_root/'P001/prompt.txt').write_text(p['prompt']);write(repair_root,'P001/提示词.json',p);ref=write(repair_root,'repair-manifest.json',m);r['package_manifest']={**ref,'path':'attempt2/'+ref['path']}
+  (repair_root/'P001/prompt.txt').write_text(p['prompt'], encoding='utf-8', newline='\n');write(repair_root,'P001/提示词.json',p);ref=write(repair_root,'repair-manifest.json',m);r['package_manifest']={**ref,'path':'attempt2/'+ref['path']}
   gen=evaluate(s,root,'generate','P001');observe('full second-round repair preflight while followers unsubmitted',gen['next_action'],'READY_FOR_HALF_PANEL');observe('second-round preflight errors',gen['errors'],[])
   s_bad=copy.deepcopy(s);s_bad['panels'][0]['round_id']=3;observe('third round rejected',evaluate(s_bad,root,'generate','P001')['status'],'HOLD')
   # Validate report/package binding remains strict after source-target mutation.
@@ -154,7 +154,7 @@ def tests_successor(root,s,m,shots):
   for name in ('identity-proof.json','style_approval.json','capability.json'):shutil.copy2(root/name,package_root/name)
   current['generation_execution']={'status':'NOT_RUN'};packet['round_context']={'batch_id':'H001','round_id':1,'attempt_id':'P002-r1'}
   packet['continuity_context']=write(package_root,'context-P002.json',ctx)
-  (package_root/'P002').mkdir();(package_root/'P002/prompt.txt').write_text(current['prompt']);write(package_root,'P002/提示词.json',current)
+  (package_root/'P002').mkdir();(package_root/'P002/prompt.txt').write_text(current['prompt'], encoding='utf-8', newline='\n');write(package_root,'P002/提示词.json',current)
   record=s['panels'][1];ref=write(package_root,'全话提示词索引.json',packet);record['package_manifest']={**ref,'path':'attempt-P002/'+ref['path']}
   subset={**packet,'panels':[copy.deepcopy(current)]}
   subset['continuity_context']=write(root,'context-P002-subset.json',ctx);record['shot_subset']=write(root,'P002-shot-subset.json',subset)
@@ -196,7 +196,7 @@ def tests_adjacent_context(root):
   packet={**copy.deepcopy(m),'panels':[current],'round_context':{'batch_id':'H001','round_id':1,'attempt_id':'P002-r1'}}
   packet['continuity_context']=write(root,'context-P002.json',ctx)
   current['generation_execution']={'status':'NOT_RUN'}
-  (root/'P002').mkdir();(root/'P002/prompt.txt').write_text(current['prompt']);write(root,'P002/提示词.json',current)
+  (root/'P002').mkdir();(root/'P002/prompt.txt').write_text(current['prompt'], encoding='utf-8', newline='\n');write(root,'P002/提示词.json',current)
   s['panels'][1].update(package_manifest=write(root,'P002-manifest.json',packet),shot_subset=write(root,'P002-subset.json',packet))
   from validate_preproduction import Gate
   gate=Gate(root);gate.check_adjacent(p,current)
@@ -211,14 +211,14 @@ class ExecutionLifecycleTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp)/'episode';s,m,p,shots=build_calibration(root)
             library=root/'rules';library.mkdir();body=library/'rule.md'
-            body.write_text('SYNTHETIC adjacent rule: camera_view_distinct and shot_scale_distinct.\n')
+            body.write_text('SYNTHETIC adjacent rule: camera_view_distinct and shot_scale_distinct.\n', encoding='utf-8', newline='\n')
             rule={'id':'MEM-010','title':'Synthetic adjacent rule','version':'1','status':'active','scope':'cross_work',
                 'primary_stage':'shot_design','stages':['shot_design','generation','image_review'],
                 'admission':{'portable':True,'contains_story_facts':False,'rationale':'SYNTHETIC method only'},
                 'trigger':{'any_tags':['adjacent_panel_pair'],'any_visual_terms':[]},
                 'requirements':{stage:{'checks':['camera_view_distinct','shot_scale_distinct'],'artifacts':[],'prompt_constraints':False} for stage in ['shot_design','generation','image_review']},
                 'file':{'path':'rule.md','sha256':digest(body)}}
-            (library/'记忆索引.json').write_text(json.dumps({'policy':'triggered_rules_v1','rules':[rule]}))
+            (library/'记忆索引.json').write_text(json.dumps({'policy':'triggered_rules_v1','rules':[rule]}), encoding='utf-8', newline='\n')
             source={'policy':'triggered_rules_v1','root':str(library),'index':'记忆索引.json'}
             s['memory_source']=source;m['memory_source']=source;shots['memory_source']=source;current=shots['panels'][1];current['memory_tags']=[]
             for stage in ('shot_design','generation'):
@@ -237,7 +237,7 @@ class ExecutionLifecycleTests(unittest.TestCase):
             context_ref=write(root,'rule-context.json',context)
             packet={**m,'panels':[current],'continuity_context':context_ref,'dependency_outputs':{},
                 'round_context':{'batch_id':'H001','round_id':1,'attempt_id':'P002-r1'}}
-            (root/'P002').mkdir();(root/'P002/prompt.txt').write_text(current['prompt']);write(root,'P002/提示词.json',current)
+            (root/'P002').mkdir();(root/'P002/prompt.txt').write_text(current['prompt'], encoding='utf-8', newline='\n');write(root,'P002/提示词.json',current)
             subset={**shots,'panels':[current],'continuity_context':context_ref}
             record=s['panels'][1];record.update(package_manifest=write(root,'rule-packet.json',packet),shot_subset=write(root,'rule-subset.json',subset))
             technical=Gate(root,expected_panel_ids=['P002']).run(root/record['shot_subset']['path'],root/record['package_manifest']['path'])

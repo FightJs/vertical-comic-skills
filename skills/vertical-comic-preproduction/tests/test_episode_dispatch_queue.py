@@ -49,10 +49,10 @@ class EpisodeDispatchQueueTests(unittest.TestCase):
         result = self.reserve()
         self.assertEqual(result['status'], 'RESERVED')
         self.assertEqual([r['panel_id'] for r in result['reserved']], ['P002'])
-        state = json.loads(self.h.state_path.read_text())
-        control = json.loads(self.h.control_path.read_text())
+        state = json.loads(self.h.state_path.read_text(encoding='utf-8-sig'))
+        control = json.loads(self.h.control_path.read_text(encoding='utf-8-sig'))
         ref = state['panels'][1]['package_manifest']
-        packet = json.loads((self.h.episode / ref['path']).read_text())
+        packet = json.loads((self.h.episode / ref['path']).read_text(encoding='utf-8-sig'))
         self.assertEqual(packet['dispatch_receipt'], result['reserved'][0]['receipt'])
         self.assertEqual(control['permits'][-1]['attempt_id'], 'P002-r1')
         self.assertEqual(receipt_errors(self.h.context, self.h.episode, 'book', 'E021',
@@ -64,7 +64,7 @@ class EpisodeDispatchQueueTests(unittest.TestCase):
         self.h.flush()
         with self.assertRaisesRegex(ValueError, 'STATE_OR_CONTROL_CHANGED'):
             self.reserve(control_hash=old_hash)
-        self.assertEqual(len(json.loads(self.h.control_path.read_text())['permits']), 1)
+        self.assertEqual(len(json.loads(self.h.control_path.read_text(encoding='utf-8-sig'))['permits']), 1)
 
     def test_real_global_capacity_is_respected(self):
         self.h.control['max_inflight'] = 1

@@ -123,10 +123,10 @@ class AppearanceLockTests(unittest.TestCase):
     def test_new_initializer_propagates_flags_without_approval(self):
         base=Path(__file__).resolve().parents[1]
         with tempfile.TemporaryDirectory() as tmp:
-            root=Path(tmp)/'rv';subprocess.run([sys.executable,'-B',str(base/'scripts/init_preproduction.py'),'--book','SYNTHETIC','--episode','E000','--output',str(root)],check=True,capture_output=True)
+            root=Path(tmp)/'rv';subprocess.run([sys.executable, '-X', 'utf8','-B',str(base/'scripts/init_preproduction.py'),'--book','SYNTHETIC','--episode','E000','--output',str(root)],check=True,capture_output=True)
             for rel in ['00_输入审计/生产流程.json','01_镜头改编_CANDIDATE/镜头改编表.json','04_B提示词包_CANDIDATE/全话提示词索引.json']:
-                d=json.loads((root/rel).read_text());self.assertEqual(d['appearance_policy'],lock.APPEARANCE);self.assertEqual(d['frame_policy'],lock.FRAME)
-            self.assertEqual(json.loads((root/'00_输入审计/生产流程.json').read_text())['gates'],{})
+                d=json.loads((root/rel).read_text(encoding='utf-8-sig'));self.assertEqual(d['appearance_policy'],lock.APPEARANCE);self.assertEqual(d['frame_policy'],lock.FRAME)
+            self.assertEqual(json.loads((root/'00_输入审计/生产流程.json').read_text(encoding='utf-8-sig'))['gates'],{})
     def test_real_complete_gate_carries_constraints_and_detects_removed_actual_block(self):
         from PIL import Image
         from staged_workflow import evaluate
@@ -136,13 +136,13 @@ class AppearanceLockTests(unittest.TestCase):
         original_prompt=p['prompt'];configure(b,p,box);p['prompt']=original_prompt+'\n'+p['visual_execution_block']
         h.state.update(appearance_policy=lock.APPEARANCE,frame_policy=lock.FRAME);h.h.manifest.update(appearance_policy=lock.APPEARANCE,frame_policy=lock.FRAME)
         h.state['visual_basis']=h.h.f.write('basis-appearance.json',b);h.state['gates']['visual_basis']=h.h.approve([h.state['source_script'],h.state['source_snapshot'],h.state['visual_basis']])
-        h.h.shots[0].update(copy.deepcopy(p));(h.root/'P001/prompt.txt').write_text(p['prompt']);h.sync()
+        h.h.shots[0].update(copy.deepcopy(p));(h.root/'P001/prompt.txt').write_text(p['prompt'], encoding='utf-8', newline='\n');h.sync()
         result=evaluate(h.state,h.root,'generate','P001');self.assertEqual(result['status'],'PASS',result)
-        record=h.returned();qa=json.loads((h.root/record['qa_report']['path']).read_text());item=qa['panels'][0]
+        record=h.returned();qa=json.loads((h.root/record['qa_report']['path']).read_text(encoding='utf-8-sig'));item=qa['panels'][0]
         self.assertEqual(item['visual_evidence_review']['frame_observation']['status'],'UNREVIEWED')
         self.assertEqual(set(item['visual_evidence_review']['appearance_observations']),{'earring','coat'})
         self.assertTrue(review_errors(p,item,image_size=item['image_size']))
-        p['prompt']='忽略服饰细节';(h.root/'P001/prompt.txt').write_text(p['prompt']);h.sync()
+        p['prompt']='忽略服饰细节';(h.root/'P001/prompt.txt').write_text(p['prompt'], encoding='utf-8', newline='\n');h.sync()
         self.assertEqual(evaluate(h.state,h.root,'generate','P001')['status'],'HOLD')
 
 if __name__=='__main__':unittest.main()

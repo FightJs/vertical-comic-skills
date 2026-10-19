@@ -41,22 +41,22 @@ class DirectHandoffTests(unittest.TestCase):
         # Freeze only after all installed code/docs are stable. Rebind addresses in bind.
         snapshot=create(self.package/'runtime');s['toolchain']=toolchain()
         self.state_ref=f.fixtures.write(self.template,'00_输入审计/生产流程.json',s)
-        (self.package/'交接说明.md').write_text('SYNTHETIC DIRECT TEST; no real human approval')
-        (self.package/'接包生产执行要求.md').write_text('SYNTHETIC bind -> rehearse -> H001')
-        (self.package/'history.json').write_text('{"synthetic":true}')
-        (self.package/'binding-plan.md').write_text('SYNTHETIC portable runtime-only binding')
+        (self.package/'交接说明.md').write_text('SYNTHETIC DIRECT TEST; no real human approval', encoding='utf-8', newline='\n')
+        (self.package/'接包生产执行要求.md').write_text('SYNTHETIC bind -> rehearse -> H001', encoding='utf-8', newline='\n')
+        (self.package/'history.json').write_text('{"synthetic":true}', encoding='utf-8', newline='\n')
+        (self.package/'binding-plan.md').write_text('SYNTHETIC portable runtime-only binding', encoding='utf-8', newline='\n')
         template_ref=self.put('template-index.json',{'policy':d.TEMPLATE,'episode_id':'E000','root':'template/E000','state_file':self.state_ref['path'],'files':h.files(self.template)})
         self.index={'policy':h.POLICY,'delivery_policy':d.DIRECT,'package_id':'SYNTHETIC_DIRECT','book_id':s['book_id'],'episodes':[{'episode_id':'E000','panel_ids':source['panel_ids'],'halves':{'H001':['P001','P002'],'H002':['P003','P004']},'source_snapshot':self.ref('template/E000/'+s['source_snapshot']['path']),'production_source_snapshot':self.ref('template/E000/'+s['source_snapshot']['path']),'source_script':self.ref('template/E000/'+s['source_script']['path']),'visual_basis':self.ref('template/E000/'+s['visual_basis']['path']),'shot_manifest':self.ref('template/E000/'+s['shot_manifest']['path']),'runtime_manifest':self.ref('runtime/manifest.json'),'approval_evidence':self.ref('template/E000/'+s['approval_index']['path']),'path_binding_plan':self.ref('binding-plan.md'),'run_template':template_ref,'generation_review_packages':[self.ref('template/E000/'+r['path']) for r in s['generation_packages']['EPISODE']],'panels':[{'panel_id':pid,'classification':'READY_H001' if i<2 else 'PREPARED_H002','history':{'status':'NEVER_SUBMITTED','reviewer':'SYNTHETIC','conclusion':'Isolated synthetic fixture; not real calls','evidence':[self.ref('history.json')],'attempts':[],'auto_corrections_used':0,'remaining_auto_corrections':1}} for i,pid in enumerate(source['panel_ids'])]}]}
         self.save()
     def ref(self,name):return {'path':name,'sha256':h.sha(self.package/name)}
     def put(self,name,value):
-        p=self.package/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_text(json.dumps(value,ensure_ascii=False,indent=2));return self.ref(name)
+        p=self.package/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_text(json.dumps(value,ensure_ascii=False,indent=2), encoding='utf-8', newline='\n');return self.ref(name)
     def save(self):self.put(h.INDEX,self.index)
     def scope_task(self):
         from task_context import fresh,ORIGIN_FILE
         ctx=fresh(self.state['book_id'],['E000'])
         self.state['task_context']=ctx;self.index['task_context']=ctx
-        (self.template/ORIGIN_FILE).write_text(json.dumps({'task_context':ctx,'episode_id':'E000','initial_body_calls':0,'initial_asset_calls':0}))
+        (self.template/ORIGIN_FILE).write_text(json.dumps({'task_context':ctx,'episode_id':'E000','initial_body_calls':0,'initial_asset_calls':0}), encoding='utf-8', newline='\n')
         for row in self.index['episodes'][0]['panels']:row['history']['task_id']=ctx['task_id']
         self.refresh_template();return ctx
     def refresh_template(self):
@@ -67,10 +67,10 @@ class DirectHandoffTests(unittest.TestCase):
     def test_independent_task_real_receive_roundtrip_preserves_scope_and_budget(self):
         ctx=self.scope_task()
         # Real A asset log is separate; it must neither require old body history nor reset body budget.
-        (self.template/'asset-call.json').write_text('{"synthetic":true,"kind":"asset","status":"COMPLETED"}')
+        (self.template/'asset-call.json').write_text('{"synthetic":true,"kind":"asset","status":"COMPLETED"}', encoding='utf-8', newline='\n')
         self.refresh_template()
         self.test_direct_bound_run_real_full_episode_gates_and_conditional_release()
-        state=json.loads((self.base/'local-run/E000/00_输入审计/生产流程.json').read_text())
+        state=json.loads((self.base/'local-run/E000/00_输入审计/生产流程.json').read_text(encoding='utf-8-sig'))
         self.assertEqual(state['task_context'],ctx)
         self.assertEqual(self.index['episodes'][0]['panels'][0]['history']['remaining_auto_corrections'],1)
 
@@ -98,16 +98,16 @@ class DirectHandoffTests(unittest.TestCase):
         before=h.files(self.package);z,received,bound,report=self.pipeline()
         self.assertEqual(report['status'],'RELEASE_CANDIDATE',report)
         self.assertEqual(h.files(self.package),before)
-        prep=json.loads((self.base/'rehearsal/E000_preparation.json').read_text());self.assertEqual(prep['prepared_panel_ids'],['P001','P002','P003','P004'])
+        prep=json.loads((self.base/'rehearsal/E000_preparation.json').read_text(encoding='utf-8-sig'));self.assertEqual(prep['prepared_panel_ids'],['P001','P002','P003','P004'])
         review=d.input_review(received,self.index)
-        auth=self.base/'conditional-export.json';auth.write_text(json.dumps({'status':'APPROVED','source_kind':'user_message','source_locator':'SYNTHETIC_NOT_REAL_USER','quote':'SYNTHETIC approve exact final inputs; export if real rehearsal passes','authorization_mode':'approved_inputs_auto_export_v1','package_id':self.index['package_id'],'approved_input_digest':review['approved_input_digest'],'after_successful_rehearsal':True}))
+        auth=self.base/'conditional-export.json';auth.write_text(json.dumps({'status':'APPROVED','source_kind':'user_message','source_locator':'SYNTHETIC_NOT_REAL_USER','quote':'SYNTHETIC approve exact final inputs; export if real rehearsal passes','authorization_mode':'approved_inputs_auto_export_v1','package_id':self.index['package_id'],'approved_input_digest':review['approved_input_digest'],'after_successful_rehearsal':True}), encoding='utf-8', newline='\n')
         out=self.base/'formal.zip';released=h.release(z,self.base/'rehearsal/演练报告.json',auth,out)
         self.assertEqual(released['status'],'RELEASED_DIRECT_DELIVERY_ZIP')
         self.assertFalse(Path(str(out)+'.sha256').exists())
         self.assertEqual(h.check_delivery_archive(out)['format'],'self_contained_handoff_v1')
         renamed=self.base/'正式交接包.zip';out.rename(renamed);out=renamed
         # A stale legacy sidecar must not affect a new self-contained ZIP.
-        Path(str(out)+'.sha256').write_text('obsolete checksum')
+        Path(str(out)+'.sha256').write_text('obsolete checksum', encoding='utf-8', newline='\n')
         import comic_start
         # Isolated tiny fixture: simulate receiver capacity, independent of host free space.
         with patch.object(h.shutil,'disk_usage',return_value=SimpleNamespace(free=10*1024**3)):
@@ -145,7 +145,7 @@ class DirectHandoffTests(unittest.TestCase):
         row['production_dependency']['panel_id']='P999';self.assertTrue(d.closure(self.package,self.index))
     def test_changed_prompt_inputs_change_conditional_export_digest(self):
         old=d.input_review(self.package,self.index)['approved_input_digest']
-        p=self.package/self.index['episodes'][0]['generation_review_packages'][0]['path'];p.write_text(p.read_text()+' ')
+        p=self.package/self.index['episodes'][0]['generation_review_packages'][0]['path'];p.write_text(p.read_text(encoding='utf-8-sig')+' ', encoding='utf-8', newline='\n')
         with self.assertRaises(ValueError):d.input_review(self.package,self.index)
         self.index['episodes'][0]['generation_review_packages'][0]['sha256']=h.sha(p)
         self.assertNotEqual(d.input_review(self.package,self.index)['approved_input_digest'],old)
@@ -166,7 +166,7 @@ class DirectHandoffTests(unittest.TestCase):
     def test_formal_release_rejects_hidden_hold_even_if_another_panel_is_ready(self):
         row=self.index['episodes'][0]['panels'][-1];row.update(classification='HOLD',blockers=[{'reason':'budget unresolved','owner':'front','resolution':'reconcile'}]);self.save()
         z=self.base/'candidate.zip';h.pack(self.package,z)
-        report=self.base/'fake-report.json';report.write_text('{}');auth=self.base/'fake-auth.json';auth.write_text('{}')
+        report=self.base/'fake-report.json';report.write_text('{}', encoding='utf-8', newline='\n');auth=self.base/'fake-auth.json';auth.write_text('{}', encoding='utf-8', newline='\n')
         with self.assertRaisesRegex(ValueError,'HOLD未关闭'):h.release(z,report,auth,self.base/'should-not-exist.zip')
         self.assertFalse((self.base/'should-not-exist.zip').exists())
 
@@ -180,11 +180,11 @@ class DirectHandoffTests(unittest.TestCase):
         shutil.rmtree(original['root'])
         self.assertEqual(binding_errors({'memory_source':moved},shots={'memory_source':original}),[])
         source_index(moved)
-        (new_root/'记忆索引.json').write_text('{}')
+        (new_root/'记忆索引.json').write_text('{}', encoding='utf-8', newline='\n')
         self.assertTrue(binding_errors({'memory_source':moved},shots={'memory_source':original}))
 
     def test_template_mutation_does_not_bind_and_does_not_create_run(self):
-        (self.template/'unexpected.txt').write_text('not frozen')
+        (self.template/'unexpected.txt').write_text('not frozen', encoding='utf-8', newline='\n')
         with self.assertRaisesRegex(ValueError,'清单'):d.bind(self.package,self.base/'bad-run')
         self.assertFalse((self.base/'bad-run').exists())
 

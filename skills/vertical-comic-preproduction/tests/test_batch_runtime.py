@@ -26,24 +26,24 @@ class SnapshotTests(unittest.TestCase):
         self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup);self.root=Path(self.tmp.name)
         self.skills=self.root/'installed'
         for name in SKILLS:
-            p=self.skills/name;p.mkdir(parents=True);(p/'SKILL.md').write_text(name)
-        p=self.skills/SKILLS[0]/'scripts';p.mkdir();(p/'runtime.py').write_text('frozen')
+            p=self.skills/name;p.mkdir(parents=True);(p/'SKILL.md').write_text(name, encoding='utf-8', newline='\n')
+        p=self.skills/SKILLS[0]/'scripts';p.mkdir();(p/'runtime.py').write_text('frozen', encoding='utf-8', newline='\n')
         self.source=p/'runtime.py'
 
     def test_install_change_does_not_change_frozen_runtime_and_no_hardlink(self):
         ref=create(self.root/'batch',skills_root=self.skills)
-        self.source.write_text('new installation')
+        self.source.write_text('new installation', encoding='utf-8', newline='\n')
         frozen=verify(ref);actual=Path(frozen['scripts'])/'runtime.py'
-        self.assertEqual(actual.read_text(),'frozen')
+        self.assertEqual(actual.read_text(encoding='utf-8-sig'),'frozen')
         self.assertNotEqual(actual.stat().st_ino,self.source.stat().st_ino)
         verify(ref,executing_script=actual)
         with self.assertRaisesRegex(ValueError,'快照scripts'):verify(ref,executing_script=self.source)
 
     def test_tamper_added_import_and_manifest_are_rejected(self):
         ref=create(self.root/'batch',skills_root=self.skills);scripts=Path(verify(ref)['scripts'])
-        extra=scripts/'shadow.py';extra.write_text('added')
+        extra=scripts/'shadow.py';extra.write_text('added', encoding='utf-8', newline='\n')
         with self.assertRaisesRegex(ValueError,'集合变化'):verify(ref)
-        extra.unlink();(scripts/'runtime.py').write_text('tampered')
+        extra.unlink();(scripts/'runtime.py').write_text('tampered', encoding='utf-8', newline='\n')
         with self.assertRaisesRegex(ValueError,'文件已变化'):verify(ref)
         with self.assertRaises(ValueError):create(self.root/'batch',skills_root=self.skills)
 
@@ -64,18 +64,18 @@ class SnapshotTests(unittest.TestCase):
     def test_init_binds_real_snapshot_toolchain_and_rule_source(self):
         ref=create(self.root/'batch',memory_source=None)
         out=self.root/'episode'
-        cmd=[sys.executable,str(ROOT/'scripts/init_preproduction.py'),'--output',str(out),
+        cmd=[sys.executable, '-X', 'utf8',str(ROOT/'scripts/init_preproduction.py'),'--output',str(out),
              '--book','test','--episode','E001','--runtime-snapshot',ref['path']]
-        p=subprocess.run(cmd,capture_output=True,text=True)
+        p=subprocess.run(cmd,capture_output=True,text=True, encoding='utf-8')
         self.assertEqual(p.returncode,0,p.stderr)
-        state=json.loads((out/'00_输入审计/生产流程.json').read_text())
+        state=json.loads((out/'00_输入审计/生产流程.json').read_text(encoding='utf-8-sig'))
         self.assertEqual(state['runtime_snapshot'],ref)
         self.assertEqual(state['toolchain']['root'],verify(ref)['scripts'])
         code="import sys,json;sys.path.insert(0,sys.argv[1]);from execution_contract import state_errors;from pathlib import Path;s=json.loads(Path(sys.argv[2]).read_text());print(json.dumps(state_errors(s,Path(sys.argv[3]))))"
-        checked=subprocess.run([sys.executable,'-c',code,verify(ref)['scripts'],str(out/'00_输入审计/生产流程.json'),str(out)],capture_output=True,text=True)
+        checked=subprocess.run([sys.executable, '-X', 'utf8','-c',code,verify(ref)['scripts'],str(out/'00_输入审计/生产流程.json'),str(out)],capture_output=True,text=True, encoding='utf-8')
         self.assertEqual(checked.returncode,0,checked.stderr)
         self.assertEqual(json.loads(checked.stdout),[])
-        installed=subprocess.run([sys.executable,'-c',code,str(ROOT/'scripts'),str(out/'00_输入审计/生产流程.json'),str(out)],capture_output=True,text=True)
+        installed=subprocess.run([sys.executable, '-X', 'utf8','-c',code,str(ROOT/'scripts'),str(out/'00_输入审计/生产流程.json'),str(out)],capture_output=True,text=True, encoding='utf-8')
         self.assertTrue(any('快照scripts' in e for e in json.loads(installed.stdout)))
 
 
@@ -84,7 +84,7 @@ class GroupedReviewTests(unittest.TestCase):
         self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup);self.root=Path(self.tmp.name)
         refs=[]
         for name in ('basis','shots','package'):
-            p=self.root/(name+'.json');p.write_text('{}');refs.append({'path':p.name,'sha256':digest(p)})
+            p=self.root/(name+'.json');p.write_text('{}', encoding='utf-8', newline='\n');refs.append({'path':p.name,'sha256':digest(p)})
         self.basis,self.shots,self.package=refs
         self.items=[{'item_id':'B','phase':'shot_design','panel_ids':['P001'],
                      'artifacts':refs[:2],'summary':'镜头'},
@@ -144,8 +144,8 @@ class LeaseTests(unittest.TestCase):
         with patch('scoped_episode_workflow.evaluate_episode',side_effect=self.gate):
             return reserve_ready(self.h.state_path,digest(self.h.state_path),digest(self.h.control_path))
 
-    def state(self):return json.loads(self.h.state_path.read_text())
-    def control(self):return json.loads(self.h.control_path.read_text())
+    def state(self):return json.loads(self.h.state_path.read_text(encoding='utf-8-sig'))
+    def control(self):return json.loads(self.h.control_path.read_text(encoding='utf-8-sig'))
 
     def test_local_reservation_never_writes_control_and_respects_slot(self):
         original=self.h.control_path.read_bytes();r=self.reserve();state=self.state()
@@ -177,7 +177,7 @@ class LeaseTests(unittest.TestCase):
     def test_release_restores_original_packet_and_can_reserve_same_attempt(self):
         self.reserve();release_unsubmitted(self.h.state_path,digest(self.h.state_path),['P001'])
         state=self.state();self.assertEqual(state['dispatch_ledger'][0]['status'],'RELEASED')
-        self.assertNotIn('dispatch_receipt',json.loads((self.h.episode/state['panels'][0]['package_manifest']['path']).read_text()))
+        self.assertNotIn('dispatch_receipt',json.loads((self.h.episode/state['panels'][0]['package_manifest']['path']).read_text(encoding='utf-8-sig')))
         self.reserve();state=self.state();advance(state,'P001','IN_FLIGHT')
         self.assertEqual(state['dispatch_ledger'][-1]['status'],'IN_FLIGHT')
 
@@ -194,14 +194,14 @@ class LeaseTests(unittest.TestCase):
         output=self.h.write(self.h.episode,'returned-output.json',{'actual_test_bytes':True})
         state['panels'][0].update(status='GENERATED',output=output)
         advance(state,'P001','GENERATED',output)
-        self.h.state_path.write_text(json.dumps(state))
+        self.h.state_path.write_text(json.dumps(state), encoding='utf-8', newline='\n')
         self.assertEqual(receipt_errors(self.h.context,self.h.episode,'book','E021','P001',first['receipt'],output['sha256']),[])
         self.assertTrue(receipt_errors(self.h.context,self.h.episode,'book','E021','P001',first['receipt'],'0'*64))
         self.assertEqual([x['panel_id'] for x in self.reserve()['reserved']],['P002'])
         # Completed jobs can still adopt their original verified outputs.
         release_unsubmitted(self.h.state_path,digest(self.h.state_path),['P002'])
         control=self.control();control['jobs'][0]['status']='COMPLETED'
-        self.h.control_path.write_text(json.dumps(control))
+        self.h.control_path.write_text(json.dumps(control), encoding='utf-8', newline='\n')
         self.assertEqual(receipt_errors(self.h.context,self.h.episode,'book','E021','P001',first['receipt'],output['sha256']),[])
 
     def test_unknown_resolution_requires_actual_bound_evidence_and_preserves_history(self):
@@ -209,7 +209,7 @@ class LeaseTests(unittest.TestCase):
         advance(state,'P001','IN_FLIGHT');state['panels'][0]['status']='IN_FLIGHT'
         original=self.h.write(self.h.episode,'unknown.json',{'attempt_id':'P001-r1','status':'RESULT_UNKNOWN','source_locator':'synthetic://transport','evidence':'synthetic unknown'})
         state['panels'][0].update(status='RESULT_UNKNOWN',call_evidence=original)
-        advance(state,'P001','RESULT_UNKNOWN');self.h.state_path.write_text(json.dumps(state))
+        advance(state,'P001','RESULT_UNKNOWN');self.h.state_path.write_text(json.dumps(state), encoding='utf-8', newline='\n')
         actual=self.h.write(self.h.episode,'service.json',{'synthetic_verified_no_output':True})
         failure=self.h.write(self.h.episode,'failed.json',{'attempt_id':'P001-r1','status':'CALL_FAILED','source_locator':'synthetic://service','evidence':'synthetic verified no output'})
         report={'policy':'unknown_result_resolution_v1','status':'REVIEWED','panel_id':'P001','attempt_id':'P001-r1','round_id':1,'original_call_evidence':original,'reviewer':'SYNTHETIC','evidence':'synthetic checked service','source_locator':'synthetic://service','service_evidence':actual,'conclusion':'CONFIRMED_NO_OUTPUT'}
@@ -219,7 +219,7 @@ class LeaseTests(unittest.TestCase):
         commit_updates(self.h.state_path,digest(self.h.state_path),[update],resolution_ref=ref)
         self.assertEqual(self.state()['dispatch_ledger'][0]['status'],'COMPLETED')
         self.assertEqual(self.state()['unknown_resolutions']['P001-r1'],ref)
-        self.assertEqual(json.loads((self.h.episode/original['path']).read_text())['status'],'RESULT_UNKNOWN')
+        self.assertEqual(json.loads((self.h.episode/original['path']).read_text(encoding='utf-8-sig'))['status'],'RESULT_UNKNOWN')
 
 
 class FeasibilityAndBoundaryTests(unittest.TestCase):
@@ -229,7 +229,7 @@ class FeasibilityAndBoundaryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as name:
             root=Path(name)
             def write(name,value):
-                p=root/name;p.write_text(json.dumps(value));return {'path':name,'sha256':digest(p)}
+                p=root/name;p.write_text(json.dumps(value), encoding='utf-8', newline='\n');return {'path':name,'sha256':digest(p)}
             panel={'panel_id':'P001','visible_region':'胸口以上','framing':{'required_visible':['膝上双手']}}
             state={'book_id':'UNIT','episode_id':'E001','preparation_policy':'episode_preparation_v1',
                    'runtime':{'question_policy':'grouped_review_v1'},

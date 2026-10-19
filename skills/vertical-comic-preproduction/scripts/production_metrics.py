@@ -29,7 +29,7 @@ def build(state_paths,*,native_events=None,verify_images=False,capacity=None):
         p=Path(ref['path']);p=p if p.is_absolute() else root/p
         return p if p.is_file() else None
     for sp in state_paths:
-        sp=Path(sp).resolve();data=json.loads(sp.read_text());root=sp.parent.parent
+        sp=Path(sp).resolve();data=json.loads(sp.read_text(encoding='utf-8-sig'));root=sp.parent.parent
         eid=data.get('episode_id',data.get('episode',str(root)));book=data.get('book_id',data.get('book','UNKNOWN'))
         if (book,eid) in episodes:raise ValueError('每话只指定一个权威状态，禁止混算迁移RV：'+str(eid))
         episodes.add((book,eid));sources.append({'path':str(sp),'sha256':digest(sp)})
@@ -62,7 +62,7 @@ def build(state_paths,*,native_events=None,verify_images=False,capacity=None):
                 actual_request=False
                 if req:
                     try:
-                        d=json.loads(req.read_text());actual_request=d.get('source_kind')=='observed_tool_call' and bool(d.get('source_locator'))
+                        d=json.loads(req.read_text(encoding='utf-8-sig'));actual_request=d.get('source_kind')=='observed_tool_call' and bool(d.get('source_locator'))
                     except (ValueError,OSError):pass
                 if actual_request:reads.append(key)
                 start,end=instant(row.get('submitted_at')),instant(row.get('returned_at'))
@@ -78,7 +78,7 @@ def build(state_paths,*,native_events=None,verify_images=False,capacity=None):
                 qpath=referenced(root,row.get('qa_report'))
                 if qpath and digest(qpath)==row['qa_report'].get('sha256'):
                     try:
-                        document=json.loads(qpath.read_text())
+                        document=json.loads(qpath.read_text(encoding='utf-8-sig'))
                         item=next(q for q in document.get('panels',[]) if q.get('panel_id')==pid and q.get('image_sha256')==row.get('output',{}).get('sha256'))
                         comparison=item.get('visual_evidence_review',{}).get('repair_comparison',{})
                         preserved=comparison.get('preserved_observations')
@@ -130,4 +130,7 @@ def build(state_paths,*,native_events=None,verify_images=False,capacity=None):
 def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--state',action='append',required=True);p.add_argument('--native-events');p.add_argument('--verify-images',action='store_true');p.add_argument('--capacity',type=int);a=p.parse_args()
     print(json.dumps(build(a.state,native_events=a.native_events,verify_images=a.verify_images,capacity=a.capacity),ensure_ascii=False,indent=2))
-if __name__=='__main__':main()
+if __name__=='__main__':
+    from platform_io import configure_stdio
+    configure_stdio()
+    main()

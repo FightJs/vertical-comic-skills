@@ -229,9 +229,12 @@ def main():
             raise ValueError('指定write汇总模板或contact-sheet审阅图')
         value = template(state, batch, records, a.round)
         dest = Path(a.write).resolve(); dest.relative_to(root)
-        with dest.open('x', encoding='utf-8') as f: json.dump(value, f, ensure_ascii=False, indent=2); f.write('\n')
+        with dest.open('x', encoding='utf-8', newline='\n') as f: json.dump(value, f, ensure_ascii=False, indent=2); f.write('\n')
         print(json.dumps({'status': 'UNREVIEWED_TEMPLATE_CREATED', 'path': str(dest)}, ensure_ascii=False)); return 0
     except (OSError, ValueError, TypeError, KeyError, StopIteration) as exc:
         print(json.dumps({'status': 'HOLD', 'errors': [str(exc)]}, ensure_ascii=False)); return 1
 
-if __name__ == '__main__': raise SystemExit(main())
+if __name__ == '__main__':
+    from platform_io import configure_stdio
+    configure_stdio()
+    raise SystemExit(main())

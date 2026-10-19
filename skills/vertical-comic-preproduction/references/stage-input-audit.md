@@ -32,3 +32,7 @@ New comic_execution_v2 production freezes one immutable raw source snapshot and 
 ## 本批集中准备
 
 审计仅覆盖请求话；将真实脚本冲突、缺资产和可行方案集中随A交审，关键未知提前问。开批先检查输出空间并创建唯一运行快照，原图/资产共用只读来源，不逐话全量复制。技术HOLD先诊断，不把路径/版本问题直接变成人工选择题。
+
+## 可移植XLSX读取
+
+源稿为XLSX时可使用`scripts/source_workbook.py --source <本机文件> --output <新原始单元格证据JSON>`。使用已检查的同一Python解释器及openpyxl，不依赖Excel、COM、AppleScript或桌面办公软件。读取保留工作表、单元格坐标、原文、公式及源文件哈希；输出仅为原始证据，不推断话号、格序、身份或批准。执行者随后按本节核对请求范围，并按既有source_adapter建立真实源编号映射。不可把文件存在检查或伪XLSX夹具通过视作源稿已审计。

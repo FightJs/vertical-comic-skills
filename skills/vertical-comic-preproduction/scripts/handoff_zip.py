@@ -11,6 +11,7 @@ import hashlib
 import json
 import platform
 from pathlib import Path, PurePosixPath
+from platform_io import portable_relative, check_destination_paths
 import shutil
 import stat
 import subprocess
@@ -33,16 +34,11 @@ def sha(path):
 
 def read(path): return json.loads(Path(path).read_text(encoding='utf-8-sig'))
 def write(path,value):
-    with Path(path).open('x',encoding='utf-8') as f:json.dump(value,f,ensure_ascii=False,indent=2);f.write('\n')
+    with Path(path).open('x',encoding='utf-8', newline='\n') as f:json.dump(value,f,ensure_ascii=False,indent=2);f.write('\n')
 
 
 def relative(value):
-    if not isinstance(value,str) or not value or '\\' in value or '\x00' in value:
-        raise ValueError('路径须为明确的包内POSIX相对路径')
-    p=PurePosixPath(value)
-    if p.is_absolute() or '..' in p.parts or ':' in p.parts[0] or str(p)!=value:
-        raise ValueError('路径越界或非规范相对路径:'+value)
-    return p
+    return portable_relative(value)
 
 
 def inside(root,value):
@@ -203,7 +199,7 @@ def check_delivery_archive(zip_path,checksum_file=None):
         top,manifest=zip_inventory(z)
         if manifest.get('container_policy')!='self_contained_handoff_v1':
             if checksum_file is None:raise ValueError('旧版正式ZIP需要同名.zip.sha256；候选包不能直接接包生产')
-            line=Path(checksum_file).read_text().strip().split(maxsplit=1)
+            line=Path(checksum_file).read_text(encoding='utf-8-sig').strip().split(maxsplit=1)
             if len(line)!=2 or line[1]!=Path(zip_path).name or line[0]!=sha(zip_path):raise ValueError('正式ZIP外部SHA256或文件名不符')
             return {'format':'legacy_with_checksum'}
         idx=read_zip_json(z,top+'/'+INDEX)
@@ -233,13 +229,14 @@ def check_delivery_archive(zip_path,checksum_file=None):
 
 def extract(zip_path,destination,*,reserve_bytes=256*1024*1024,checksum_file=None):
     if checksum_file:
-        line=Path(checksum_file).read_text().strip().split(maxsplit=1)
+        line=Path(checksum_file).read_text(encoding='utf-8-sig').strip().split(maxsplit=1)
         if len(line)!=2 or line[1]!=Path(zip_path).name or line[0]!=sha(zip_path):
             raise ValueError('正式ZIP外部SHA256或文件名不符')
     destination=Path(destination).resolve()
     if destination.exists():raise ValueError('解压目录须全新且不存在，不能复用前期运行目录')
     with zipfile.ZipFile(zip_path) as z:
         top,manifest=zip_inventory(z)
+        check_destination_paths(destination, [i.filename for i in z.infolist()])
         required=sum(i.file_size for i in z.infolist())+reserve_bytes
         parent=destination.parent
         while not parent.exists():parent=parent.parent
@@ -285,13 +282,13 @@ def rehearse(zip_path,package_root,run_root,run_index,report,*,timeout=180):
             manifest_path=reference(package_root,episode['runtime_manifest']);snap_ref=state.get('runtime_snapshot',{})
             if Path(snap_ref.get('path','')).resolve()!=manifest_path.resolve() or snap_ref.get('sha256')!=sha(manifest_path):raise ValueError('本地运行未绑定解压包内实际冻结快照')
             frozen=verify(snap_ref);script=Path(frozen['scripts'])/'production_runtime.py'
-            argv=[sys.executable,'-B',str(script),'--state',str(state_path),'--action','compile','--panels',*episode['halves']['H001']]
+            argv=[sys.executable, '-X', 'utf8','-B',str(script),'--state',str(state_path),'--action','compile','--panels',*episode['halves']['H001']]
             try:
-                proc=subprocess.run(argv,capture_output=True,text=True,timeout=timeout,cwd=state_path.parent.parent);rc=proc.returncode
-                (report/(eid+'_stdout.json')).write_text(proc.stdout);(report/(eid+'_stderr.txt')).write_text(proc.stderr)
+                proc=subprocess.run(argv,capture_output=True,text=True,timeout=timeout,cwd=state_path.parent.parent, encoding='utf-8');rc=proc.returncode
+                (report/(eid+'_stdout.json')).write_text(proc.stdout, encoding='utf-8', newline='\n');(report/(eid+'_stderr.txt')).write_text(proc.stderr, encoding='utf-8', newline='\n')
                 raw=json.loads(proc.stdout)
             except subprocess.TimeoutExpired as exc:
-                (report/(eid+'_timeout.txt')).write_text(str(exc));raise ValueError('冻结预检超时；未记通过')
+                (report/(eid+'_timeout.txt')).write_text(str(exc), encoding='utf-8', newline='\n');raise ValueError('冻结预检超时；未记通过')
             if not isinstance(raw,dict) or raw.get('candidate_only') is not False or raw.get('image_calls')!=0:raise ValueError('缺真实非candidate只读预检；不接受候选PASS代替生产预检')
             if data.get('delivery_policy')=='direct_delivery_v2':
                 from handoff_delivery import input_review
@@ -303,16 +300,16 @@ def rehearse(zip_path,package_root,run_root,run_index,report,*,timeout=180):
                     if sha(reference(state_path.parent.parent,state.get(key)))!=sha(reference(package_root,episode.get(target))):raise ValueError('实际执行依据不等于最终审查输入:'+key)
                 actual_packages={r['sha256'] for refs in state.get('generation_packages',{}).values() for r in refs}
                 if actual_packages!={r['sha256'] for r in episode['generation_review_packages']}:raise ValueError('实际生图包审查清单换版')
-                prep_argv=[sys.executable,'-B',str(script),'--state',str(state_path),'--action','readiness']
-                prep=subprocess.run(prep_argv,capture_output=True,text=True,timeout=timeout,cwd=state_path.parent.parent)
-                (report/(eid+'_preparation.json')).write_text(prep.stdout);(report/(eid+'_preparation_stderr.txt')).write_text(prep.stderr)
+                prep_argv=[sys.executable, '-X', 'utf8','-B',str(script),'--state',str(state_path),'--action','readiness']
+                prep=subprocess.run(prep_argv,capture_output=True,text=True,timeout=timeout,cwd=state_path.parent.parent, encoding='utf-8')
+                (report/(eid+'_preparation.json')).write_text(prep.stdout, encoding='utf-8', newline='\n');(report/(eid+'_preparation_stderr.txt')).write_text(prep.stderr, encoding='utf-8', newline='\n')
                 prepared=json.loads(prep.stdout)
                 required=[p['panel_id'] for p in episode['panels'] if p['classification']!='REUSE']
                 if prep.returncode or prepared.get('global_errors') or prepared.get('errors') or not set(required).issubset(prepared.get('prepared_panel_ids',[])):
                     raise ValueError('全话准备预检未通过，不能以首半话可启动代替全话交付')
-                all_argv=[sys.executable,'-B',str(script),'--state',str(state_path),'--action','compile','--panels',*episode['panel_ids']]
-                all_proc=subprocess.run(all_argv,capture_output=True,text=True,timeout=timeout,cwd=state_path.parent.parent)
-                (report/(eid+'_all_inputs.json')).write_text(all_proc.stdout);(report/(eid+'_all_inputs_stderr.txt')).write_text(all_proc.stderr)
+                all_argv=[sys.executable, '-X', 'utf8','-B',str(script),'--state',str(state_path),'--action','compile','--panels',*episode['panel_ids']]
+                all_proc=subprocess.run(all_argv,capture_output=True,text=True,timeout=timeout,cwd=state_path.parent.parent, encoding='utf-8')
+                (report/(eid+'_all_inputs.json')).write_text(all_proc.stdout, encoding='utf-8', newline='\n');(report/(eid+'_all_inputs_stderr.txt')).write_text(all_proc.stderr, encoding='utf-8', newline='\n')
                 all_inputs=json.loads(all_proc.stdout)
                 full_expected=[p['panel_id'] for p in episode['panels'] if p['classification'] in {'READY_H001','PREPARED_H002'}]
                 if all_inputs.get('candidate_only') is not False or all_inputs.get('image_calls')!=0 or [j.get('panel_id') for j in all_inputs.get('jobs',[])]!=full_expected:
@@ -438,4 +435,7 @@ def main():
         print(json.dumps({'status':'HOLD','errors':[str(exc)]},ensure_ascii=False));return 1
 
 
-if __name__=='__main__':raise SystemExit(main())
+if __name__=='__main__':
+    from platform_io import configure_stdio
+    configure_stdio()
+    raise SystemExit(main())

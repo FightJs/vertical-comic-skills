@@ -10,14 +10,14 @@ class HandoffZipTests(unittest.TestCase):
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup)
         self.base=Path(self.tmp.name);self.root=self.base/'候选包';self.root.mkdir()
-        (self.root/'交接说明.md').write_text('SYNTHETIC TEST ONLY; no real approval')
-        (self.root/'接包生产执行要求.md').write_text('SYNTHETIC test reception steps')
+        (self.root/'交接说明.md').write_text('SYNTHETIC TEST ONLY; no real approval', encoding='utf-8', newline='\n')
+        (self.root/'接包生产执行要求.md').write_text('SYNTHETIC test reception steps', encoding='utf-8', newline='\n')
         self.put('source.json',{'panel_ids':['P001']});self.put('proof.json',{'test':'SYNTHETIC; not human evidence'})
         ref=self.ref('proof.json')
         self.index={'policy':h.POLICY,'package_id':'TEST_ONLY','book_id':'UNIT','episodes':[{'episode_id':'E000','panel_ids':['P001'],'halves':{'H001':['P001'],'H002':[]},'source_snapshot':self.ref('source.json'),'runtime_manifest':ref,'approval_evidence':ref,'path_binding_plan':ref,'panels':[{'panel_id':'P001','classification':'READY_H001','history':{'status':'NEVER_SUBMITTED','reviewer':'SYNTHETIC','conclusion':'Isolated synthetic fixture; not production history','evidence':[ref],'attempts':[],'auto_corrections_used':0,'remaining_auto_corrections':1}}]}]}
         self.save()
     def put(self,name,value):
-        p=self.root/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_text(json.dumps(value));return self.ref(name)
+        p=self.root/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_text(json.dumps(value), encoding='utf-8', newline='\n');return self.ref(name)
     def ref(self,name):return {'path':name,'sha256':h.sha(self.root/name)}
     def save(self):self.put(h.INDEX,self.index)
     def candidate(self):
@@ -29,10 +29,10 @@ class HandoffZipTests(unittest.TestCase):
         self.assertEqual(h.files(self.root),before);self.assertEqual(h.files(received),before)
         self.assertFalse((self.root/h.INVENTORY).exists())
     def test_external_sha256_checked_before_extraction(self):
-        z=self.candidate();side=self.base/'candidate.zip.sha256';side.write_text('0'*64+'  candidate.zip\n')
+        z=self.candidate();side=self.base/'candidate.zip.sha256';side.write_text('0'*64+'  candidate.zip\n', encoding='utf-8', newline='\n')
         with self.assertRaisesRegex(ValueError,'外部SHA256'):h.extract(z,self.base/'bad-sha',reserve_bytes=0,checksum_file=side)
         self.assertFalse((self.base/'bad-sha').exists())
-        side.write_text(h.sha(z)+'  candidate.zip\n');h.extract(z,self.base/'correct-sha',reserve_bytes=0,checksum_file=side)
+        side.write_text(h.sha(z)+'  candidate.zip\n', encoding='utf-8', newline='\n');h.extract(z,self.base/'correct-sha',reserve_bytes=0,checksum_file=side)
 
     def test_self_contained_marker_alone_cannot_turn_candidate_into_release(self):
         z=self.candidate();fake=self.base/'fake-formal.zip'
@@ -73,8 +73,12 @@ class HandoffZipTests(unittest.TestCase):
                     for n in names:f.writestr(n,'bad')
                 with zipfile.ZipFile(z) as f:
                     with self.assertRaises(ValueError):h.zip_inventory(f)
-        (self.root/'link').symlink_to(self.root/'proof.json')
-        with self.assertRaises(ValueError):self.candidate()
+        # ZIP symlink rejection does not require Windows developer mode/admin rights.
+        info=zipfile.ZipInfo('root/link');info.create_system=3;info.external_attr=0o120777<<16
+        z=self.base/'symlink.zip'
+        with zipfile.ZipFile(z,'w') as archive:archive.writestr(info,'proof.json')
+        with zipfile.ZipFile(z) as archive:
+            with self.assertRaisesRegex(ValueError,'符号链接'):h.zip_inventory(archive)
     def test_damaged_inventory_and_no_overwrite(self):
         z=self.candidate()
         with self.assertRaises(ValueError):h.pack(self.root,z)
@@ -93,39 +97,39 @@ class HandoffZipTests(unittest.TestCase):
         z=self.candidate();received=self.extracted(z)
         run=self.base/'run';shutil.copytree(received/'run-template',run)
         state['runtime_snapshot']={'path':str(received/'runtime/manifest.json'),'sha256':snapshot['sha256']}
-        (run/'00_输入审计').mkdir();(run/'00_输入审计/state.json').write_text(json.dumps(state));(run/'mapping.json').write_text(json.dumps({'test':'SYNTHETIC relocation mapping; relative original inputs'}))
-        index=self.base/'run-index.json';index.write_text(json.dumps({'package_id':'TEST_ONLY','episodes':[{'episode_id':'E000','state':'00_输入审计/state.json','binding_evidence':{'path':'mapping.json','sha256':h.sha(run/'mapping.json')}}]}))
+        (run/'00_输入审计').mkdir();(run/'00_输入审计/state.json').write_text(json.dumps(state), encoding='utf-8', newline='\n');(run/'mapping.json').write_text(json.dumps({'test':'SYNTHETIC relocation mapping; relative original inputs'}), encoding='utf-8', newline='\n')
+        index=self.base/'run-index.json';index.write_text(json.dumps({'package_id':'TEST_ONLY','episodes':[{'episode_id':'E000','state':'00_输入审计/state.json','binding_evidence':{'path':'mapping.json','sha256':h.sha(run/'mapping.json')}}]}), encoding='utf-8', newline='\n')
         return z,received,run,index,state
     def test_real_frozen_gate_relocated_then_formal_zip_roundtrip(self):
         z,received,run,index,state=self.real_fixture();before=h.files(received)
         result=h.rehearse(z,received,run,index,self.base/'report',timeout=15)
         self.assertEqual(result['status'],'RELEASE_CANDIDATE',result);self.assertEqual(result['ready_h001_count'],1)
         self.assertEqual(result['image_calls'],0);self.assertEqual(h.files(received),before)
-        raw=json.loads((self.base/'report/E000_stdout.json').read_text());self.assertFalse(raw['candidate_only']);self.assertEqual(len(raw['jobs']),1)
+        raw=json.loads((self.base/'report/E000_stdout.json').read_text(encoding='utf-8-sig'));self.assertFalse(raw['candidate_only']);self.assertEqual(len(raw['jobs']),1)
         for path in raw['jobs'][0]['arguments']['referenced_image_paths']:self.assertTrue(Path(path).resolve().is_relative_to(run.resolve()))
-        report=self.base/'report/演练报告.json';approval=self.base/'approval.json';approval.write_text(json.dumps({'status':'APPROVED','source_kind':'user_message','source_locator':'SYNTHETIC_NOT_REAL','quote':'SYNTHETIC TEST ONLY','candidate_zip_sha256':h.sha(z),'rehearsal_report_sha256':h.sha(report)}))
+        report=self.base/'report/演练报告.json';approval=self.base/'approval.json';approval.write_text(json.dumps({'status':'APPROVED','source_kind':'user_message','source_locator':'SYNTHETIC_NOT_REAL','quote':'SYNTHETIC TEST ONLY','candidate_zip_sha256':h.sha(z),'rehearsal_report_sha256':h.sha(report)}), encoding='utf-8', newline='\n')
         with self.assertRaisesRegex(ValueError,'direct_delivery_v2'):h.release(z,report,approval,self.base/'formal.zip')
 
     def test_declared_ready_but_real_gate_hold_prevents_release(self):
-        z,received,run,index,state=self.real_fixture();state['holds']=['SYNTHETIC system HOLD'];(run/'00_输入审计/state.json').write_text(json.dumps(state))
+        z,received,run,index,state=self.real_fixture();state['holds']=['SYNTHETIC system HOLD'];(run/'00_输入审计/state.json').write_text(json.dumps(state), encoding='utf-8', newline='\n')
         result=h.rehearse(z,received,run,index,self.base/'report',timeout=15)
         self.assertEqual(result['status'],'HOLD',result);self.assertEqual(result['ready_h001_count'],0)
-        approval=self.base/'approval.json';approval.write_text('{}')
+        approval=self.base/'approval.json';approval.write_text('{}', encoding='utf-8', newline='\n')
         with self.assertRaises(ValueError):h.release(z,self.base/'report/演练报告.json',approval,self.base/'formal.zip')
     def test_old_machine_runtime_path_rejected_before_gate(self):
-        z,received,run,index,state=self.real_fixture();state['runtime_snapshot']['path']='/old/machine/manifest.json';(run/'00_输入审计/state.json').write_text(json.dumps(state))
+        z,received,run,index,state=self.real_fixture();state['runtime_snapshot']['path']='/old/machine/manifest.json';(run/'00_输入审计/state.json').write_text(json.dumps(state), encoding='utf-8', newline='\n')
         result=h.rehearse(z,received,run,index,self.base/'report',timeout=15)
         self.assertEqual(result['status'],'HOLD');self.assertIn('未绑定',str(result['results']))
     def test_local_state_cannot_switch_to_another_source_order(self):
         z,received,run,index,state=self.real_fixture()
-        changed=run/'different-source.json';changed.write_text(json.dumps({'panel_ids':['P001','P999']}))
+        changed=run/'different-source.json';changed.write_text(json.dumps({'panel_ids':['P001','P999']}), encoding='utf-8', newline='\n')
         state['source_snapshot']={'path':changed.name,'sha256':h.sha(changed)}
-        (run/'00_输入审计/state.json').write_text(json.dumps(state))
+        (run/'00_输入审计/state.json').write_text(json.dumps(state), encoding='utf-8', newline='\n')
         result=h.rehearse(z,received,run,index,self.base/'report',timeout=15)
         self.assertEqual(result['status'],'HOLD');self.assertIn('生产源序',str(result['results']))
 
     def test_mismatched_export_approval_rejected(self):
-        z=self.candidate();report=self.base/'report.json';report.write_text(json.dumps({'policy':h.POLICY,'source_kind':'observed_frozen_gate_rehearsal','status':'RELEASE_CANDIDATE','originals_unchanged':True,'image_calls':0,'candidate_zip_sha256':h.sha(z),'ready_h001_count':1,'results':[{'status':'REHEARSED','errors':[]}]}));approval=self.base/'approval.json';approval.write_text('{}')
+        z=self.candidate();report=self.base/'report.json';report.write_text(json.dumps({'policy':h.POLICY,'source_kind':'observed_frozen_gate_rehearsal','status':'RELEASE_CANDIDATE','originals_unchanged':True,'image_calls':0,'candidate_zip_sha256':h.sha(z),'ready_h001_count':1,'results':[{'status':'REHEARSED','errors':[]}]}), encoding='utf-8', newline='\n');approval=self.base/'approval.json';approval.write_text('{}', encoding='utf-8', newline='\n')
         with self.assertRaises(ValueError):h.release(z,report,approval,self.base/'formal.zip')
 
 if __name__=='__main__':unittest.main()

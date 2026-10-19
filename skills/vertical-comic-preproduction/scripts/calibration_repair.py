@@ -75,8 +75,11 @@ def main():
         if errors:raise ValueError(';'.join(errors))
         value={'policy':POLICY,'book_id':state['book_id'],'episode_id':state['episode_id'],'batch_id':batch['batch_id'],'panel_ids':[pid],'source_snapshot':state['source_snapshot'],'visual_basis':view['visual_basis'],'shot_manifest':view['shot_manifest'],'attempts':[snapshot(record)],'status':'UNREVIEWED','reviewer':'','evidence':'','diagnosis':{}}
         dest=Path(a.write).resolve();dest.relative_to(root)
-        with dest.open('x',encoding='utf-8') as f:json.dump(value,f,ensure_ascii=False,indent=2)
+        with dest.open('x',encoding='utf-8', newline='\n') as f:json.dump(value,f,ensure_ascii=False,indent=2)
         print(json.dumps({'status':'UNREVIEWED_CALIBRATION_REPORT','path':str(dest)},ensure_ascii=False));return 0
     except (OSError,ValueError,TypeError,KeyError,StopIteration) as exc:print(json.dumps({'status':'HOLD','errors':[str(exc)]},ensure_ascii=False));return 1
 
-if __name__=='__main__':raise SystemExit(main())
+if __name__=='__main__':
+    from platform_io import configure_stdio
+    configure_stdio()
+    raise SystemExit(main())

@@ -19,7 +19,7 @@ class Contracts(unittest.TestCase):
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup);self.root=Path(self.tmp.name)
     def write(self,name,data):
-        path=self.root/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_text(json.dumps(data,ensure_ascii=False));return {'path':name,'sha256':digest(path)}
+        path=self.root/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_text(json.dumps(data,ensure_ascii=False), encoding='utf-8', newline='\n');return {'path':name,'sha256':digest(path)}
     def source(self):
         raw={'source_sha256':'source-sha','panel_ids':['E023-P001','E023-P002'],'locked_scripts':{'E023-P001':{'event':'原文\n保持'},'E023-P002':{'dialogue':'不改对白'}},'extras':{'original':True}}
         ref=self.write('raw.json',raw);return adapted(raw,'E023',ref)
@@ -97,7 +97,7 @@ class Contracts(unittest.TestCase):
         self.assertEqual(validate_manifest(f.manifest,root,prompt=True),[])
         self.assertEqual(validate_manifest(f.manifest,root),[])
         from validate_preproduction import Gate
-        (root/'P001/prompt.txt').write_text(panel['prompt']);f.f.write('P001/提示词.json',panel)
+        (root/'P001/prompt.txt').write_text(panel['prompt'], encoding='utf-8', newline='\n');f.f.write('P001/提示词.json',panel)
         shot=f.f.write('atlas-shot.json',{**f.manifest,'schema':'vertical-comic-shot-design-v1','panels':[copy.deepcopy(panel)]});packet=f.f.write('atlas-manifest.json',f.manifest)
         self.assertEqual(Gate(root,expected_panel_ids=['P001']).run(root/shot['path'],root/packet['path'])['errors'],[])
     def test_original_full_panel_scope_covers_same_episode_local_alias(self):
@@ -117,10 +117,10 @@ class Contracts(unittest.TestCase):
         import test_execution_lifecycle as lifecycle
         from scoped_inputs import half_view
         root=self.root/'episode';state,manifest,panel,shots=lifecycle.build_calibration(root)
-        source=memory.library(root/'rules');index_path=root/'rules/记忆索引.json';index=json.loads(index_path.read_text())
+        source=memory.library(root/'rules');index_path=root/'rules/记忆索引.json';index=json.loads(index_path.read_text(encoding='utf-8-sig'))
         for rid,tag in (('MEM-005','visual_subjects_present'),('MEM-006','human_figure_visible')):
             rule=copy.deepcopy(index['rules'][0]);rule['id']=rid;rule['trigger']={'any_tags':[tag],'any_visual_terms':[]};index['rules'].append(rule)
-        index_path.write_text(json.dumps(index));state['memory_source']=source;shots['memory_source']=source
+        index_path.write_text(json.dumps(index), encoding='utf-8', newline='\n');state['memory_source']=source;shots['memory_source']=source
         for p in shots['panels']:p['memory_tags']=['human_figure_visible'] if human_tag else []
         state['half_inputs']['H001']['shot_manifest']=lifecycle.write(root,'coverage-shots.json',shots)
         audit=semantic_template(state,root,'H001')
@@ -156,7 +156,7 @@ class Contracts(unittest.TestCase):
         from continuity_context import build,load_context,binding_errors
         root=self.root/'episode';state,manifest,panel,shots=lifecycle.build_calibration(root)
         original=copy.deepcopy(state['half_gates']);context=build(state,root,'P002')
-        path=root/'built-context.json';path.write_text(json.dumps(context));packet={**manifest,'panels':[shots['panels'][1]],'continuity_context':{'path':path.name,'sha256':digest(path)}}
+        path=root/'built-context.json';path.write_text(json.dumps(context), encoding='utf-8', newline='\n');packet={**manifest,'panels':[shots['panels'][1]],'continuity_context':{'path':path.name,'sha256':digest(path)}}
         self.assertEqual(load_context(packet,root)[1],[]);self.assertEqual(binding_errors(state,root,packet,root),[]);self.assertEqual(state['half_gates'],original)
     def exception(self):
         source=memory.library(self.root/'library');rule=source_index(source)[1]['rules'][0];panel={'panel_id':'P001','locked_script':{'event_text':'床上'},'memory_tags':['person_on_bed'],'prompt':'SYNTHETIC support constraint'};app=memory.applied(source,'image_review',panel,self.root)

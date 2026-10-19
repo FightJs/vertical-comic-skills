@@ -18,7 +18,7 @@ class WatchdogTests(unittest.TestCase):
         self.ledger = self.root / "00_输入审计" / "worker_watchdog.json"
         self.ledger.parent.mkdir()
         self.evidence = self.root / "shot.json"
-        self.evidence.write_text('{"shot":"real saved artifact"}', encoding="utf-8")
+        self.evidence.write_text('{"shot":"real saved artifact"}', encoding="utf-8", newline='\n')
         self.event = {"stage":"shot_design", "kind":"shot_saved", "blocker_id":"B:P001",
                       "evidence":{"path":"shot.json", "sha256": hashlib.sha256(self.evidence.read_bytes()).hexdigest()}}
         self.start = "2026-10-14T00:00:00Z"
@@ -57,21 +57,21 @@ class WatchdogTests(unittest.TestCase):
         self.assertFalse(self.ledger.exists())
         record_progress(self.ledger,self.root,self.event,now=self.start)
         with self.assertRaises(ValueError):acknowledge(self.ledger,{"panels":[]},["invented"],now="2026-10-14T00:06:00Z")
-        self.assertEqual(json.loads(self.ledger.read_text())["emitted"],[])
+        self.assertEqual(json.loads(self.ledger.read_text(encoding='utf-8-sig'))["emitted"],[])
         self.assertEqual(DEFAULTS["request_warning_seconds"],900)
 
     def test_runtime_cli_records_and_reads_episode_sidecar(self):
         from production_runtime import DEFAULTS as RUNTIME_DEFAULTS
         state_path=self.ledger.parent/"生产流程.json"
-        state_path.write_text(json.dumps({"episode_id":"E021","runtime":RUNTIME_DEFAULTS,"panels":[]}))
+        state_path.write_text(json.dumps({"episode_id":"E021","runtime":RUNTIME_DEFAULTS,"panels":[]}), encoding='utf-8', newline='\n')
         event_path=self.root/"event.json"
-        event_path.write_text(json.dumps(self.event))
+        event_path.write_text(json.dumps(self.event), encoding='utf-8', newline='\n')
         script=Path(__file__).resolve().parents[1]/"scripts"/"production_runtime.py"
-        record=subprocess.run([sys.executable,str(script),"--state",str(state_path),"--action","watch-progress",
-                               "--watch-event",str(event_path)],capture_output=True,text=True,check=True)
+        record=subprocess.run([sys.executable, '-X', 'utf8',str(script),"--state",str(state_path),"--action","watch-progress",
+                               "--watch-event",str(event_path)],capture_output=True,text=True,check=True, encoding='utf-8')
         self.assertEqual(json.loads(record.stdout)["status"],"PROGRESS_RECORDED")
-        checked=subprocess.run([sys.executable,str(script),"--state",str(state_path),"--action","watch-check"],
-                               capture_output=True,text=True,check=True)
+        checked=subprocess.run([sys.executable, '-X', 'utf8',str(script),"--state",str(state_path),"--action","watch-check"],
+                               capture_output=True,text=True,check=True, encoding='utf-8')
         self.assertEqual(json.loads(checked.stdout)["policy"],"worker_watchdog_v1")
 
 

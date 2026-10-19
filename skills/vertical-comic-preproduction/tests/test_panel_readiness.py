@@ -43,7 +43,7 @@ def fixture(root,candidate=False):
             source_ref={'root':str(root),'episode_id':s['episode_id'],'source_script':s['source_script'],'source_snapshot':s['source_snapshot'],'visual_basis':s['visual_basis'],'shot_manifest':shot_ref,'visual_approval':s['gates']['visual_basis'],'shot_approval':s['gates']['shot_design']}
             context={'policy':'approved_shot_context_v1','book_id':s['book_id'],'current':{'episode_id':s['episode_id'],'panel_id':pid},'episode_order':s['episode_order'],'sources':[source_ref],'entries':[{'source':0,'panel_id':p} for p in order[:i]]}
             packet['continuity_context']=fixtures.write(root,pid+'-context.json',context)
-        (root/pid).mkdir(exist_ok=True);(root/row['prompt_file']).write_text(row['prompt']);fixtures.write(root,row['panel_json_file'],row)
+        (root/pid).mkdir(exist_ok=True);(root/row['prompt_file']).write_text(row['prompt'], encoding='utf-8', newline='\n');fixtures.write(root,row['panel_json_file'],row)
         record['package_manifest']=fixtures.write(root,pid+'-packet.json',packet);record['shot_subset']=fixtures.write(root,pid+'-subset.json',packet)
     s['toolchain']=toolchain();return s,shots
 

@@ -54,10 +54,13 @@ def main():
     p.add_argument('--asset-root',required=True);p.add_argument('--visual-basis',required=True)
     a=p.parse_args()
     try:
-        value=json.loads(Path(a.visual_basis).read_text())
+        value=json.loads(Path(a.visual_basis).read_text(encoding='utf-8-sig'))
         print(json.dumps(audit(a.asset_root,value.get('asset_tasks')),ensure_ascii=False));return 0
     except (OSError,ValueError,KeyError,TypeError) as exc:
         print(json.dumps({'status':'ASSET_AUDIT_HOLD','error':str(exc)},ensure_ascii=False));return 1
 
 
-if __name__=='__main__':raise SystemExit(main())
+if __name__=='__main__':
+    from platform_io import configure_stdio
+    configure_stdio()
+    raise SystemExit(main())

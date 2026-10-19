@@ -35,7 +35,7 @@ class AuthorityTests(unittest.TestCase):
             'artifacts':[self.artifact],'summary':'Synthetic reviewed shot'}],self.root)
 
     def write(self,name,value):
-        p=self.root/name;p.write_text(json.dumps(value));return {'path':name,'sha256':digest(p)}
+        p=self.root/name;p.write_text(json.dumps(value), encoding='utf-8', newline='\n');return {'path':name,'sha256':digest(p)}
 
     def decide(self):
         return delegated_decisions(self.review,['B'],self.write('grant.json',self.grant),'synthetic agent',
@@ -64,7 +64,7 @@ class AuthorityTests(unittest.TestCase):
     def test_grant_tamper_and_foreign_artifact_do_not_release(self):
         p=self.decide();other=self.write('other.json',{'different':True})
         self.assertTrue(approval_errors(p,self.root,[other],'T','E1',phase='shot_design'))
-        (self.root/'grant.json').write_text('{}')
+        (self.root/'grant.json').write_text('{}', encoding='utf-8', newline='\n')
         self.assertTrue(decision_errors(p,self.root,'T','E1'))
 
     def test_technical_operation_and_exact_additional_attempts(self):
@@ -217,7 +217,7 @@ class ContextAndMetricTests(unittest.TestCase):
     def test_context_is_source_ordered_read_only_and_rejects_ambiguous_records(self):
         with tempfile.TemporaryDirectory() as t:
             root=Path(t)
-            def w(name,v):p=root/name;p.write_text(json.dumps(v));return {'path':name,'sha256':digest(p)}
+            def w(name,v):p=root/name;p.write_text(json.dumps(v), encoding='utf-8', newline='\n');return {'path':name,'sha256':digest(p)}
             source={'panel_ids':['P001','P002']}
             state={'execution_mode':'episode_async_v1','preparation_policy':'episode_preparation_v1',
                    'source_snapshot':w('source.json',source),'visual_basis':w('basis.json',{}),
@@ -235,7 +235,7 @@ class ContextAndMetricTests(unittest.TestCase):
             root=Path(t);folder=root/'00_输入审计';folder.mkdir();p=folder/'state.json'
             p.write_text(json.dumps({'book_id':'T','episode_id':'E1','panels':[
                 {'panel_id':'P001','attempt_id':'a','round_id':1,'status':'GENERATED','submitted_at':'2026-10-01T00:00:00Z','returned_at':'2026-10-01T00:00:10Z'},
-                {'panel_id':'P002','attempt_id':'b','round_id':1,'status':'GENERATED','submitted_at':'2026-10-01T00:00:05Z','returned_at':'2026-10-01T00:00:15Z'}]}))
+                {'panel_id':'P002','attempt_id':'b','round_id':1,'status':'GENERATED','submitted_at':'2026-10-01T00:00:05Z','returned_at':'2026-10-01T00:00:15Z'}]}), encoding='utf-8', newline='\n')
             stats=build([p]);phases=stats['timing']['phase_windows']
             self.assertEqual(phases['submit_to_return']['union_seconds'],15)
             self.assertEqual(phases['submit_to_return']['sum_seconds_not_wall_time'],20)

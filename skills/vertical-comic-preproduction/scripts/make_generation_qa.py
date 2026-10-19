@@ -261,8 +261,8 @@ def _main(argv=None) -> int:
                         pair = Image.new("RGB", (760, 540), "white")
                         draw = ImageDraw.Draw(pair)
                         for col, (source, label) in enumerate(((reference, "REFERENCE"), (image, "RETURNED"))):
-                            with Image.open(source).convert("RGB") as opened:
-                                thumb = opened.copy()
+                            with Image.open(source) as opened:
+                                thumb = opened.convert("RGB")
                             thumb.thumbnail((360, 480))
                             pair.paste(thumb, (col * 380 + (380 - thumb.width) // 2, 40))
                             draw.text((col * 380 + 10, 10), f"{pid} {label}", fill="black")
@@ -298,8 +298,8 @@ def _main(argv=None) -> int:
         from PIL import Image, ImageDraw
         thumbs = []
         for pid, path in image_items:
-            with Image.open(path).convert("RGB") as opened:
-                thumb = opened.copy()
+            with Image.open(path) as opened:
+                thumb = opened.convert("RGB")
             thumb.thumbnail((360, 480))
             canvas = Image.new("RGB", (380, 520), "white")
             canvas.paste(thumb, ((380-thumb.width)//2, 30))
@@ -314,7 +314,7 @@ def _main(argv=None) -> int:
     except Exception as exc:
         report["warnings"].append(f"未生成批次审查图:{exc}")
 
-    (output / "生成图QA报告.json").write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    (output / "生成图QA报告.json").write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline='\n')
     (output / "相邻镜头审查说明.md").write_text(
         "# 返回底图审查\n\n"
         "逐对检查相邻格：机位角度族、真实摄影机位置、景别、地平线/消失点、背景裁切、人物可见范围和遮挡。\n\n"
@@ -323,7 +323,7 @@ def _main(argv=None) -> int:
         "D阶段选用CREATE/REUSE构图参考时，与返回图并排核对；NOT_REQUIRED时依据批准镜头、空间记录及相关资产审查，composition_match仅表示额外图片对照并标NOT_APPLICABLE。机位、裁切、接触、遮挡和framing维度仍须实际复核，不为验收补造灰阶稿或站位图。\n\n"
         "启用连续性合同时另逐项检查identity、costume、action_interaction、background_space、framing。必审项保持UNREVIEWED；实际看图后写PASS/FAIL、复核者和具体证据。计划的NOT_VISIBLE/NOT_APPLICABLE不能在生图后扩大。身份通过但接触失败仍HOLD；同场景换机位核对空间而非像素复制。分项记录校验不代替首三格、相邻审查和用户批准。\n",
         encoding="utf-8",
-    )
+    newline='\n')
     print(json.dumps({"status": report["status"], "output": str(output), "errors": len(report["errors"])}, ensure_ascii=False, indent=2))
     return 0
 
@@ -333,4 +333,6 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    from platform_io import configure_stdio
+    configure_stdio()
     raise SystemExit(main())

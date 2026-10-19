@@ -14,10 +14,10 @@ class EasyStartTests(unittest.TestCase):
         temp=tempfile.TemporaryDirectory();self.addCleanup(temp.cleanup);self.root=Path(temp.name)
         self.library=self.root/'library';shutil.copytree(b.ROOT,self.library);self.state=self.root/'state'
     def put(self,name,value):
-        p=self.root/name;p.write_text(json.dumps(value,ensure_ascii=False));return p
+        p=self.root/name;p.write_text(json.dumps(value,ensure_ascii=False), encoding='utf-8', newline='\n');return p
     def rule(self):
-        source=fixture.library(self.root/'synthetic');rule=json.loads((Path(source['root'])/'记忆索引.json').read_text())['rules'][0]
-        rule.update(id='USR-SUPPORT',version='1',load_policy='on_match');body=self.root/'generic.md';body.write_text('# 通用承托判据\n明确身体承托物与接触点。')
+        source=fixture.library(self.root/'synthetic');rule=json.loads((Path(source['root'])/'记忆索引.json').read_text(encoding='utf-8-sig'))['rules'][0]
+        rule.update(id='USR-SUPPORT',version='1',load_policy='on_match');body=self.root/'generic.md';body.write_text('# 通用承托判据\n明确身体承托物与接触点。', encoding='utf-8', newline='\n')
         return self.put('rule.json',rule),body,self.put('review.json',{'source_kind':'user_message','source_locator':'synthetic://test-only','authorization':'SYNTHETIC maintenance authorization','portable':True,'contains_story_facts':False})
     def test_builtins_resolve_without_third_path_and_reuse_content_cache(self):
         a=b.resolve(library_root=self.library,cache_root=self.root/'cache');other=b.resolve(library_root=self.library,cache_root=self.root/'cache')
@@ -64,7 +64,7 @@ class EasyStartTests(unittest.TestCase):
         with self.assertRaises(ValueError):c.import_package(broken,self.root/'owner2')
 
     def test_story_specific_update_rejected_and_original_bytes_preserved(self):
-        args=self.rule();before=b.digest(self.library/'用户增补/记忆索引.json');args[1].write_text('E026-P015 的傅家卧室具体位置')
+        args=self.rule();before=b.digest(self.library/'用户增补/记忆索引.json');args[1].write_text('E026-P015 的傅家卧室具体位置', encoding='utf-8', newline='\n')
         with self.assertRaises(ValueError):c.update(*args,library_root=self.library,state_root=self.state)
         self.assertEqual(b.digest(self.library/'用户增补/记忆索引.json'),before)
     def test_duplicate_ids_cannot_override_builtin(self):
@@ -103,15 +103,15 @@ class EasyStartTests(unittest.TestCase):
         script=self.root/'source.xlsx';script.write_bytes(b'SYNTHETIC');assets=self.root/'assets';assets.mkdir()
         result=start.prepare(self.root,'SYNTHETIC',['E001'],script=script,assets=assets)
         root=Path(result['run_root']);state=root/'E001/00_输入审计/生产流程.json';before=state.read_bytes()
-        cmd=[sys.executable,'-B',str(root/'00_总控/运行版本/skills/vertical-comic-preproduction/scripts/init_preproduction.py'),
+        cmd=[sys.executable, '-X', 'utf8','-B',str(root/'00_总控/运行版本/skills/vertical-comic-preproduction/scripts/init_preproduction.py'),
              '--book','SYNTHETIC','--episode','E001','--config',result['config'],
              '--runtime-snapshot',str(root/'00_总控/运行版本/manifest.json'),'--output',str(root/'E001')]
-        proc=subprocess.run(cmd,capture_output=True,text=True)
+        proc=subprocess.run(cmd,capture_output=True,text=True, encoding='utf-8')
         self.assertEqual(proc.returncode,0);self.assertEqual(state.read_bytes(),before)
         self.assertEqual(json.loads(proc.stdout)['status'],'EXISTING_STATE_PRESERVED')
         from task_context import fresh
         foreign=self.put('foreign-task.json',fresh('SYNTHETIC',['E001']))
-        changed=subprocess.run([*cmd,'--task-context',str(foreign)],capture_output=True,text=True)
+        changed=subprocess.run([*cmd,'--task-context',str(foreign)],capture_output=True,text=True, encoding='utf-8')
         self.assertNotEqual(changed.returncode,0);self.assertEqual(state.read_bytes(),before)
     def test_receive_missing_archive_does_not_create_run(self):
         with self.assertRaises(ValueError):start.receive(self.root/'package.zip',output=self.root/'receive')

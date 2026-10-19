@@ -83,7 +83,7 @@ def main():
         check(case_id + ":缺底图不能视为验收通过", generation.get("status") == "MISSING_RETURNED_PANEL_IMAGE" and not generation.get("image_files"))
         destination = output / "迁移候选" / (case_id + ".json")
         destination.parent.mkdir(exist_ok=True)
-        destination.write_text(json.dumps({"status": "TEST_MIGRATION_ONLY_NOT_READY_OR_APPROVED", "case_id": case_id, "input": entry["stages"]["06_提示词"]["input"], "panel": cleaned, "migration": migration}, ensure_ascii=False, indent=2))
+        destination.write_text(json.dumps({"status": "TEST_MIGRATION_ONLY_NOT_READY_OR_APPROVED", "case_id": case_id, "input": entry["stages"]["06_提示词"]["input"], "panel": cleaned, "migration": migration}, ensure_ascii=False, indent=2), encoding='utf-8', newline='\n')
         cases.append({"case_id": case_id, "removed_aliases": migration["removed_aliases"], "script_preserved": source_locked == cleaned.get("locked_script"), "historical_label": "OBSERVED_HISTORICAL_OUTPUT_NOT_GOLD", "image_acceptance": "NOT_ASSESSED"})
     for episode in sorted({item["case_id"].split("-")[0] for item in cross}):
         package = root / "00_共享证据/原始包证据" / episode
@@ -93,13 +93,13 @@ def main():
         gate.prompt_root = package
         shot_panels = gate.check_shots(shots)
         gate.check_prompt(source, shot_panels)
-        (output / (episode + "_旧包门禁.json")).write_text(json.dumps({"status": "HOLD" if gate.errors else "PASS", "errors": gate.errors, "warnings": gate.warnings}, ensure_ascii=False, indent=2))
+        (output / (episode + "_旧包门禁.json")).write_text(json.dumps({"status": "HOLD" if gate.errors else "PASS", "errors": gate.errors, "warnings": gate.warnings}, ensure_ascii=False, indent=2), encoding='utf-8', newline='\n')
         check(episode + ":历史候选不自动批准", bool(gate.errors))
         if episode == "E012":
             check("E012-P008:已知机位签名差异被门禁捕获", any("提示词索引[7]" in e and "camera_view_signature与镜头改编表不一致" in e for e in gate.errors))
         for script in ("repair_prompt_package.py", "repair_prompt_package_v2.py"):
             destination = output / (episode + "_" + Path(script).stem)
-            run = subprocess.run([sys.executable, str(SCRIPTS / script), "--source", str(package), "--output", str(destination)], capture_output=True, text=True)
+            run = subprocess.run([sys.executable, '-X', 'utf8', str(SCRIPTS / script), "--source", str(package), "--output", str(destination)], capture_output=True, text=True, encoding='utf-8')
             try:
                 result = json.loads(run.stdout)
             except ValueError:
@@ -110,7 +110,7 @@ def main():
     changed = [rel for rel, digest in before.items() if sha(root / rel) != digest]
     check("测试后原数据集字节未改", not changed, changed)
     report = {"status": "PASS" if all(c["passed"] for c in checks) else "FAIL", "dataset": str(root), "case_count": len(cases), "unique_reference_files_verified": len(verified_images), "integrity_file_count": len(before), "metadata_mismatches": metadata_mismatches, "checks_passed": sum(c["passed"] for c in checks), "checks_total": len(checks), "actual_generation_calls": 0, "returned_panel_images": 0, "visual_quality_assessed": False, "checks": checks, "cases": cases, "repair_cli_checks": repairs}
-    (output / "数据集回归报告.json").write_text(json.dumps(report, ensure_ascii=False, indent=2))
+    (output / "数据集回归报告.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8', newline='\n')
     print(json.dumps({k: v for k, v in report.items() if k not in {"checks", "cases", "repair_cli_checks"}}, ensure_ascii=False, indent=2))
     return 0 if report["status"] == "PASS" else 1
 

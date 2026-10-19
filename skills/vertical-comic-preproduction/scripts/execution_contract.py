@@ -12,7 +12,7 @@ SKILLS=('vertical-comic-preproduction','vertical-comic-visual-assets','vertical-
 
 def toolchain(base=None):
     base=Path(base).resolve() if base is not None else Path(__file__).resolve().parent
-    files=[{'path':str(p.relative_to(base)),'sha256':digest(p)} for p in sorted(base.iterdir()) if p.suffix in {'.py','.js'}]
+    files=[{'path':p.relative_to(base).as_posix(),'sha256':digest(p)} for p in sorted(base.iterdir()) if p.suffix in {'.py','.js'}]
     entries=[{'path':str(base.parent.parent/name/'SKILL.md'),'sha256':digest(base.parent.parent/name/'SKILL.md')} for name in SKILLS]
     return {'policy':'comic_toolchain_v1','release':POLICY,'root':str(base),'files':files,'skill_entries':entries}
 
@@ -140,7 +140,7 @@ def main():
         if a.write_semantic:
             if not a.batch and state.get('preparation_policy')!='episode_preparation_v1':raise ValueError('旧模式语义核对模板须指定真实半话batch')
             value=semantic_template(state,root,a.batch);dest=Path(a.write_semantic).resolve();dest.relative_to(root)
-            with dest.open('x',encoding='utf-8') as f:json.dump(value,f,ensure_ascii=False,indent=2)
+            with dest.open('x',encoding='utf-8', newline='\n') as f:json.dump(value,f,ensure_ascii=False,indent=2)
             print(json.dumps({'status':'UNREVIEWED_SEMANTIC_TEMPLATE','path':str(dest)},ensure_ascii=False));return 0
         from staged_workflow import evaluate, preflight_many
         from review_reuse import session
@@ -154,4 +154,7 @@ def main():
         print(json.dumps(value,ensure_ascii=False));return 0 if ready or status['status']=='PASS' else 1
     except (OSError,ValueError,TypeError,KeyError,StopIteration) as exc:print(json.dumps({'status':'HOLD','errors':[str(exc)]},ensure_ascii=False));return 1
 
-if __name__=='__main__':raise SystemExit(main())
+if __name__=='__main__':
+    from platform_io import configure_stdio
+    configure_stdio()
+    raise SystemExit(main())

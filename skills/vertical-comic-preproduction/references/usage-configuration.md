@@ -6,7 +6,7 @@
 
 当前generation配置：execution_mode=episode_async_v1、batch_strategy=full_episode、episode_workers=5、max_inflight_per_episode=episode、max_inflight_images=auto。不设batch_size。整话源格数是待提交池的上界，实际在途数仍受总控和已核定后端容量约束；后二者可设正整数上限。每话一名唯一执行者。
 
-新任务的runtime.watchdog完整对象见 [执行者两级监控](worker-watchdog.md)，项目实例见 [配置示例](../../../examples/comic.config.example.json)。默认准备和自审/诊断5分钟T1、12分钟T2；单个请求15分钟T1、30分钟T2。六项秒数可调，均须为正整数且同类T2大于T1；不改变episode_workers或图像并发上限。旧RV未写watchdog按原冻结版本恢复。
+新任务的runtime.watchdog完整对象见 [执行者两级监控](worker-watchdog.md)，项目实例见 [配置示例](../assets/templates/默认使用配置.json)。默认准备和自审/诊断5分钟T1、12分钟T2；单个请求15分钟T1、30分钟T2。六项秒数可调，均须为正整数且同类T2大于T1；不改变episode_workers或图像并发上限。旧RV未写watchdog按原冻结版本恢复。
 
 新配置声明preparation.policy=episode_preparation_v1，初始化写入根visual_basis/shot_manifest/semantic_audit/gates，A/B及全话生图包各按实际范围确认；optimization.approval_scope=generation_episode_only表示整话逐格生成、自审和滚动返修。旧half_scoped_v1状态不自动迁移，行为见 [整话异步生产](episode-async.md)。
 

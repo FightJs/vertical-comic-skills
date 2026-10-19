@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Short first-use prepare/receive entry. Does not approve or generate images."""
 from pathlib import Path
+from platform_io import book_directory
+from runtime_environment import require_ready
 import argparse,copy,datetime,json,subprocess,sys,uuid
 from usage_config import read_config,memory_source
 from runtime_snapshot import create
@@ -28,6 +30,7 @@ def episodes(values):
 def prepare(project,book,ids,*,script=None,assets=None,output=None,workers=None,request_source=None,reuse_selection=None):
     project=Path(project).resolve();ids=episodes(ids)
     if not project.is_dir():raise ValueError('项目目录不存在')
+    require_ready(probe_root=project)
     import hashlib
     profile_dir=project/'.comic/books';profile=profile_dir/(hashlib.sha256(book.encode()).hexdigest()[:16]+'.json')
     old=read(profile) if profile.exists() else None
@@ -48,15 +51,15 @@ def prepare(project,book,ids,*,script=None,assets=None,output=None,workers=None,
         config['generation']['episode_workers']=workers
     # Validate all inputs and bundled rules before creating a project run.
     effective=resolve();config['inputs']['memory_root']=effective['root'];config['memory'].update(source='builtin',index_sha256=effective['index_sha256'])
-    output_base=Path(output).resolve() if output else project/'条漫输出'/book.replace('/','_')/('_'.join((ids[0],ids[-1])))
+    output_base=Path(output).resolve() if output else project/'条漫输出'/book_directory(book)/('_'.join((ids[0],ids[-1])))
     stamp=datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=8))).strftime('%Y%m%d_%H%M%S')
     run=output_base/('RV_'+stamp+'_'+uuid.uuid4().hex[:6]);run.mkdir(parents=True)
     task_path=run/'任务来源.json';write(task_path,task)
     cfg=run/'本次配置.json';write(cfg,config);read_config(cfg)
     snap=create(run/'00_总控/运行版本',memory_source=memory_source(config))
     for eid in ids:
-        cmd=[sys.executable,'-B',str(Path(snap['path']).parent/'skills/vertical-comic-preproduction/scripts/init_preproduction.py'),'--book',book,'--episode',eid,'--config',str(cfg),'--runtime-snapshot',snap['path'],'--task-context',str(task_path),'--output',str(run/eid),'--backend','codex_builtin_imagegen']
-        proc=subprocess.run(cmd,capture_output=True,text=True)
+        cmd=[sys.executable, '-X', 'utf8','-B',str(Path(snap['path']).parent/'skills/vertical-comic-preproduction/scripts/init_preproduction.py'),'--book',book,'--episode',eid,'--config',str(cfg),'--runtime-snapshot',snap['path'],'--task-context',str(task_path),'--output',str(run/eid),'--backend','codex_builtin_imagegen']
+        proc=subprocess.run(cmd,capture_output=True,text=True, encoding='utf-8')
         if proc.returncode:raise ValueError('初始化失败，保留诊断运行目录:'+eid+':'+proc.stderr[-1000:])
     if old is None:
         profile_dir.mkdir(parents=True,exist_ok=True);write(profile,{'policy':'comic_book_profile_v1','book':book,**inputs})
@@ -64,6 +67,7 @@ def prepare(project,book,ids,*,script=None,assets=None,output=None,workers=None,
     write(run/'启动摘要.json',result);return result
 
 def receive(zip_path,*,output=None):
+    require_ready()
     archive=Path(zip_path).resolve();side=Path(str(archive)+'.sha256')
     checked=check_delivery_archive(archive,checksum_file=side if side.is_file() else None)
     checksum=side if checked['format']=='legacy_with_checksum' else None
@@ -85,4 +89,7 @@ def main():
         result=prepare(a.project,a.book,a.episodes,script=a.script,assets=a.assets,output=a.output,workers=a.workers,request_source=read(a.request_source) if a.request_source else None,reuse_selection=read(a.reuse_selection) if a.reuse_selection else None) if a.action=='prepare' else receive(a.zip,output=a.output)
         print(json.dumps(result,ensure_ascii=False));return int(result['status']=='HOLD')
     except (OSError,ValueError,KeyError,TypeError) as e:print(json.dumps({'status':'HOLD','error':str(e)},ensure_ascii=False));return 1
-if __name__=='__main__':raise SystemExit(main())
+if __name__=='__main__':
+    from platform_io import configure_stdio
+    configure_stdio()
+    raise SystemExit(main())

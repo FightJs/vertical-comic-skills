@@ -6,7 +6,7 @@
 
 ## 首次安装（公开下载无需GitHub账号）
 
-需要Codex和Python 3.12+。图片生成还需要当前Codex环境实际可用的生图工具；安装不会自动提供工具权限。下面命令适用于macOS/Linux；Windows的虚拟环境解释器位于`.venv\Scripts\python.exe`。Git仅供Git下载及更新使用，Download ZIP安装不需要Git或GitHub CLI。
+支持原生 Windows 10/11、macOS 和 Linux 的本地文件系统，需要Codex和Python 3.12+。图片生成还需要当前Codex环境实际可用的生图工具；安装不会自动提供工具权限。下面命令适用于macOS/Linux；Windows请使用下方PowerShell步骤。Git仅供Git下载及更新使用，Download ZIP安装不需要Git或GitHub CLI。
 
 先下载，任选一种方式：
 
@@ -18,10 +18,33 @@
 ```sh
 python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python tools/check_environment.py
+.venv/bin/python tools/check_bundle.py
 .venv/bin/python tools/sync_skills.py
 ```
 
 也可以把解压后的目录交给Codex，说“请按README创建虚拟环境并安装完整条漫五件套”。不要直接向系统Python安装依赖；Homebrew等环境会拒绝此操作。后续命令继续使用此虚拟环境的Python，无需激活环境或修改系统Python设置。
+
+### Windows 首次安装（PowerShell）
+
+在仓库或解压后的发布目录执行，使用同一个虚拟环境解释器安装和运行，无需激活环境或修改 PowerShell 执行策略：
+
+```powershell
+py -3 -m venv "$env:LOCALAPPDATA\ComicSkills\venv"
+$comicPython = "$env:LOCALAPPDATA\ComicSkills\venv\Scripts\python.exe"
+& $comicPython -m pip install -r requirements.txt
+& $comicPython -B tools/check_environment.py
+& $comicPython -B tools/check_bundle.py
+& $comicPython -B tools/sync_skills.py
+```
+
+如果没有 `py` 启动器，可用实际 Python 3.12+ 的完整路径替代第一行的 `py -3`。所有路径参数保留引号。环境检查失败时，先处理报告中的具体依赖或目录问题；`fcntl` 是 Unix 标准库模块，不能在 Windows 上用 pip 补装。
+
+安装记录保存本机解释器路径；后续启动优先使用该解释器。跨电脑交接仍使用接收端自己的解释器，不继承前期电脑的虚拟环境。Python/依赖更新后重新运行环境检查。安装时先检查暂存版本，再替换旧版；运行检查不证明已具有实际生图权限。
+
+核心依赖为 Pillow、PyYAML、openpyxl。Node.js 用于 JS 调度器回归测试，实际生图由 Codex 的可用工具执行。旧 SVG 参考转换是可选能力，只有实际需要时才安装 CairoSVG 及原生 Cairo，并执行 `tools/check_environment.py --require-svg`；不允许因缺转换器静默丢弃必需参考。
+
+仓库用 `.gitattributes` 固定文本 LF；不要用编辑器批量改写发布文件编码或换行来绕过哈希。包内路径使用 `/`，本机路径使用当前系统格式。Windows 保留名称或不支持的文件名会在接包前报告。网络共享的锁语义不属于本地文件系统验证范围。
 
 默认安装到`$CODEX_HOME/skills`（未设置时为`~/.codex/skills`），默认规则随总控Skill安装到`assets/rule-memory`；`$CODEX_HOME/skill-bundles/vertical-comic-skills/memory`保留外置来源兼容副本，新用户不用配置它。
 
@@ -40,6 +63,8 @@ python3 -m venv .venv
 自定义Codex目录使用`--codex-home /实际目录`，检查和后续更新也沿用该参数。内置规则缓存和本机规则增补状态跟随`CODEX_HOME`；未设置环境变量时，工具识别受管理安装目录。安装完成后在新的Codex轮次/任务中使用Skill；已经冻结的生产任务仍使用原快照。
 
 ## 更新到最新版本
+
+以下Shell示例用于macOS/Linux；Windows请继续使用首次安装时的`$comicPython`，把`.venv/bin/python`替换为`& $comicPython`，并按PowerShell步骤安装依赖。
 
 **Git下载版**：在原仓库目录执行：
 
@@ -60,7 +85,7 @@ python3 -m venv .venv
 
 ZIP版不使用`--update`；误用时工具会提示以上路径。已有安装由同一工具管理且没有代码改动时会直接更新；存在本地代码改动时先检查，再按明确选择使用`--replace-existing`。用户增补保留，旧版本备份；不要手工覆盖`skills`目录。
 
-需要保持固定版本时，从GitHub下载对应tag的ZIP，或在Git副本中切换tag，再安装，不使用`--update`：
+需要保持固定版本时，从GitHub下载对应tag的ZIP，或在Git副本中切换tag，再安装，不使用`--update`。以下仅演示已有旧tag；Windows兼容修复尚未创建tag，请使用main，不要切回旧tag：
 
 ```sh
 git fetch --tags
@@ -139,7 +164,7 @@ Skill会先检查本项目已有配置，再一次收集缺少的书名、源脚
 node skills/vertical-comic-preproduction/tests/test_async_generation.js
 ```
 
-GitHub Actions会在push和pull request后执行这些检查。测试使用隔离合成输入，不发起真实生图调用。
+GitHub Actions在push和pull request后运行Windows、macOS、Linux × Python 3.12/3.14矩阵，并交换三种系统生成的合成ZIP进行九种来源/接收组合演练。测试使用隔离合成输入，不发起真实生图调用。CI配置存在不等于所有平台已经通过；以对应提交实际运行结果为准。发布验收还需要原生Windows Codex的小规模真实参考上传、返图保存与QA测试。
 
 ## 维护者发布更新
 
@@ -156,3 +181,7 @@ git push origin main
 ```
 
 只有已提交并推送的版本可被使用者同步；本机安装目录的后续修改不会自动上传。发布新稳定版本时创建新的tag/Release，保留旧版本用于冻结生产恢复。本仓库未擅自添加开源许可证。
+
+## 旧冻结包与升级边界
+
+升级安装版不会替换已有RV或ZIP里的冻结脚本。旧包若仍直接导入fcntl，Windows接包会报告FROZEN_RUNTIME_UNSUPPORTED；请前期端按新版本创建明确迁移的RV，保留源文件、批准原件、调用历史和返修预算，完成受影响范围核对后重新导出。禁止在接收端改包内代码、重签哈希冒充原批准输入。新旧包均需实际冻结工具的接包演练，不能仅凭ZIP完整性宣布可生产。

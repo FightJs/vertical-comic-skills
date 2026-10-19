@@ -48,11 +48,14 @@ def build_queue(state,root,batch,*,incremental=False,processed=None):
 def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--state',required=True);p.add_argument('--batch',required=True);p.add_argument('--write',required=True);p.add_argument('--incremental',action='store_true');a=p.parse_args()
     try:
-        path=Path(a.state).resolve();root=path.parent.parent;state=json.loads(path.read_text());plan=json.loads(checked_file(root,state['batch_plan']).read_text());batch=next(b for b in plan['batches'] if b['batch_id']==a.batch)
+        path=Path(a.state).resolve();root=path.parent.parent;state=json.loads(path.read_text(encoding='utf-8-sig'));plan=json.loads(checked_file(root,state['batch_plan']).read_text(encoding='utf-8-sig'));batch=next(b for b in plan['batches'] if b['batch_id']==a.batch)
         value=build_queue(state,root,batch,incremental=a.incremental);dest=Path(a.write).resolve();dest.relative_to(root)
-        with dest.open('x',encoding='utf-8') as f:json.dump(value,f,ensure_ascii=False,indent=2);f.write('\n')
+        with dest.open('x',encoding='utf-8', newline='\n') as f:json.dump(value,f,ensure_ascii=False,indent=2);f.write('\n')
         print(json.dumps({'status':value['status'],'items':len(value['items']),'path':str(dest)},ensure_ascii=False));return 0
     except (OSError,ValueError,TypeError,KeyError,StopIteration) as exc:
         print(json.dumps({'status':'HOLD','errors':[str(exc)]},ensure_ascii=False));return 1
 
-if __name__=='__main__':raise SystemExit(main())
+if __name__=='__main__':
+    from platform_io import configure_stdio
+    configure_stdio()
+    raise SystemExit(main())

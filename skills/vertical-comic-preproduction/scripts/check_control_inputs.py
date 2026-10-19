@@ -266,11 +266,13 @@ def main() -> int:
     if args.report:
         path = Path(args.report)
         path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("x", encoding="utf-8") as handle:
+        with path.open("x", encoding="utf-8", newline='\n') as handle:
             handle.write(output)
     print(output, end="")
     return 1 if result["status"] == "HOLD" else 0
 
 
 if __name__ == "__main__":
+    from platform_io import configure_stdio
+    configure_stdio()
     raise SystemExit(main())

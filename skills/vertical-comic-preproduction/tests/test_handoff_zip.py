@@ -34,6 +34,17 @@ class HandoffZipTests(unittest.TestCase):
         self.assertFalse((self.base/'bad-sha').exists())
         side.write_text(h.sha(z)+'  candidate.zip\n');h.extract(z,self.base/'correct-sha',reserve_bytes=0,checksum_file=side)
 
+    def test_self_contained_marker_alone_cannot_turn_candidate_into_release(self):
+        z=self.candidate();fake=self.base/'fake-formal.zip'
+        with zipfile.ZipFile(z) as original,zipfile.ZipFile(fake,'w') as target:
+            for info in original.infolist():
+                body=original.read(info)
+                if info.filename.endswith('/'+h.INVENTORY):
+                    manifest=json.loads(body);manifest['container_policy']='self_contained_handoff_v1'
+                    body=json.dumps(manifest).encode()
+                target.writestr(info,body)
+        with self.assertRaisesRegex(ValueError,'正式发布证据'):h.check_delivery_archive(fake)
+
     def test_missing_reference_rejected(self):
         (self.root/'proof.json').unlink()
         with self.assertRaises(ValueError):self.candidate()

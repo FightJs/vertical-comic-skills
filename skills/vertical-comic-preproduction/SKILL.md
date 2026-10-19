@@ -23,7 +23,7 @@ description: Coordinate a staged vertical-comic workflow from approved scripts a
 
 - 新任务：按[整话异步](references/episode-async.md)使用episode_preparation_v1、episode_async_v1、scoped_episode_review_v1、comic_execution_v2与incremental_runtime_v2。全话准备、[逐格就绪](references/panel-readiness.md)，B与实际包合并展示并分别记录决定；缺口仅阻塞受影响格及真实依赖。默认无固定半话C。
 - 恢复任务：先从原冻结入口运行staged_workflow.py --check status；按原模式、源序、输入、规则与预算恢复，不静默迁移旧RV。
-- 用户指定分工制作：读[双电脑交接](references/split-production.md)、[直接交付](references/direct-delivery.md)及[ZIP演练](references/zip-handoff.md)。只提交获批当前半话，第一半话确认后才提交后半；缺技术编译的候选不能当正式可生产包。
+- 用户指定分工制作：最终只交一个正式ZIP，交接说明、哈希清单及发布证据内置；接收端直接用ZIP路径和可选输出位置启动，旧版sidecar仍兼容。读[双电脑交接](references/split-production.md)、[直接交付](references/direct-delivery.md)及[ZIP演练](references/zip-handoff.md)。只提交获批当前半话，第一半话确认后才提交后半；缺技术编译的候选不能当正式可生产包。
 
 核对准确书话、源脚本、真实格数及源序、资产、批准画风和输出RV，不按估计格数初始化。配置存在时读[使用配置](references/usage-configuration.md)，新任务用init_preproduction.py创建未批准模板。
 

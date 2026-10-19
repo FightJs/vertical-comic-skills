@@ -1,6 +1,8 @@
 """Direct handoff: current contracts, real frozen gates, synthetic human evidence."""
-import copy,json,shutil,sys,tempfile,unittest
+import copy,json,shutil,sys,tempfile,unittest,zipfile
 from pathlib import Path
+from unittest.mock import patch
+from types import SimpleNamespace
 sys.path[:0]=[str(Path(__file__).resolve().parents[1]/'scripts'),str(Path(__file__).parent)]
 import handoff_zip as h
 import handoff_delivery as d
@@ -65,10 +67,37 @@ class DirectHandoffTests(unittest.TestCase):
         auth=self.base/'conditional-export.json';auth.write_text(json.dumps({'status':'APPROVED','source_kind':'user_message','source_locator':'SYNTHETIC_NOT_REAL_USER','quote':'SYNTHETIC approve exact final inputs; export if real rehearsal passes','authorization_mode':'approved_inputs_auto_export_v1','package_id':self.index['package_id'],'approved_input_digest':review['approved_input_digest'],'after_successful_rehearsal':True}))
         out=self.base/'formal.zip';released=h.release(z,self.base/'rehearsal/演练报告.json',auth,out)
         self.assertEqual(released['status'],'RELEASED_DIRECT_DELIVERY_ZIP')
-        formal=Path(h.extract(out,self.base/'received-on-another-path',reserve_bytes=0,checksum_file=Path(str(out)+'.sha256'))['root'])
+        self.assertFalse(Path(str(out)+'.sha256').exists())
+        self.assertEqual(h.check_delivery_archive(out)['format'],'self_contained_handoff_v1')
+        renamed=self.base/'正式交接包.zip';out.rename(renamed);out=renamed
+        # A stale legacy sidecar must not affect a new self-contained ZIP.
+        Path(str(out)+'.sha256').write_text('obsolete checksum')
+        import comic_start
+        # Isolated tiny fixture: simulate receiver capacity, independent of host free space.
+        with patch.object(h.shutil,'disk_usage',return_value=SimpleNamespace(free=10*1024**3)):
+            reception=comic_start.receive(out,output=self.base/'接包输出')
+        self.assertEqual(reception['status'],'READY_FOR_PRODUCTION_ROUTING',reception)
+        self.assertEqual(reception['image_calls'],0)
+        formal=Path(h.extract(out,self.base/'received-on-another-path',reserve_bytes=0)['root'])
+        self.assertTrue((formal/'接包入口.md').is_file());self.assertTrue((formal/'交接说明.md').is_file())
         bound2=d.bind(formal,self.base/'another-local-run');self.assertNotEqual(bound['run_root'],bound2['run_root'])
         second=h.rehearse(out,formal,bound2['run_root'],bound2['run_index'],self.base/'second-rehearsal',timeout=20)
         self.assertEqual(second['status'],'RELEASE_CANDIDATE',second);self.assertEqual(second['image_calls'],0)
+    def test_candidate_cannot_be_received_without_release_evidence(self):
+        import comic_start
+        z=self.base/'candidate.zip';h.pack(self.package,z)
+        with self.assertRaisesRegex(ValueError,'旧版正式ZIP'):
+            comic_start.receive(z,output=self.base/'must-not-exist')
+        self.assertFalse((self.base/'must-not-exist').exists())
+
+    def test_internal_hash_failure_stops_before_receiver_creates_run(self):
+        import comic_start
+        z=self.base/'damaged.zip';h.pack(self.package,z)
+        with zipfile.ZipFile(z,'a') as archive:archive.writestr('package/extra.txt','unlisted')
+        with self.assertRaisesRegex(ValueError,'清单'):
+            comic_start.receive(z,output=self.base/'must-not-exist')
+        self.assertFalse((self.base/'must-not-exist').exists())
+
     def test_one_ready_cannot_hide_later_hold_or_unknown(self):
         row=self.index['episodes'][0]['panels'][-1];row.update(classification='HOLD',blockers=[{'reason':'budget unknown','owner':'front','resolution':'reconcile'}])
         self.assertTrue(d.closure(self.package,self.index))

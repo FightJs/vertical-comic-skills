@@ -67,7 +67,7 @@ class EasyStartTests(unittest.TestCase):
         self.assertEqual(state['gates'],{});self.assertTrue(state['memory_source']['index_sha256']);self.assertTrue((Path(state['memory_source']['root'])/'内置规则/规则记忆输入与增添规范.md').is_file())
         newer=start.prepare(self.root,'SYNTHETIC',['E003']);self.assertNotEqual(result['run_root'],newer['run_root'])
         self.assertEqual(b.read(newer['config'])['production']['episodes'],['E003'])
-    def test_receive_missing_checksum_does_not_create_run(self):
+    def test_receive_missing_archive_does_not_create_run(self):
         with self.assertRaises(ValueError):start.receive(self.root/'package.zip',output=self.root/'receive')
         self.assertFalse((self.root/'receive').exists())
     def test_no_login_when_enabled_is_pending_and_does_not_lose_update(self):

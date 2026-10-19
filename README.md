@@ -4,6 +4,19 @@
 
 仓库是使用者同步来源：`main`提供最新提交，Release/tag提供固定版本。整套更新，避免五个Skill及规则库版本混用。生产RV按其已冻结版本继续，更新不会迁移旧RV或授予新的生图/返修权限。
 
+## 已安装用户：一句话更新
+
+在Codex中说：
+
+```text
+检查并更新条漫Skill五件套到最新稳定版。
+保留本书配置和用户增补，正在运行的RV继续使用原冻结版本。
+```
+
+新版入口默认从正式Release下载整套安装ZIP，无需Git或GitHub账号。也可说“检查是否有更新”“列出可恢复备份”“恢复上一版条漫Skill”。详见[安装更新](skills/vertical-comic-preproduction/references/installation-update.md)。安装后只在用户要求时查更新，不后台自动升级。
+
+老版本尚无此入口时，从[正式发布页](https://github.com/FightJs/vertical-comic-skills/releases/latest)下载一次新版安装ZIP，按下方安装步骤操作；后续即可用一句话更新。main合并不等于稳定版已发布。
+
 ## 首次安装（公开下载无需GitHub账号）
 
 支持原生 Windows 10/11、macOS 和 Linux 的本地文件系统，需要Codex和Python 3.12+。图片生成还需要当前Codex环境实际可用的生图工具；安装不会自动提供工具权限。下面命令适用于macOS/Linux；Windows请使用下方PowerShell步骤。Git仅供Git下载及更新使用，Download ZIP安装不需要Git或GitHub CLI。
@@ -62,7 +75,7 @@ $comicPython = "$env:LOCALAPPDATA\ComicSkills\venv\Scripts\python.exe"
 
 自定义Codex目录使用`--codex-home /实际目录`，检查和后续更新也沿用该参数。内置规则缓存和本机规则增补状态跟随`CODEX_HOME`；未设置环境变量时，工具识别受管理安装目录。安装完成后在新的Codex轮次/任务中使用Skill；已经冻结的生产任务仍使用原快照。
 
-## 更新到最新版本
+## 高级用户：Git或手动ZIP更新
 
 以下Shell示例用于macOS/Linux；Windows请继续使用首次安装时的`$comicPython`，把`.venv/bin/python`替换为`& $comicPython`，并按PowerShell步骤安装依赖。
 
@@ -185,3 +198,9 @@ git push origin main
 ## 旧冻结包与升级边界
 
 升级安装版不会替换已有RV或ZIP里的冻结脚本。旧包若仍直接导入fcntl，Windows接包会报告FROZEN_RUNTIME_UNSUPPORTED；请前期端按新版本创建明确迁移的RV，保留源文件、批准原件、调用历史和返修预算，完成受影响范围核对后重新导出。禁止在接收端改包内代码、重签哈希冒充原批准输入。新旧包均需实际冻结工具的接包演练，不能仅凭ZIP完整性宣布可生产。
+
+## 发布稳定版安装包
+
+维护者在PR验证并合并后，将VERSION设为准确版本，创建同名版本标签并推送。`.github/workflows/release.yml`复用三平台检查，通过后由`tools/build_release.py`生成`vertical-comic-skills-vYYYY.MM.DD.N.zip`及SHA256附件并发布Release。标签必须与VERSION一致，已有Release不会覆盖。失败不向用户提供半成品稳定版。
+
+本地演练打包：`python tools/build_release.py --output <新目录>`。安装ZIP与逐格生产的正式交接ZIP用途不同。安装版本更新不要求登录；发布权限只留在GitHub Actions，不进入用户Skill。

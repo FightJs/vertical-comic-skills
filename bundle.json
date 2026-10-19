@@ -30,8 +30,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/SKILL.md",
-      "sha256": "671309dc61b99b49d170d619e41dce17391b57a801d2886ca301b41f4f5b6e55",
-      "bytes": 7013
+      "sha256": "38ba05af9199bed4df27427c8b6fda8bc4a9cdeaae7bdfe9dd52ee226de33c63",
+      "bytes": 7365
     },
     {
       "path": "skills/vertical-comic-preproduction/agents/openai.yaml",
@@ -175,8 +175,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/references/builtin-rule-maintenance.md",
-      "sha256": "a7ae4d6b2b803c2631001cd720a9d5d9a79f404e0b5d4df81fa54f24adf16422",
-      "bytes": 4295
+      "sha256": "6af9c78da45e2b3157c331150175d93a0707f6de4aa820248160f7ddf9bf553f",
+      "bytes": 4671
     },
     {
       "path": "skills/vertical-comic-preproduction/references/codex-imagegen.md",
@@ -234,6 +234,11 @@
       "bytes": 7762
     },
     {
+      "path": "skills/vertical-comic-preproduction/references/installation-update.md",
+      "sha256": "56b88310188ba1ce3c37efbee48371f898d21dee4da0a46de24fa07068ee9eb2",
+      "bytes": 4127
+    },
+    {
       "path": "skills/vertical-comic-preproduction/references/legacy-package-repair.md",
       "sha256": "d667af6d053aced7002e4865acc33413067ca711ab2166c7a660e1a8fef96846",
       "bytes": 3980
@@ -260,8 +265,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/references/quick-start.md",
-      "sha256": "75794e998ae99bbba41cdf4c85c3857a99404556c1fe18753f0459cb2bc58882",
-      "bytes": 7294
+      "sha256": "232bb755a9a130a32e7105d4b45e7e113c950b1af310777f8cef891ad51e8080",
+      "bytes": 7597
     },
     {
       "path": "skills/vertical-comic-preproduction/references/reference-budget.md",
@@ -534,6 +539,11 @@
       "bytes": 11508
     },
     {
+      "path": "skills/vertical-comic-preproduction/scripts/installation_state.py",
+      "sha256": "352eb5a361cc4d53bfa647436a2fdf999739cd23d89acff3f1f95802fc4cbd9c",
+      "bytes": 6901
+    },
+    {
       "path": "skills/vertical-comic-preproduction/scripts/legacy_spatial_cleanup.py",
       "sha256": "830fff8685a102980d8979fd0b14a6609b7c20176ab4583f9746aed789f30dbe",
       "bytes": 9872
@@ -615,8 +625,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/rule_contributions.py",
-      "sha256": "89ada0a02b92b8df50ad50ec4455a42582f1ca44faf0ef54f5cbbee700b2f6d2",
-      "bytes": 17371
+      "sha256": "11cf54e34a5a53343d1d75dcdc9c9ae0e8c4a7b05c0efaac475cbb5ef1a77226",
+      "bytes": 17975
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/rule_exception.py",
@@ -630,8 +640,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/runtime_environment.py",
-      "sha256": "8dab9091613fd5cba55037c5ccfbc2a594c5bdc280ca5e80e99e54aef32a8982",
-      "bytes": 4063
+      "sha256": "eadabccb066d88e1ffe7caa423422b4f2825d1fef3ef28d83ada5ba59fad4630",
+      "bytes": 4110
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/runtime_snapshot.py",
@@ -682,6 +692,11 @@
       "path": "skills/vertical-comic-preproduction/scripts/task_context.py",
       "sha256": "c3c1fbc9b311d8d805734ba8874949b3cfbd8e130e019c0eee9f133c80f9765a",
       "bytes": 7616
+    },
+    {
+      "path": "skills/vertical-comic-preproduction/scripts/update_skills.py",
+      "sha256": "2630199a7b5aa844030fb048dbfe236edfe375ad02879485110145bc738b2dd1",
+      "bytes": 11761
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/usage_config.py",

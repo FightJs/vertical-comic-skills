@@ -5,7 +5,7 @@ import argparse,copy,datetime,json,subprocess,sys,uuid
 from usage_config import read_config,memory_source
 from runtime_snapshot import create
 from builtin_memory import resolve
-from handoff_zip import extract,rehearse,read,write
+from handoff_zip import extract,rehearse,read,write,check_delivery_archive
 from handoff_delivery import bind
 
 BASE=Path(__file__).resolve().parents[1]
@@ -59,10 +59,11 @@ def prepare(project,book,ids,*,script=None,assets=None,output=None,workers=None)
 
 def receive(zip_path,*,output=None):
     archive=Path(zip_path).resolve();side=Path(str(archive)+'.sha256')
-    if not side.is_file():raise ValueError('未找到同名.zip.sha256，不能猜测其他校验文件')
+    checked=check_delivery_archive(archive,checksum_file=side if side.is_file() else None)
+    checksum=side if checked['format']=='legacy_with_checksum' else None
     base=Path(output).resolve() if output else archive.parent/'接包生产'
     target=base/('RV_'+uuid.uuid4().hex[:12]);target.mkdir(parents=True)
-    received=extract(archive,target/'收到原件',checksum_file=side)
+    received=extract(archive,target/'收到原件',checksum_file=checksum)
     bound=bind(received['root'],target/'本地运行')
     result=rehearse(archive,received['root'],bound['run_root'],bound['run_index'],target/'接包预检')
     return {'status':'READY_FOR_PRODUCTION_ROUTING' if result['status']=='RELEASE_CANDIDATE' else 'HOLD','run_root':str(target),'episode_results':result['results'],'image_calls':0,'next':'通过后仍按H001/高风险/D审核节点及真实许可生产'}

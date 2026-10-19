@@ -178,6 +178,45 @@ def pack(root,output):
     return {'status':'CANDIDATE_ZIP_NOT_RELEASED','zip':str(output),'sha256':sha(output),'file_count':len(rows)+1}
 
 
+def check_delivery_archive(zip_path,checksum_file=None):
+    """Validate a self-contained release before creating the receiver's run.
+
+    Internal hashes detect damage, not publisher identity. Legacy archives still
+    require their detached checksum. Production approval is checked by rehearsal.
+    """
+    if not Path(zip_path).is_file():raise ValueError('正式ZIP不存在')
+    with zipfile.ZipFile(zip_path) as z:
+        top,manifest=zip_inventory(z)
+        if manifest.get('container_policy')!='self_contained_handoff_v1':
+            if checksum_file is None:raise ValueError('旧版正式ZIP需要同名.zip.sha256；候选包不能直接接包生产')
+            line=Path(checksum_file).read_text().strip().split(maxsplit=1)
+            if len(line)!=2 or line[1]!=Path(zip_path).name or line[0]!=sha(zip_path):raise ValueError('正式ZIP外部SHA256或文件名不符')
+            return {'format':'legacy_with_checksum'}
+        idx=read_zip_json(z,top+'/'+INDEX)
+        report_name='演练与导出确认/演练报告.json'
+        approval_name='演练与导出确认/用户导出确认.json'
+        required={report_name,approval_name,'交接说明.md','接包生产执行要求.md','接包入口.md'}
+        if not required.issubset({r['path'] for r in manifest['files']}):raise ValueError('单ZIP缺交接说明或正式发布证据')
+        report=read_zip_json(z,top+'/'+report_name);approval=read_zip_json(z,top+'/'+approval_name)
+        if (idx.get('delivery_policy')!='direct_delivery_v2' or manifest.get('package_id')!=idx.get('package_id') or
+            report.get('package_id')!=idx.get('package_id') or report.get('policy')!=POLICY or
+            report.get('source_kind')!='observed_frozen_gate_rehearsal' or report.get('status')!='RELEASE_CANDIDATE' or
+            report.get('originals_unchanged') is not True or report.get('image_calls')!=0 or not report.get('ready_h001_count')):
+            raise ValueError('单ZIP正式发布或演练证据不完整')
+        results=report.get('results',[])
+        if ([r.get('episode_id') for r in results]!=[e['episode_id'] for e in idx['episodes']] or
+            any(r.get('status')!='REHEARSED' or r.get('errors') for r in results)):
+            raise ValueError('单ZIP演练未覆盖全部话')
+        literal=approval.get('status')=='APPROVED' and approval.get('source_kind')=='user_message' and approval.get('source_locator') and approval.get('quote')
+        exact=(approval.get('candidate_zip_sha256')==report.get('candidate_zip_sha256') and
+               approval.get('rehearsal_report_sha256')==hashlib.sha256(z.read(top+'/'+report_name)).hexdigest())
+        conditional=(approval.get('authorization_mode')=='approved_inputs_auto_export_v1' and
+                     approval.get('package_id')==idx['package_id'] and approval.get('after_successful_rehearsal') is True and
+                     bool(approval.get('approved_input_digest')))
+        if not literal or not (exact or conditional):raise ValueError('单ZIP缺适用导出授权')
+        return {'format':'self_contained_handoff_v1','package_id':idx['package_id']}
+
+
 def extract(zip_path,destination,*,reserve_bytes=256*1024*1024,checksum_file=None):
     if checksum_file:
         line=Path(checksum_file).read_text().strip().split(maxsplit=1)
@@ -324,7 +363,7 @@ def release(candidate_zip,rehearsal_report,approval_file,output):
                  approval.get('approved_input_digest')==reviewed['approved_input_digest'] and approval.get('after_successful_rehearsal') is True)
     if not literal or not (exact or conditional):
         raise ValueError('缺当前候选真实导出确认或最终输入不变条件导出授权，不得回签旧批准')
-    if output.exists() or Path(str(output)+'.sha256').exists() or output.suffix.lower()!='.zip':raise ValueError('正式ZIP须新路径，不覆盖候选或原包')
+    if output.exists() or output.suffix.lower()!='.zip':raise ValueError('正式ZIP须新路径，不覆盖候选或原包')
     with zipfile.ZipFile(candidate_zip) as original:
         top,manifest=zip_inventory(original);idx=read_zip_json(original,top+'/'+INDEX)
         if idx['package_id']!=report['package_id']:raise ValueError('演练包ID不同')
@@ -337,6 +376,7 @@ def release(candidate_zip,rehearsal_report,approval_file,output):
         if report['ready_h001_count']!=sum(len(r['ready_h001']) for r in report['results']):raise ValueError('演练就绪统计失配')
         additions={'演练与导出确认/演练报告.json':rehearsal_report.read_bytes(),'演练与导出确认/用户导出确认.json':Path(approval_file).read_bytes()}
         for ref in report.get('evidence_files',[]):additions['演练与导出确认/原始预检/'+ref['path']]=reference(rehearsal_report.parent,ref).read_bytes()
+        additions['接包入口.md']=('# 正式交接包\n\n仅交付本ZIP，无需外置校验文件或再次解压套包。\n在Codex中使用 $vertical-comic-preproduction，填写：接包生产：【本ZIP的本机绝对路径】；输出位置：【本机目录】；审核人是我。\n接收端先校验包内清单及正式发布证据，再解压、绑定和演练；通过后依包内审核节点生产。\n详细范围、历史预算与步骤见交接说明.md、接包生产执行要求.md及交接验收索引.json。\n内部哈希用于完整性核对，不证明发布者身份；本ZIP最终SHA256只记录于导出日志，不写入自身。\n').encode('utf-8')
         reserved={r['path'] for r in manifest['files']}
         if reserved & set(additions):raise ValueError('正式证据路径与原包冲突')
         rows=sorted(manifest['files']+[{'path':k,'sha256':hashlib.sha256(v).hexdigest(),'bytes':len(v)} for k,v in additions.items()],key=lambda r:r['path'])
@@ -347,10 +387,9 @@ def release(candidate_zip,rehearsal_report,approval_file,output):
                     if info.filename==top+'/'+INVENTORY:continue
                     with original.open(info) as src,z.open(info,'w') as dst:shutil.copyfileobj(src,dst)
                 for name,value in additions.items():z.writestr(top+'/'+name,value)
-                z.writestr(top+'/'+INVENTORY,json.dumps({**manifest,'files':rows},ensure_ascii=False,indent=2))
+                z.writestr(top+'/'+INVENTORY,json.dumps({**manifest,'container_policy':'self_contained_handoff_v1','files':rows},ensure_ascii=False,indent=2))
             with zipfile.ZipFile(output) as z:zip_inventory(z)
-            checksum=Path(str(output)+'.sha256')
-            with checksum.open('x',encoding='utf-8') as f:f.write(sha(output)+'  '+output.name+'\n')
+            check_delivery_archive(output)
         except Exception:output.unlink(missing_ok=True);raise
     return {'status':'RELEASED_DIRECT_DELIVERY_ZIP','zip':str(output),'sha256':sha(output),'ready_h001_count':report['ready_h001_count'],'not_production_authorization':True}
 

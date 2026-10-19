@@ -84,9 +84,36 @@ class EasyStartTests(unittest.TestCase):
         result=start.prepare(self.root,'SYNTHETIC',['E001-E002'],script=script,assets=assets)
         self.assertEqual(result['image_calls'],0);root=Path(result['run_root']);state=b.read(root/'E001/00_输入审计/生产流程.json')
         self.assertEqual(state['gates'],{});self.assertTrue(state['memory_source']['index_sha256']);self.assertTrue((Path(state['memory_source']['root'])/'内置规则/规则记忆输入与增添规范.md').is_file())
+        self.assertEqual(state['task_context'],result['task_context'])
+        self.assertEqual(b.read(root/'E002/00_输入审计/生产流程.json')['task_context'],state['task_context'])
+        self.assertEqual(state['task_context']['origin'],'fresh')
+        self.assertEqual(state['task_context']['imports'],[])
+        self.assertEqual(state['task_context']['request_source']['source_kind'],'tool_invocation')
         newer=start.prepare(self.root,'SYNTHETIC',['E003']);self.assertNotEqual(result['run_root'],newer['run_root'])
         self.assertEqual(b.read(newer['config'])['production']['episodes'],['E003'])
-    def test_receive_missing_checksum_does_not_create_run(self):
+        self.assertNotEqual(newer['task_context']['task_id'],result['task_context']['task_id'])
+        # Even the same book/episode is a separate task when explicitly prepared afresh.
+        (self.root/'old-production-with-missing-ledger').mkdir()
+        remake=start.prepare(self.root,'SYNTHETIC',['E001'])
+        self.assertNotEqual(remake['task_context']['task_id'],result['task_context']['task_id'])
+        self.assertEqual(b.read(Path(remake['run_root'])/'E001/00_输入审计/生产流程.json')['panels'],[])
+
+    def test_reinitializing_existing_episode_cannot_reset_task_identity(self):
+        import subprocess
+        script=self.root/'source.xlsx';script.write_bytes(b'SYNTHETIC');assets=self.root/'assets';assets.mkdir()
+        result=start.prepare(self.root,'SYNTHETIC',['E001'],script=script,assets=assets)
+        root=Path(result['run_root']);state=root/'E001/00_输入审计/生产流程.json';before=state.read_bytes()
+        cmd=[sys.executable,'-B',str(root/'00_总控/运行版本/skills/vertical-comic-preproduction/scripts/init_preproduction.py'),
+             '--book','SYNTHETIC','--episode','E001','--config',result['config'],
+             '--runtime-snapshot',str(root/'00_总控/运行版本/manifest.json'),'--output',str(root/'E001')]
+        proc=subprocess.run(cmd,capture_output=True,text=True)
+        self.assertEqual(proc.returncode,0);self.assertEqual(state.read_bytes(),before)
+        self.assertEqual(json.loads(proc.stdout)['status'],'EXISTING_STATE_PRESERVED')
+        from task_context import fresh
+        foreign=self.put('foreign-task.json',fresh('SYNTHETIC',['E001']))
+        changed=subprocess.run([*cmd,'--task-context',str(foreign)],capture_output=True,text=True)
+        self.assertNotEqual(changed.returncode,0);self.assertEqual(state.read_bytes(),before)
+    def test_receive_missing_archive_does_not_create_run(self):
         with self.assertRaises(ValueError):start.receive(self.root/'package.zip',output=self.root/'receive')
         self.assertFalse((self.root/'receive').exists())
     def test_no_login_when_enabled_is_pending_and_does_not_lose_update(self):

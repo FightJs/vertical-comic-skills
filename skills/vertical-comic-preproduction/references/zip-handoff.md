@@ -1,10 +1,10 @@
 # ZIP正式交接与解压接包演练
 
-适用：split_production_v1前期导出和生产接收。新正式包必须先读[直接交付合同](direct-delivery.md)，采用direct_delivery_v2，本文是ZIP容器及基础索引说明；有差异以直接交付合同为准。策略：rehearsed_zip_handoff_v1。正式交付为一个ZIP及同名`.zip.sha256`，不以文件夹、路径清单或哈希PASS代替可接包交付。旧包不追改；需要修复时建立新候选版本。
+适用：split_production_v1前期导出和生产接收。新正式包必须先读[直接交付合同](direct-delivery.md)，采用direct_delivery_v2，本文是ZIP容器及基础索引说明；有差异以直接交付合同为准。策略：rehearsed_zip_handoff_v1。正式交付仅一个ZIP，容器标记`self_contained_handoff_v1`；交接说明、哈希清单、演练与导出证据全部内置，不以文件夹、路径清单或哈希PASS代替可接包交付。旧包不追改；需要修复时建立新候选版本。
 
 ## 前期必须完成的顺序
 
-1. 先补齐完整技术编译与可移植上下文，再完成原输入审计、A、全话镜头B及生图包批准；核对源适配与源快照，不把技术派生编号写回源稿。核对所有话的历史状态、逐次调用账、返回图、QA、未知请求和剩余返修预算。原源稿/批准/调用证据保持字节及哈希。
+1. 先按[任务来源](task-origin.md)冻结task_id、输入与继承范围，再补齐技术编译及可移植上下文，完成输入审计、A、全话B及包批准；核对源适配与源快照，不改源编号。仅核本任务及选定继承范围的逐次调用、返回图、QA、UNKNOWN与预算。fresh不索要其他任务旧账；资产调用和正文调用分开。原证据保持字节及哈希。
 2. 建候选目录，带齐实际参考、旧结果、规则和冻结工具。写`交接说明.md`、`接包生产执行要求.md`及下述验收索引；不替换原生产索引。提供已冻结、可由bind自动验证和落盘的运行模板，不能只写“接手后自行修路径”。
 3. 用`handoff_zip.py pack`建立候选ZIP，随后`extract`到全新目录。前期工作目录仍存在也不能使用其中的绝对路径或缓存通过演练。
 4. 模拟接包人，用bind按包内模板在包外建立新本地RV与绑定索引。运行原冻结编译器的真实完整预检；`rehearse`提供覆盖全部话的只读编译检查，不调用生图、不领线上许可。实际参考必须落在解压包或新RV内。H001选集包含整半话，实际就绪格须与声明准确相等。H002此时也须通过全话readiness资料/依赖/源审计，不假造第一半话人工批准，也不提前生图。
@@ -38,6 +38,12 @@
   "delivery_policy":"direct_delivery_v2",
   "package_id":"唯一候选版本ID",
   "book_id":"实际书ID",
+  "task_context":{
+    "policy":"task_scoped_history_v1","task_id":"本次真实任务ID",
+    "book_id":"实际书ID","episode_ids":["E026"],"origin":"fresh",
+    "input_scope":"script_and_assets","imports":[],
+    "request_source":{"source_kind":"user_message","source_locator":"真实消息位置","quote":"真实重新制作原话"}
+  },
   "episodes":[{
     "episode_id":"E026",
     "panel_ids":["源格号1","源格号2"],
@@ -50,6 +56,7 @@
       "panel_id":"源格号1",
       "classification":"READY_H001",
       "history":{
+        "task_id":"本次真实任务ID",
         "status":"NEVER_SUBMITTED",
         "reviewer":"实际核对者",
         "conclusion":"核查哪些状态及原始调用账后得到的具体结论",
@@ -65,7 +72,7 @@
 
 示例省略第二格，实际必须完整覆盖`panel_ids`并保持顺序。规范化源序审计JSON根提供`panel_ids`或`id_mapping.panel_ids`，并附原始源适配/原稿哈希与审计结论；它是补充核对视图，不替代原源快照。真实编译器仍核查原source_adapter/source_snapshot合同。
 
-历史status为NEVER_SUBMITTED、RECONCILED或UNRESOLVED。逐次attempt含`attempt_id`、`kind`（initial/auto_correction/manual_authorized）、`status`（COMPLETED/FAILED/UNKNOWN）及非空`evidence`引用数组；COMPLETED须附`output`及`qa`引用，manual_authorized须附`authorization`。已知有图而缺文件必须补齐或保留未解决，不能把COMPLETED改FAILED来省略图片。UNRESOLVED或UNKNOWN只能HOLD/WAIT_DEPENDENCY；未知调用占用的轮次仍记录。最多一轮自动返修不变，另有授权的追加调用独立列账。
+历史status为NEVER_SUBMITTED、RECONCILED或UNRESOLVED，均限定本任务；新包顶层task_context、history.task_id与运行模板一致，逐次attempt另含真实task_id，导入来源须在imports准确选择。逐次attempt含`attempt_id`、`kind`（initial/auto_correction/manual_authorized）、`status`（COMPLETED/FAILED/UNKNOWN）及非空`evidence`引用数组；COMPLETED须附`output`及`qa`引用，manual_authorized须附`authorization`。NEVER_SUBMITTED由本任务来源及真实运行模板状态核对，不能仅填空账或用PENDING证明零调用。已知本任务有图而缺文件必须补齐或保留未解决，不能改FAILED省略图片。UNRESOLVED/UNKNOWN只能HOLD/WAIT_DEPENDENCY；同一任务换路径不重置预算。其他独立任务不因相同书话号被导入。
 
 HOLD/WAIT_DEPENDENCY加`blockers`数组，每项含`reason`、`owner`、`resolution`；REUSE加`accepted_image`、`accepted_qa`、`acceptance`三份引用。H001就绪仅用READY_H001，H002资料齐备用PREPARED_H002。
 
@@ -92,7 +99,7 @@ HOLD/WAIT_DEPENDENCY加`blockers`数组，每项含`reason`、`owner`、`resolut
 
 必须覆盖包内全部话、同序。状态文件须保留原runtime约定的`本话RV/00_输入审计/生产流程.json`层级（原编译器以状态文件父目录的父目录作为本话根）；绑定索引和引用据此填写，不能把状态随意放到RV根。本地状态须将`runtime_snapshot`解析到解压包实际manifest绝对路径及原哈希，其余源/参考/规则/批准解析按原冻结合同逐项建立映射。bind仅自动解析已冻结运行模板的runtime_snapshot/toolchain/memory_source根地址；脚本不改创作输入、不重绑批准，不以修改JSON字符串冒充合同兼容；原门禁不接受就回前期处理。
 
-需要单独确认ZIP时，导出确认JSON记录`status=APPROVED`、`source_kind=user_message`、真实`source_locator`和`quote`、`candidate_zip_sha256`、`rehearsal_report_sha256`。脚本核对字段和文件，不具备鉴别人类消息真实性的能力；执行者必须引用真实消息，禁止自填批准。原A/B/包仍由原门禁独立验证。正式ZIPSHA放在外部sidecar，不能在ZIP内写其自身最终哈希造成循环。
+需要单独确认ZIP时，导出确认JSON记录`status=APPROVED`、`source_kind=user_message`、真实`source_locator`和`quote`、`candidate_zip_sha256`、`rehearsal_report_sha256`。脚本核对字段和文件，不具备鉴别人类消息真实性的能力；执行者必须引用真实消息，禁止自填批准。原A/B/包仍由原门禁独立验证。正式ZIP最终SHA256只记入导出日志，不再生成外部sidecar，也不在ZIP内写自身最终哈希造成循环。包内逐文件哈希和CRC验证完整性，不承担发布者身份认证。
 
 ## 工具保证与限制
 
@@ -100,6 +107,6 @@ pack流式归档，PNG/JPEG/WebP等不再重复压缩，文本快速压缩；不
 
 rehearse从包内实际快照调用`production_runtime.py --action compile --panels <H001准确源格号>`，明确非candidate、image_calls=0。保存原始stdout/stderr、实际作业格号、参考落点及错误；无就绪格时不伪造PASS。所有指定话的前期资料闭合、每话有实际启动入口且声明与实测相符，才可发布；未知历史等不可继续带入正式包。不会用候选编译、mock结果、空历史或自造检查器代替这次真实预检。
 
-索引哈希通过只证明“所列证据存在且未变”，不能证明外部历史没有漏记，也不自动证明所有语义正确。执行者必须先完成历史对账与源语义审计；原门禁仍是生产判定依据。正式ZIP增加导出证据后重新建立容器清单；生产输入字节与演练候选相同。接包端先校验外部SHA，再extract到新目录并按说明bind自动绑定/完整预检，任何差异集中报告，不返回一句“请补齐全部材料”。
+索引哈希通过只证明“所列证据存在且未变”，不能证明外部历史没有漏记，也不自动证明所有语义正确。执行者必须先完成历史对账与源语义审计；原门禁仍是生产判定依据。正式ZIP增加导出证据后重新建立容器清单；生产输入字节与演练候选相同。接包端先用check_delivery_archive验证内置逐文件SHA256、CRC及正式发布证据，再extract到新目录并按说明bind自动绑定/完整预检，任何差异集中报告，不返回一句“请补齐全部材料”。
 
-可复用[交接说明模板](../assets/templates/ZIP交接说明模板.md)，逐项填本次真实数据，并据此写接包执行要求。模板不自动证明完整性，不能随空占位发布。正式接包的解压命令增加`--sha256-file "/实际/正式交接包.zip.sha256"`；校验失败不开始解压。候选演练尚无正式sidecar，可按候选记录哈希核对。
+可复用[交接说明模板](../assets/templates/ZIP交接说明模板.md)，逐项填本次真实数据，并据此写接包执行要求。模板不自动证明完整性，不能随空占位发布。正式接包统一使用`comic_start.py receive --zip "/实际/正式交接包.zip" --output "/本机/输出目录"`，先校验再创建运行。接收端不要求外部校验文件，不先手动解压、不套第二层ZIP。旧版ZIP可继续携同名.zip.sha256接收；候选仍仅供演练，不能经新版接包入口直接生产。

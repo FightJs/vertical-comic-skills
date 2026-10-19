@@ -107,6 +107,8 @@ python <快照scripts>/init_preproduction.py --config <配置JSON> --runtime-sna
 
 ## 分工模式与现有配置的关系
 
+先确定[任务来源](task-origin.md)。本书配置只提供路径和运行偏好；fresh独立任务不继承同书同话旧调用。接包/恢复保留原task_context；任务身份不是新的并发或人工批准开关。
+
 用户显式选择分工制作时按[split-production.md](split-production.md)切换职责和半话提交窗口；现有generation.execution_mode=episode_async_v1及当前runtime不改成旧半话格式。源配置提供书/话/来源/规则和请求容量，实际本次明确书话优先并须核对范围。前期停在正文前；接包端建立本地路径/容量绑定，原批准原件与规则版本保留。模式名不是现有CLI参数，不宣称配置读取器自动创建半话人工停点或跨机迁移。用法对齐不授权修改全局或正在运行RV的配置。
 
 

@@ -35,6 +35,7 @@ def main() -> int:
     parser.add_argument("--panel-count", type=int, default=None)
     parser.add_argument("--config", help="可选使用配置JSON；读取第三来源及请求并发，不修改全局agent配置")
     parser.add_argument("--runtime-snapshot", help="本批一次创建、各话共用的manifest.json绝对路径")
+    parser.add_argument("--task-context", help="本批唯一任务来源JSON；恢复/接包保留原任务，不重新初始化")
     parser.add_argument("--memory-root", help="通用规则记忆库绝对路径")
     parser.add_argument("--memory-loading-policy", choices=("stage_baseline_loading_v1",), help="无配置的新库须显式绑定读取合同；旧库省略")
     parser.add_argument("--batch-size", type=int, choices=range(1, 6), default=None)
@@ -136,9 +137,26 @@ def main() -> int:
         extra["requested_generation"] = config["generation"]
 
     root = Path(args.output).resolve()
+    if mode == 'episode_async_v1':
+        from task_context import fresh, validate as validate_task, ORIGIN_FILE
+        if (root/'00_输入审计/生产流程.json').exists():
+            existing=json.loads((root/'00_输入审计/生产流程.json').read_text())
+            if args.task_context and json.loads(Path(args.task_context).read_text())!=existing.get('task_context'):
+                parser.error('已有生产流程不能换任务或重置预算；从原冻结入口恢复')
+            print(json.dumps({'status':'EXISTING_STATE_PRESERVED','root':str(root),
+                              'image_calls':0,'next':'原文件未修改；恢复从原冻结入口执行'},ensure_ascii=False))
+            return 0
+        task = validate_task(json.loads(Path(args.task_context).read_text())) if args.task_context else fresh(args.book, config['production']['episodes'] if config else [args.episode])
+        if task['book_id'] != args.book or args.episode not in task['episode_ids']:
+            parser.error('任务来源与本书/本话失配')
+        extra['task_context'] = task
     root.mkdir(parents=True, exist_ok=True)
     for name in DIRS:
         (root / name).mkdir(parents=True, exist_ok=True)
+    if mode == 'episode_async_v1':
+        write_if_missing(root/ORIGIN_FILE, {'task_context': task, 'episode_id': args.episode,
+                         'initial_body_calls': 0, 'initial_asset_calls': 0,
+                         'source_kind': 'observed_initialization', 'approval': 'NOT_GRANTED'})
 
     if extra.get("runtime", {}).get("watchdog", {}).get("policy") == "worker_watchdog_v1":
         write_if_missing(root / "00_输入审计" / "worker_watchdog.json",

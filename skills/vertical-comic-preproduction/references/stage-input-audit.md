@@ -2,6 +2,8 @@
 
 ### Phase A — script and asset audit
 
+先按[任务来源](task-origin.md)冻结允许输入。fresh从指定源稿提取本批实际需求，再查当前资产及包内适用确认；不主动读取旧成图/QA/调用目录。旧索引路径缺失先判断本次是否使用，未使用缺项不阻塞。正文历史仅核本任务；不能把新任务无旧账写成UNRESOLVED。
+
 For new B packages, read [structural guidance and execution evidence](control-guidance.md) and register the actual generation backend before selecting a control route. Ordinary reference-image upload is `reference_guided`, not proof of ControlNet or another structural interface. Record actual input slots and capability evidence; control models/versions apply only to supported structural backends. For Codex built-in generation, read [codex-imagegen.md](codex-imagegen.md), use `codex_builtin_imagegen/reference_guided` and `reference_input_policy=codex_reference_v1`; no mask, pose/depth control, reference weight, separate negative or size argument is inferred. Unknown capabilities remain HOLD. Use structure controls only when the actual backend supports them, and do not require controls for every panel.
 
 Create an input audit without editing the source script. Register:

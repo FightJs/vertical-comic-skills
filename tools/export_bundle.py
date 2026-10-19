@@ -18,7 +18,7 @@ def export(skills_root,memory_root):
             if not (source/'SKILL.md').is_file():raise ValueError('Missing Skill: '+name)
             for p in sorted(source.rglob('*')):
                 if p.is_symlink():raise ValueError('Symlink not published: '+str(p))
-                if not p.is_file() or EXCLUDED.intersection(p.parts) or p.suffix=='.pyc':continue
+                if not p.is_file() or EXCLUDED.intersection(p.parts) or any(x.startswith(('.user-backup-','.user-rules-','.update-lock')) for x in p.parts) or p.suffix=='.pyc':continue
                 h=digest(p);dest=stage/'skills'/name/p.relative_to(source);dest.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(p,dest)
                 tracked.append((p,h))
         memory_root=memory_root or skills_root/'vertical-comic-preproduction/assets/rule-memory/内置规则'

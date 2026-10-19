@@ -1,6 +1,7 @@
 """Updater behavior in disposable Codex homes; never touches a real installation."""
-import importlib.util,json,subprocess,sys,tempfile,unittest
+import importlib.util,tempfile,unittest,json,copy,hashlib,subprocess,sys
 from pathlib import Path
+from unittest.mock import patch
 ROOT=Path(__file__).resolve().parents[1]
 spec=importlib.util.spec_from_file_location('sync',ROOT/'tools/sync_skills.py');sync=importlib.util.module_from_spec(spec);spec.loader.exec_module(sync)
 class SyncTests(unittest.TestCase):
@@ -23,21 +24,23 @@ class SyncTests(unittest.TestCase):
         self.assertEqual(sync.install(self.home,check=True)['status'],'LOCAL_CHANGES')
         with self.assertRaises(ValueError):sync.install(self.home)
         self.assertEqual(file.read_text(),'CUSTOM')
+    def test_user_additions_survive_update_without_becoming_install_conflicts(self):
+        sync.install(self.home);base=self.home/'skills/vertical-comic-preproduction/assets/rule-memory';user=base/'用户增补'
+        rule=copy.deepcopy(json.loads((base/'内置规则/记忆索引.json').read_text())['rules'][0]);body=user/'规则/USR-CUSTOM.md';body.parent.mkdir();body.write_text('# Universal user method')
+        rule.update(id='USR-CUSTOM',version='1',file={'path':'规则/USR-CUSTOM.md','sha256':hashlib.sha256(body.read_bytes()).hexdigest()})
+        index=json.loads((user/'记忆索引.json').read_text());index['rules']=[rule];(user/'记忆索引.json').write_text(json.dumps(index,ensure_ascii=False))
+        self.assertEqual(sync.install(self.home,check=True)['status'],'UP_TO_DATE')
+        (self.home/'skills/vertical-comic-preproduction/SKILL.md').write_text('LOCAL EDIT triggers explicit replacement')
+        sync.install(self.home,replace_existing=True)
+        self.assertEqual(body.read_text(),'# Universal user method');self.assertEqual(json.loads((user/'记忆索引.json').read_text())['rules'][0]['id'],'USR-CUSTOM')
+
     def test_unmanaged_existing_skill_requires_explicit_replacement(self):
         file=self.home/'skills/vertical-comic-preproduction/SKILL.md';file.parent.mkdir(parents=True);file.write_text('OLD')
         with self.assertRaises(ValueError):sync.install(self.home)
         self.assertEqual(file.read_text(),'OLD')
-    def test_builtin_user_additions_survive_replacement_without_becoming_managed(self):
-        sync.install(self.home)
-        directory=self.home/sync.USER_ADDITIONS
-        directory.mkdir(parents=True,exist_ok=True)
-        (directory/'custom.md').write_text('USER RULE')
-        (directory/'记忆索引.json').write_text('{"user":true}')
-        self.assertEqual(sync.install(self.home,check=True)['status'],'UP_TO_DATE')
-        core=self.home/'skills/vertical-comic-preproduction/SKILL.md';core.write_text('LOCAL EDIT')
-        sync.install(self.home,replace_existing=True)
-        self.assertEqual((directory/'custom.md').read_text(),'USER RULE')
-        self.assertEqual((directory/'记忆索引.json').read_text(),'{"user":true}')
+    def test_zip_install_does_not_require_git_or_github(self):
+        with patch.object(sync.shutil,'which',return_value=None):result=sync.install(self.home)
+        self.assertEqual(result['status'],'INSTALLED')
 
     def test_fresh_install_can_auto_configure_and_reuse_book_profile(self):
         sync.install(self.home)

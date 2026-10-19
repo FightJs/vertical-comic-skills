@@ -23,6 +23,25 @@ class EasyStartTests(unittest.TestCase):
         a=b.resolve(library_root=self.library,cache_root=self.root/'cache');other=b.resolve(library_root=self.library,cache_root=self.root/'cache')
         self.assertEqual(a,other);self.assertEqual(len(b.read(Path(a['root'])/'记忆索引.json')['rules']),11)
         self.assertTrue((Path(a['root'])/'内置规则/规则记忆输入与增添规范.md').is_file())
+    def test_custom_codex_home_controls_default_cache(self):
+        home=self.root/'custom-home'
+        with patch.dict(b.os.environ,{'CODEX_HOME':str(home)}):
+            result=b.resolve(library_root=self.library)
+        self.assertTrue(Path(result['root']).is_relative_to(home.resolve()/'comic/cache/rules'))
+    def test_explicit_cache_takes_precedence_over_codex_home(self):
+        cache=self.root/'explicit-cache'
+        with patch.dict(b.os.environ,{'CODEX_HOME':str(self.root/'other-home')}):
+            result=b.resolve(library_root=self.library,cache_root=cache)
+        self.assertTrue(Path(result['root']).is_relative_to(cache.resolve()))
+    def test_prepared_config_uses_frozen_rules_without_resolving_live_cache(self):
+        script=self.root/'source.xlsx';script.write_bytes(b'SYNTHETIC');assets=self.root/'assets';assets.mkdir()
+        with patch.dict(b.os.environ,{'CODEX_HOME':str(self.root/'custom-home')}):
+            result=start.prepare(self.root,'SYNTHETIC',['E001'],script=script,assets=assets)
+        config=b.read(result['config']);origin=config['inputs']['memory_root']
+        state=b.read(Path(result['run_root'])/'E001/00_输入审计/生产流程.json')
+        with patch.object(b,'resolve',side_effect=AssertionError('must not resolve live rules from a frozen run')):
+            loaded=read_config(result['config'],frozen_memory_source=state['memory_source'])
+        self.assertEqual(loaded['inputs']['memory_root'],origin)
     def test_user_update_does_not_need_account_and_export_excludes_authorization(self):
         args=self.rule()
         with patch.object(c,'api',side_effect=AssertionError('must not call GitHub')):

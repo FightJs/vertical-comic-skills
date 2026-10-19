@@ -5,6 +5,14 @@ from rule_memory import POLICY,LOADING_POLICY,source_index
 
 ROOT=Path(__file__).resolve().parents[1]/'assets/rule-memory'
 
+def codex_home():
+    configured=os.environ.get('CODEX_HOME')
+    if configured:return Path(configured).expanduser().resolve()
+    # --codex-home installations remain self-contained even outside ~/.codex.
+    installed=ROOT.parents[3]
+    if (installed/'skill-bundles/vertical-comic-skills/installed.json').is_file():return installed
+    return Path.home()/'.codex'
+
 def digest(p):return hashlib.sha256(Path(p).read_bytes()).hexdigest()
 def read(p):return json.loads(Path(p).read_text(encoding='utf-8-sig'))
 def source(root,token=None):
@@ -13,7 +21,7 @@ def source(root,token=None):
     return value
 
 def resolve(*,library_root=None,cache_root=None):
-    root=Path(library_root or ROOT).resolve();cache=Path(cache_root or Path.home()/'.codex/comic/cache/rules').resolve()
+    root=Path(library_root or ROOT).resolve();cache=Path(cache_root or codex_home()/'comic/cache/rules').resolve()
     entries=[];seen=set();origin=[]
     for name in ('内置规则','用户增补'):
         base=root/name;_,index=source_index(source(base));origin.append((base/'记忆索引.json',digest(base/'记忆索引.json')))

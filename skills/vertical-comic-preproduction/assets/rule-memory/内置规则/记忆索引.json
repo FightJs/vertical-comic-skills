@@ -723,7 +723,7 @@
   ],
   "maintenance_guide": {
     "path": "规则记忆输入与增添规范.md",
-    "sha256": "16f67b09de8d7ad7bb3fc8aa31ffd8b309b45d10a5f7dbc3e123c1eb424a230b",
+    "sha256": "c6bf2dfa0be28eb10c8e148e4862d0721ce9e0188d2a44db33071f294a17fd28",
     "purpose": "只在用户授权新增/修改/启停规则时读取；不作为每格生产规则加载。"
   },
   "tagging_instruction": "按当前阶段及trigger.semantic_condition核对实际画面：结构可证明的可见对象/真实相邻关系由共享入口派生，返修按operation触发；人体、床、镜面等语义由执行者核对并冻结标签。半话审计记录准确实际命中版本清单及必要人体适用性；load_policy只管何时读，阶段预读不扩展执行范围，脚本不自动看图或理解自然语言。",

@@ -59,7 +59,7 @@ class ExecutionQualityTests(unittest.TestCase):
   from codex_reference_contract import digest
   with tempfile.TemporaryDirectory() as t:
    root=Path(t)
-   def write(n,v):p=root/n;p.write_text(json.dumps(v));return {'path':n,'sha256':digest(p)}
+   def write(n,v):p=root/n;p.write_text(json.dumps(v), encoding='utf-8', newline='\n');return {'path':n,'sha256':digest(p)}
    old=write('old.json',{'panels':[{'framing':{'body_crop':'full_body'}}]});new=write('new.json',{'panels':[{'framing':{'body_crop':'waist_up'}}]})
    state={'visual_basis':{'path':'basis'},'shot_manifest':{'path':'shot'}}
    d={'reviewer':'synthetic','evidence':'SYNTHETIC','source_image_sha256':'img','defects':['camera'],'input_resolution':{**state,'evidence':'SYNTHETIC已修镜头，后续完整门禁仍要批准'}}
@@ -79,8 +79,8 @@ class ExecutionQualityTests(unittest.TestCase):
  def test_metrics_do_not_equate_events_records_or_approved_images(self):
   with tempfile.TemporaryDirectory() as t:
    root=Path(t);(root/'00_输入审计').mkdir();state=root/'00_输入审计/state.json'
-   state.write_text(json.dumps({'book_id':'T','episode_id':'E1','panels':[{'panel_id':'P001','attempt_id':'r2','round_id':2,'status':'VISUAL_PASS','attempt_history':[{'attempt_id':'r1','round_id':1,'status':'VISUAL_FAIL'}]}]}))
-   csv=root/'events.csv';csv.write_text('lane,id,status\na,x,completed\na,x,completed\na,y,completed\n')
+   state.write_text(json.dumps({'book_id':'T','episode_id':'E1','panels':[{'panel_id':'P001','attempt_id':'r2','round_id':2,'status':'VISUAL_PASS','attempt_history':[{'attempt_id':'r1','round_id':1,'status':'VISUAL_FAIL'}]}]}), encoding='utf-8', newline='\n')
+   csv=root/'events.csv';csv.write_text('lane,id,status\na,x,completed\na,x,completed\na,y,completed\n', encoding='utf-8', newline='\n')
    r=build([state],native_events=csv);self.assertEqual(r['unique_attempt_records'],2);self.assertIsNone(r['user_accepted_panels']);self.assertEqual(r['first_round']['pass_rate_among_reviewed'],0)
    self.assertEqual(r['native_terminal_events']['unique_lane_event_ids'],2);self.assertIsNone(r['native_terminal_events']['successful_images']);self.assertIsNone(r['timing']['request_window_seconds_sum_not_wall_time'])
    with self.assertRaises(ValueError):build([state,state])
@@ -102,20 +102,20 @@ class ExecutionQualityTests(unittest.TestCase):
   from runtime_snapshot import create,verify
   base=Path(__file__).resolve().parents[1]
   with tempfile.TemporaryDirectory() as t:
-   root=Path(t);config=json.loads(Path(config_path()).read_text())
-   config['execution_quality']={'policy':POLICY};cp=root/'config.json';cp.write_text(json.dumps(config))
+   root=Path(t);config=json.loads(Path(config_path()).read_text(encoding='utf-8-sig'))
+   config['execution_quality']={'policy':POLICY};cp=root/'config.json';cp.write_text(json.dumps(config), encoding='utf-8', newline='\n')
    parsed=read_config(cp);snapshot=create(root/'snapshot',memory_source=memory_source(parsed))
    self.assertTrue((Path(verify(snapshot)['scripts'])/'input_quality.py').exists())
-   subprocess.run([sys.executable,'-B',str(base/'scripts/init_preproduction.py'),'--config',str(cp),'--runtime-snapshot',snapshot['path'],'--book',config['production']['book'],'--episode',config['production']['episodes'][0],'--output',str(root/'rv')],check=True,capture_output=True)
+   subprocess.run([sys.executable, '-X', 'utf8','-B',str(base/'scripts/init_preproduction.py'),'--config',str(cp),'--runtime-snapshot',snapshot['path'],'--book',config['production']['book'],'--episode',config['production']['episodes'][0],'--output',str(root/'rv')],check=True,capture_output=True)
    for rel in ['00_输入审计/生产流程.json','01_镜头改编_CANDIDATE/镜头改编表.json','04_B提示词包_CANDIDATE/全话提示词索引.json']:
-    self.assertEqual(json.loads((root/'rv'/rel).read_text())['input_quality_policy'],POLICY)
-   state=json.loads((root/'rv/00_输入审计/生产流程.json').read_text());self.assertEqual(state['gates'],{});self.assertEqual(state['panels'],[])
-   config['execution_quality']={'policy':'unrecognized'};cp.write_text(json.dumps(config))
+    self.assertEqual(json.loads((root/'rv'/rel).read_text(encoding='utf-8-sig'))['input_quality_policy'],POLICY)
+   state=json.loads((root/'rv/00_输入审计/生产流程.json').read_text(encoding='utf-8-sig'));self.assertEqual(state['gates'],{});self.assertEqual(state['panels'],[])
+   config['execution_quality']={'policy':'unrecognized'};cp.write_text(json.dumps(config), encoding='utf-8', newline='\n')
    with self.assertRaises(ValueError):read_config(cp)
  def test_migrated_first_round_records_are_not_true_first_pass_rate(self):
   with tempfile.TemporaryDirectory() as t:
    root=Path(t);(root/'00_输入审计').mkdir();state=root/'00_输入审计/state.json'
-   state.write_text(json.dumps({'book_id':'T','episode_id':'E1','panels':[{'panel_id':'P001','attempt_id':'new','round_id':1,'status':'VISUAL_PASS','attempt_history':[{'attempt_id':'old','round_id':1,'status':'VISUAL_FAIL'}]}]}))
+   state.write_text(json.dumps({'book_id':'T','episode_id':'E1','panels':[{'panel_id':'P001','attempt_id':'new','round_id':1,'status':'VISUAL_PASS','attempt_history':[{'attempt_id':'old','round_id':1,'status':'VISUAL_FAIL'}]}]}), encoding='utf-8', newline='\n')
    r=build([state]);self.assertEqual(r['first_round']['attempts_recorded'],2);self.assertEqual(len(r['first_round']['ambiguous_first_round_panels']),1);self.assertIsNone(r['first_round']['unambiguous_panel_pass_rate'])
 
 if __name__=='__main__':unittest.main()

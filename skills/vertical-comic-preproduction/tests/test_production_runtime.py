@@ -29,12 +29,12 @@ class RuntimeTests(unittest.TestCase):
         self.h.panel["generation_execution"]["status"]="NOT_RUN"
         self.h.h.manifest["optimization_policy"]=POLICY;self.h.sync()
         s=self.state;s.update(optimization_policy=POLICY,half_inputs={},half_gates={})
-        original=json.loads((self.root/"shots.json").read_text());original["optimization_policy"]=POLICY
+        original=json.loads((self.root/"shots.json").read_text(encoding='utf-8-sig'));original["optimization_policy"]=POLICY
         shot=self.h.h.f.write("scoped-shot.json",original)
         s["half_inputs"]={"H001":{"visual_basis":s["visual_basis"],"shot_manifest":shot}}
         s["half_gates"]={"H001":{"visual_basis":self.h.h.approve([s["source_script"],s["source_snapshot"],s["visual_basis"]]),
                                "shot_design":self.h.h.approve([s["visual_basis"],shot])}}
-        source=json.loads((self.root/"snapshot.json").read_text())
+        source=json.loads((self.root/"snapshot.json").read_text(encoding='utf-8-sig'))
         s["batch_plan"]=self.h.h.f.write("scoped-plan.json",build_plan(s,source))
         self.r["status"]="PENDING"
         return s
@@ -98,28 +98,28 @@ class RuntimeTests(unittest.TestCase):
 
     def test_QA_commit_is_atomic_rejects_stale_state_and_never_approves(self):
         self.r["status"]="GENERATED";path=self.root/"00_输入审计/生产流程.json"
-        path.parent.mkdir(exist_ok=True);path.write_text(json.dumps(self.state))
+        path.parent.mkdir(exist_ok=True);path.write_text(json.dumps(self.state), encoding='utf-8', newline='\n')
         old=digest(path);updates=[{"panel_id":"P001","attempt_id":self.r["attempt_id"],"round_id":1,"status":"VISUAL_PASS"}]
         saved=commit_updates(path,old,updates)
         self.assertEqual(saved["status"],"UPDATES_SAVED")
-        self.assertEqual(json.loads(path.read_text())["panels"][0]["status"],"VISUAL_PASS")
+        self.assertEqual(json.loads(path.read_text(encoding='utf-8-sig'))["panels"][0]["status"],"VISUAL_PASS")
         with self.assertRaisesRegex(ValueError,"STATE_CHANGED"):commit_updates(path,old,updates)
         self.assertEqual(saved["user_approval"],"NOT_GRANTED")
 
     def test_verified_QA_commit_records_watchdog_progress(self):
         self.r["status"]="GENERATED";self.state["runtime"]=copy.deepcopy(DEFAULTS)
         path=self.root/"00_输入审计/生产流程.json"
-        path.parent.mkdir(exist_ok=True);path.write_text(json.dumps(self.state))
+        path.parent.mkdir(exist_ok=True);path.write_text(json.dumps(self.state), encoding='utf-8', newline='\n')
         update={"panel_id":"P001","attempt_id":self.r["attempt_id"],"round_id":1,"status":"VISUAL_PASS"}
         saved=commit_updates(path,digest(path),[update])
         self.assertEqual(saved["watchdog_progress"],["PROGRESS_RECORDED"])
-        ledger=json.loads((path.parent/"worker_watchdog.json").read_text())
+        ledger=json.loads((path.parent/"worker_watchdog.json").read_text(encoding='utf-8-sig'))
         self.assertEqual(ledger["events"][-1]["kind"],"qa_saved")
         self.assertEqual(ledger["events"][-1]["stage"],"image_review")
 
     def test_commit_cannot_rewrite_gates_or_attempt_budget(self):
         self.r["status"]="GENERATED";path=self.root/"00_输入审计/生产流程.json"
-        path.parent.mkdir(exist_ok=True);path.write_text(json.dumps(self.state));old=path.read_bytes()
+        path.parent.mkdir(exist_ok=True);path.write_text(json.dumps(self.state), encoding='utf-8', newline='\n');old=path.read_bytes()
         updates=[{"panel_id":"P001","attempt_id":self.r["attempt_id"],"round_id":1,"status":"VISUAL_PASS","gates":{}}]
         with self.assertRaises(ValueError):commit_updates(path,digest(path),updates)
         self.assertEqual(path.read_bytes(),old)
@@ -133,11 +133,11 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(repair_route_errors(s,route,["P001"]),[])
 
     def test_read_transaction_reuses_hashes_and_rejects_mid_check_mutation(self):
-        p=self.root/"small.json";p.write_text("{}")
+        p=self.root/"small.json";p.write_text("{}", encoding='utf-8', newline='\n')
         with file_session() as memo:
             first=digest(p);self.assertEqual(digest(p),first)
             self.assertEqual(memo["hash_reads"],1);self.assertEqual(memo["hash_hits"],1)
-            p.write_text('{"changed":true}')
+            p.write_text('{"changed":true}', encoding='utf-8', newline='\n')
             with self.assertRaisesRegex(ValueError,"CHECK_SNAPSHOT_CHANGED"):digest(p)
         self.assertNotEqual(digest(p),first)
 
@@ -173,22 +173,22 @@ class RuntimeTests(unittest.TestCase):
         self.r["status"]="GENERATED";self.r.pop("qa_report")
         batch={"batch_id":"H001","panel_ids":["P001"]}
         queue=prepare_review(self.state,self.root,build_queue(self.state,self.root,batch,incremental=True))
-        item=queue["items"][0];qa=json.loads((self.root/item["qa_template"]["path"]).read_text())
+        item=queue["items"][0];qa=json.loads((self.root/item["qa_template"]["path"]).read_text(encoding='utf-8-sig'))
         self.assertEqual(qa["panels"][0]["image_sha256"],self.r["output"]["sha256"])
         self.assertEqual(qa["panels"][0]["style_review"]["status"],"UNREVIEWED")
         self.assertEqual(queue["contact_sheet"]["panel_ids"],["P001"])
 
     def test_preapproved_dependency_only_substitutes_exact_verified_image(self):
         s=self.scoped();view=half_view(s,"H001")
-        shot=json.loads((self.root/view["shot_manifest"]["path"]).read_text())
+        shot=json.loads((self.root/view["shot_manifest"]["path"]).read_text(encoding='utf-8-sig'))
         shot["panels"][0]["generation_dependencies"]=["P000"]
         s["half_inputs"]["H002"]={**s["half_inputs"]["H001"],"shot_manifest":self.h.h.f.write("dependency-shot.json",shot)}
-        source=json.loads((self.root/s["source_snapshot"]["path"]).read_text())
+        source=json.loads((self.root/s["source_snapshot"]["path"]).read_text(encoding='utf-8-sig'))
         source["panel_ids"]=["P000","P001"]
         s["source_snapshot"]=self.h.h.f.write("dependency-source.json",source)
         s["panels"].insert(0,{"panel_id":"P000","status":"VISUAL_PASS","output":self.r["output"]})
         s["batch_plan"]=self.h.h.f.write("dependency-batch-plan.json",build_plan(s,source))
-        packet=json.loads((self.root/self.r["package_manifest"]["path"]).read_text());p=packet["panels"][0]
+        packet=json.loads((self.root/self.r["package_manifest"]["path"]).read_text(encoding='utf-8-sig'));p=packet["panels"][0]
         p["reference_images"].append({**self.r["output"],"alias":"@prior","role":"previous approved frame"})
         p["reference_bindings"].append({"alias":"@prior","purpose":"pose_interaction","subject_ids":["A"]})
         errors,submission=validate_panel(p,self.root);self.assertEqual(errors,[])
@@ -201,7 +201,7 @@ class RuntimeTests(unittest.TestCase):
         bundle={"dependency_completion_plan":plan};batch={"batch_id":"H002"}
         self.assertTrue(dependency_plan_matches(bundle,s,self.root,batch,self.r,packet,self.root))
         p["prompt"]+="\nSYNTHETIC unauthorized composition change"
-        (self.root/p.get("prompt_file","P001/prompt.txt")).write_text(p["prompt"])
+        (self.root/p.get("prompt_file","P001/prompt.txt")).write_text(p["prompt"], encoding='utf-8', newline='\n')
         self.assertFalse(dependency_plan_matches(bundle,s,self.root,batch,self.r,packet,self.root))
 
 

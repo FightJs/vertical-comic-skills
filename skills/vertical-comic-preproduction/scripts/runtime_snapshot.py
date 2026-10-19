@@ -8,6 +8,7 @@ import os
 import shutil
 import tempfile
 from pathlib import Path
+from platform_io import portable_relative, check_destination_paths
 
 POLICY = 'batch_snapshot_v1'
 SKILLS = ('vertical-comic-preproduction', 'vertical-comic-visual-assets',
@@ -23,19 +24,21 @@ def verify(ref, *, executing_script=None):
     path = Path(ref['path'])
     if not path.is_absolute() or path.is_symlink() or sha(path) != ref['sha256']:
         raise ValueError('SNAPSHOT_HOLD: manifest版本不一致')
-    data = json.loads(path.read_text())
+    path = path.resolve()
+    data = json.loads(path.read_text(encoding='utf-8-sig'))
     if data.get('policy') != POLICY or not isinstance(data.get('files'), list) or not data['files']:
         raise ValueError('SNAPSHOT_HOLD: 清单无效')
     root = path.parent.resolve()
     names = set()
     for item in data['files']:
+        portable_relative(item['path'])
         name = Path(item['path']); target = root / name
         if name.is_absolute() or '..' in name.parts or item['path'] in names:
             raise ValueError('SNAPSHOT_HOLD: 清单路径重复或越界')
         names.add(item['path'])
         if not target.resolve().is_relative_to(root) or target.is_symlink() or sha(target) != item['sha256']:
             raise ValueError('SNAPSHOT_HOLD: 实际运行文件已变化: '+str(name))
-    actual = {str(p.relative_to(root)) for p in root.rglob('*') if p.is_file()
+    actual = {p.relative_to(root).as_posix() for p in root.rglob('*') if p.is_file()
               and p != path and '__pycache__' not in p.parts and '__MACOSX' not in p.parts and p.name!='.DS_Store' and p.suffix != '.pyc'}
     if actual != names:
         raise ValueError('SNAPSHOT_HOLD: 快照文件集合变化')
@@ -53,6 +56,8 @@ def create(destination, *, skills_root=None, memory_source=None):
     if dest.exists():
         raise ValueError('快照目录已存在；恢复请使用原manifest，不覆盖或重建')
     source = Path(skills_root or Path(__file__).resolve().parents[2])
+    check_destination_paths(dest, ['skills/'+p.relative_to(source).as_posix()
+                                  for name in SKILLS for p in (source/name).rglob('*') if p.is_file()])
     dest.parent.mkdir(parents=True, exist_ok=True)
     stage = Path(tempfile.mkdtemp(prefix='.comic-snapshot-', dir=dest.parent))
     try:
@@ -86,12 +91,14 @@ def create(destination, *, skills_root=None, memory_source=None):
             frozen_memory = {k:v for k,v in memory_source.items() if k not in {'root','runtime_snapshot'}}
         if any(sha(p) != expected for p, expected in origins):
             raise ValueError('快照收尾时来源变化；未激活本批版本')
-        files = [{'path':str(p.relative_to(stage)), 'sha256':sha(p)}
+        files = [{'path':p.relative_to(stage).as_posix(), 'sha256':sha(p)}
                  for p in sorted(stage.rglob('*')) if p.is_file()]
+        for item in files:
+            portable_relative(item['path'])
         manifest = {'policy':POLICY, 'files':files, 'memory_source':frozen_memory,
                     'origin_skills_root':str(source.resolve()),
                     'origin_memory_root':(memory_source or {}).get('root')}
-        (stage / 'manifest.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2)+'\n')
+        (stage / 'manifest.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2)+'\n', encoding='utf-8', newline='\n')
         os.rename(stage, dest)
     finally:
         if stage.exists(): shutil.rmtree(stage)
@@ -116,4 +123,7 @@ def main():
     print(json.dumps({'runtime_snapshot':ref, **{k:v for k,v in verify(ref).items() if k!='data'}}, ensure_ascii=False))
 
 
-if __name__ == '__main__': main()
+if __name__ == '__main__':
+    from platform_io import configure_stdio
+    configure_stdio()
+    main()

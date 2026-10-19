@@ -66,7 +66,7 @@ def read_json(path: Path) -> dict[str, Any]:
 
 def write_json(path: Path, value: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline='\n')
 
 
 def sha256(path: Path) -> str:
@@ -459,14 +459,15 @@ def prepare_refs(source_root: Path, output_root: Path, panel: dict[str, Any], ev
         if source.suffix.lower() in RASTER:
             target = ref_dir / source.name
             shutil.copy2(source, target)
-        elif source.suffix.lower() == ".svg" and cairosvg is not None:
+        elif source.suffix.lower() == ".svg":
+            if cairosvg is None:
+                raise ValueError('SVG_RENDERER_HOLD: 实际参考需要SVG转PNG；当前解释器缺CairoSVG或原生Cairo。运行runtime_environment.py --require-svg检查，不得静默丢弃参考。')
             target = ref_dir / f"{source.stem}_raster.png"
             try:
                 cairosvg.svg2png(url=str(source), write_to=str(target), output_width=1400)
-            except Exception:
+            except Exception as exc:
                 target.unlink(missing_ok=True)
-                documents.append(ref)
-                continue
+                raise ValueError('SVG_RENDERER_HOLD: 必需参考转换失败: '+str(source)) from exc
             documents.append(ref)
         else:
             documents.append(ref)
@@ -615,8 +616,8 @@ def main() -> int:
         if data.get("reference_input_policy") == CODEX_POLICY:
             prompt = final_prompt(prompt, negative)
         panel_dir = output_root / panel_id
-        (panel_dir / "prompt.txt").write_text(prompt + "\n", encoding="utf-8")
-        (panel_dir / "negative_prompt.txt").write_text(negative + "\n", encoding="utf-8")
+        (panel_dir / "prompt.txt").write_text(prompt + "\n", encoding="utf-8", newline='\n')
+        (panel_dir / "negative_prompt.txt").write_text(negative + "\n", encoding="utf-8", newline='\n')
         write_json(panel_dir / "提示词.json", {"panel_id": panel_id, "prompt": prompt, "negative_prompt": negative, "references": refs, "camera_angle_family": angle, "shot_scale": scale, "frame_ratio": ratio})
         write_json(panel_dir / "camera_execution.json", {"panel_id": panel_id, "camera_angle_family": angle, "shot_scale": scale, "frame_ratio": ratio, "camera_position": camera_position, "facing_direction": facing, "camera_height": height, "visible_region": visible})
 
@@ -780,11 +781,13 @@ def main() -> int:
     write_json(output_root / "旧空间输入迁移.json", {"source_preserved": True, "changes": migrations})
     write_json(output_root / "全话提示词索引.json", data)
     write_json(output_root / "修复覆盖台账.json", {"book": args.book, "episode": args.episode, "panel_count": len(prepared), "issues": issue_ledger, "one_off_asset_exemptions": [x for x in issue_ledger if x["resolution"] == "ONE_OFF_ASSET_EXEMPT"], "open_hold_count": sum(1 for x in issue_ledger if x["resolution"] == "OPEN")})
-    (output_root / "未决项.md").write_text("# 未决项\n\n" + ("\n".join(f"- {x['panel_id']}：{x['issue']}" for x in issue_ledger if x["resolution"] == "OPEN") or "- 无结构化未决项；B返回底图后仍必须做相邻视觉QA。") + "\n", encoding="utf-8")
-    (output_root / "修复说明.md").write_text("# 综合修复v2\n\n原包只读保留。已有镜头按信息优先取景保留，允许有依据的同景别对话；缺少批准构图的默认提案保持HOLD。单次出镜对象不强制独立资产。实际提示词、逐格JSON、参考图和全话索引已重建。结构通过不等于底图通过；B返回后必须做比例、P001–P003及全话相邻镜头视觉QA。\n", encoding="utf-8")
+    (output_root / "未决项.md").write_text("# 未决项\n\n" + ("\n".join(f"- {x['panel_id']}：{x['issue']}" for x in issue_ledger if x["resolution"] == "OPEN") or "- 无结构化未决项；B返回底图后仍必须做相邻视觉QA。") + "\n", encoding="utf-8", newline='\n')
+    (output_root / "修复说明.md").write_text("# 综合修复v2\n\n原包只读保留。已有镜头按信息优先取景保留，允许有依据的同景别对话；缺少批准构图的默认提案保持HOLD。单次出镜对象不强制独立资产。实际提示词、逐格JSON、参考图和全话索引已重建。结构通过不等于底图通过；B返回后必须做比例、P001–P003及全话相邻镜头视觉QA。\n", encoding="utf-8", newline='\n')
     print(json.dumps({"status": data["status"], "output": str(output_root), "panel_count": len(prepared), "open_holds": sum(1 for x in issue_ledger if x["resolution"] == "OPEN")}, ensure_ascii=False, indent=2))
     return 0
 
 
 if __name__ == "__main__":
+    from platform_io import configure_stdio
+    configure_stdio()
     raise SystemExit(main())

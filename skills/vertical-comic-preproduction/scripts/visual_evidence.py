@@ -535,7 +535,7 @@ def write_review_regions(image_path, regions, output):
             source.crop(box).save(dest, format='PNG')
             manifest['regions'].append({'check_id':row['check_id'],'region':box,'scale':'original_pixels',
                 'image_sha256':manifest['source_image']['sha256'], 'inspection_file':{'path':str(dest),'sha256':digest(dest)}})
-        (output/'原尺寸审阅索引.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+'\n')
+        (output/'原尺寸审阅索引.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+'\n', encoding='utf-8', newline='\n')
     return manifest
 
 
@@ -772,11 +772,11 @@ def main():
     args = parser.parse_args()
     if args.review_image:
         if not args.regions or not args.output or args.basis or args.panel: parser.error('审阅模式须仅指定review-image、regions、output')
-        print(json.dumps(write_review_regions(args.review_image,json.loads(Path(args.regions).read_text()),args.output),ensure_ascii=False,indent=2))
+        print(json.dumps(write_review_regions(args.review_image,json.loads(Path(args.regions).read_text(encoding='utf-8-sig')),args.output),ensure_ascii=False,indent=2))
         return 0
     if not args.basis or not args.panel: parser.error('编译模式须提供basis和panel')
-    basis = json.loads(Path(args.basis).read_text())
-    panel = json.loads(Path(args.panel).read_text())
+    basis = json.loads(Path(args.basis).read_text(encoding='utf-8-sig'))
+    panel = json.loads(Path(args.panel).read_text(encoding='utf-8-sig'))
     context = context_for(basis, panel)
     errors = basis_errors(basis) + panel_errors(panel, context)
     print(json.dumps({'status': 'HOLD' if errors else 'CANDIDATE_BLOCK_NOT_APPROVAL', 'errors': errors,
@@ -785,4 +785,7 @@ def main():
     return bool(errors)
 
 
-if __name__ == '__main__': raise SystemExit(main())
+if __name__ == '__main__':
+    from platform_io import configure_stdio
+    configure_stdio()
+    raise SystemExit(main())

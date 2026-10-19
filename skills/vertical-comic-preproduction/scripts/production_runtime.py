@@ -11,7 +11,7 @@ import json
 import copy
 import os
 import tempfile
-import fcntl
+from platform_io import file_lock, atomic_json
 import io
 import uuid
 from contextlib import redirect_stdout
@@ -148,7 +148,7 @@ def package_signature(packet, package_root):
             "panel_id": panel["panel_id"], "prompt": submission["arguments"]["prompt"],
             "transparent_background": submission["arguments"]["transparent_background"],
             "output_spec": panel.get("output_spec"),
-            "references": [{"path": os.path.relpath(Path(p).resolve(),Path(package_root).resolve()) if portable else p, "sha256": digest(Path(p))}
+            "references": [{"path": Path(os.path.relpath(Path(p).resolve(),Path(package_root).resolve())).as_posix() if portable else p, "sha256": digest(Path(p))}
                            for p in submission["arguments"]["referenced_image_paths"]]}
 
 
@@ -396,8 +396,7 @@ def commit_updates(state_path, expected_sha256, updates, *, resolution_ref=None)
     }
     if not isinstance(updates,list) or not updates or len({u.get("panel_id") for u in updates}) != len(updates):
         raise ValueError("updates须明确不重复格号")
-    with state_path.with_suffix(".runtime.lock").open("a") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
+    with file_lock(state_path.with_suffix(".runtime.lock")) as lock:
         if digest(state_path) != expected_sha256:
             raise ValueError("STATE_CHANGED: 读取最新状态后合并，不覆盖其他返回")
         state = read_json(state_path); new = copy.deepcopy(state)
@@ -461,11 +460,7 @@ def commit_updates(state_path, expected_sha256, updates, *, resolution_ref=None)
         previous=history/(expected_sha256+".json")
         if not previous.exists():previous.write_bytes(state_path.read_bytes())
         if digest(state_path) != expected_sha256:raise ValueError("STATE_CHANGED")
-        with tempfile.NamedTemporaryFile("w",encoding="utf-8",dir=state_path.parent,delete=False) as f:
-            json.dump(new,f,ensure_ascii=False,indent=2);f.write("\n");f.flush();os.fsync(f.fileno());temp=Path(f.name)
-        try:os.replace(temp,state_path)
-        finally:
-            if temp.exists():temp.unlink()
+        atomic_json(state_path, new)
         monitored=[]
         if new.get("runtime",{}).get("watchdog",{}).get("policy") == "worker_watchdog_v1":
             from worker_watchdog import record_progress
@@ -479,7 +474,7 @@ def commit_updates(state_path, expected_sha256, updates, *, resolution_ref=None)
                       "CANCELLED":"request_returned"}.get(status)
                 if kind is None: continue
                 ref=(row.get("output") if kind=="image_saved" else row.get("qa_report") if kind=="qa_saved" else None)
-                ref=ref or {"path":str(state_path.relative_to(root)),"sha256":digest(state_path)}
+                ref=ref or {"path":state_path.relative_to(root).as_posix(),"sha256":digest(state_path)}
                 event={"stage":stage if kind!="qa_saved" else "image_review", "kind":kind,
                        "blocker_id":f"{row.get('batch_id','episode')}:{row['panel_id']}:{row.get('attempt_id','')}",
                        "evidence":ref}
@@ -495,8 +490,7 @@ def authorize_episode_repair(state_path, expected_sha256, authorization_ref):
     from batch_round import snapshot, attempt_errors
     from episode_repair import systemic_errors
     state_path=Path(state_path).resolve();root=state_path.parent.parent
-    with state_path.with_suffix('.runtime.lock').open('a') as lock:
-        fcntl.flock(lock,fcntl.LOCK_EX)
+    with file_lock(state_path.with_suffix('.runtime.lock')) as lock:
         if digest(state_path)!=expected_sha256:raise ValueError('STATE_CHANGED')
         state=read_json(state_path)
         if state.get('execution_mode')!='episode_async_v1':raise ValueError('滚动返修只用于整话模式')
@@ -538,11 +532,7 @@ def authorize_episode_repair(state_path, expected_sha256, authorization_ref):
         history=state_path.parent/'runtime_history';history.mkdir(exist_ok=True)
         previous=history/(expected_sha256+'.json')
         if not previous.exists():previous.write_bytes(state_path.read_bytes())
-        with tempfile.NamedTemporaryFile('w',encoding='utf-8',dir=state_path.parent,delete=False) as f:
-            json.dump(new,f,ensure_ascii=False,indent=2);f.write('\n');f.flush();os.fsync(f.fileno());temp=Path(f.name)
-        try:os.replace(temp,state_path)
-        finally:
-            if temp.exists():temp.unlink()
+        atomic_json(state_path, new)
         return {'status':'REPAIR_AUTHORIZED','panel_id':pid,'attempt_id':attempt,'state_sha256':digest(state_path)}
 
 
@@ -551,8 +541,7 @@ def record_episode_diagnosis(state_path, expected_sha256, diagnosis_ref):
     from episode_repair import failure_ids
     from batch_round import attempt_errors
     state_path=Path(state_path).resolve();root=state_path.parent.parent
-    with state_path.with_suffix('.runtime.lock').open('a') as lock:
-        fcntl.flock(lock,fcntl.LOCK_EX)
+    with file_lock(state_path.with_suffix('.runtime.lock')) as lock:
         if digest(state_path)!=expected_sha256:raise ValueError('STATE_CHANGED')
         state=read_json(state_path)
         if state.get('execution_mode')!='episode_async_v1':raise ValueError('共因诊断只用于整话模式')
@@ -584,11 +573,7 @@ def record_episode_diagnosis(state_path, expected_sha256, diagnosis_ref):
 
 
 def _atomic_runtime_state(state_path, value):
-    with tempfile.NamedTemporaryFile('w',encoding='utf-8',dir=state_path.parent,delete=False) as f:
-        json.dump(value,f,ensure_ascii=False,indent=2);f.write('\n');f.flush();os.fsync(f.fileno());temp=Path(f.name)
-    try:os.replace(temp,state_path)
-    finally:
-        if temp.exists():temp.unlink()
+    atomic_json(state_path, value)
 
 
 def prepare_review(state, root, queue):
@@ -617,7 +602,7 @@ def prepare_review(state, root, queue):
         except SystemExit as exc:
             raise ValueError(f"{row['panel_id']}: QA材料创建失败:{exc}") from exc
         report=out/"生成图QA报告.json"
-        item["qa_template"]={"path":str(report.relative_to(root)),"sha256":digest(report)}
+        item["qa_template"]={"path":report.relative_to(root).as_posix(),"sha256":digest(report)}
         item["template_status"]="UNREVIEWED"
     if queue["items"]:
         ids={i["panel_id"] for i in queue["items"]}
@@ -726,7 +711,7 @@ def main():
         if args.write:
             dest = Path(args.write).resolve(); dest.relative_to(root)
             dest.parent.mkdir(parents=True, exist_ok=True)
-            with dest.open("x", encoding="utf-8") as f:
+            with dest.open("x", encoding="utf-8", newline='\n') as f:
                 json.dump(value, f, ensure_ascii=False, indent=2); f.write("\n")
         print(json.dumps(value, ensure_ascii=False))
         if value.get('global_errors'):return 1
@@ -737,4 +722,6 @@ def main():
 
 
 if __name__ == "__main__":
+    from platform_io import configure_stdio
+    configure_stdio()
     raise SystemExit(main())

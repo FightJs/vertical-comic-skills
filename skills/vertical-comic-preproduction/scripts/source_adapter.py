@@ -23,7 +23,7 @@ def verify(source,root,episode):
     if mapping is None:return ['SOURCE_ID_HOLD:新合同须先冻结源编号映射']
     try:
         if mapping.get('policy')!=POLICY or mapping.get('episode_id')!=episode:raise ValueError('编号映射版本/话号不一致')
-        original=json.loads(checked_file(Path(root),mapping['source_snapshot']).read_text())
+        original=json.loads(checked_file(Path(root),mapping['source_snapshot']).read_text(encoding='utf-8-sig'))
         if source!=adapted(original,episode,mapping['source_snapshot']):raise ValueError('派生快照与源格序/原文字段不一致')
         return []
     except (OSError,ValueError,TypeError,KeyError) as exc:return [f'SOURCE_ID_HOLD:{exc}']
@@ -32,10 +32,13 @@ def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--root',required=True);p.add_argument('--source-snapshot',required=True);p.add_argument('--episode',required=True);p.add_argument('--write',required=True);a=p.parse_args()
     try:
         root=Path(a.root).resolve();source=Path(a.source_snapshot).resolve();source.relative_to(root)
-        ref={'path':str(source.relative_to(root)),'sha256':digest(source)}
-        value=adapted(json.loads(source.read_text()),a.episode,ref);dest=Path(a.write).resolve();dest.relative_to(root)
-        with dest.open('x',encoding='utf-8') as f:json.dump(value,f,ensure_ascii=False,indent=2)
+        ref={'path':source.relative_to(root).as_posix(),'sha256':digest(source)}
+        value=adapted(json.loads(source.read_text(encoding='utf-8-sig')),a.episode,ref);dest=Path(a.write).resolve();dest.relative_to(root)
+        with dest.open('x',encoding='utf-8', newline='\n') as f:json.dump(value,f,ensure_ascii=False,indent=2)
         print(json.dumps({'status':'DERIVED_SOURCE_ONLY','path':str(dest),'panels':len(value['panel_ids'])},ensure_ascii=False));return 0
     except (OSError,ValueError,TypeError,KeyError) as exc:print(json.dumps({'status':'HOLD','errors':[str(exc)]},ensure_ascii=False));return 1
 
-if __name__=='__main__':raise SystemExit(main())
+if __name__=='__main__':
+    from platform_io import configure_stdio
+    configure_stdio()
+    raise SystemExit(main())

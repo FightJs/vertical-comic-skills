@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime, timezone
-import fcntl
+from platform_io import file_lock, atomic_json
 import hashlib
 import json
 import os
@@ -134,16 +134,7 @@ def evaluate(snapshot, *, now=None, config=None):
 
 def _write_atomic(path, value):
     path.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=path.parent, delete=False) as file:
-        json.dump(value, file, ensure_ascii=False, indent=2)
-        file.write("\n")
-        file.flush()
-        os.fsync(file.fileno())
-        temporary = Path(file.name)
-    try:
-        os.replace(temporary, path)
-    finally:
-        temporary.unlink(missing_ok=True)
+    atomic_json(path, value)
 
 
 def record_progress(ledger_path, episode_root, event, *, now=None):
@@ -171,8 +162,7 @@ def record_progress(ledger_path, episode_root, event, *, now=None):
         raise ValueError("进展证据哈希不符")
     current = _time(now) if isinstance(now, str) else (now or datetime.now(timezone.utc))
     key = f"{event['stage']}:{event['kind']}:{relative}:{actual_hash}"
-    with ledger_path.with_suffix(".lock").open("a") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
+    with file_lock(ledger_path.with_suffix(".lock")) as lock:
         ledger = json.loads(ledger_path.read_text(encoding="utf-8")) if ledger_path.exists() else {"policy": POLICY, "events": [], "emitted": []}
         if ledger.get("policy") != POLICY:
             raise ValueError("监控进度账本版本不一致")
@@ -217,8 +207,7 @@ def acknowledge(ledger_path, episode_state, event_ids, *, now=None, config=None,
     if not isinstance(event_ids, list) or not event_ids or len(event_ids) != len(set(event_ids)):
         raise ValueError("须确认不重复的已送达事件ID")
     ledger_path = Path(ledger_path).resolve()
-    with ledger_path.with_suffix(".lock").open("a") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
+    with file_lock(ledger_path.with_suffix(".lock")) as lock:
         current = check_ledger(ledger_path, episode_state, now=now, config=config,
                                independent_work_pending=independent_work_pending)
         allowed = {a["event_id"] for a in current["alerts"]}
@@ -242,4 +231,6 @@ def main():
 
 
 if __name__ == "__main__":
+    from platform_io import configure_stdio
+    configure_stdio()
     main()

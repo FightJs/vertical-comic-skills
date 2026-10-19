@@ -7,7 +7,7 @@ by allocate(); owners update dispatch_ledger in their existing state transaction
 from __future__ import annotations
 import argparse
 import copy
-import fcntl
+from platform_io import file_lock, atomic_json
 import json
 import uuid
 from datetime import datetime, timezone
@@ -121,7 +121,7 @@ def allocate(control_path, expected_sha256, allocations, *, old_writers_stopped=
     locks=sorted({path.with_suffix('.dispatch.lock'),*(p.with_suffix('.runtime.lock') for _,p in states)})
     with ExitStack() as stack:
         for lock_path in locks:
-            lock=stack.enter_context(lock_path.open('a'));fcntl.flock(lock,fcntl.LOCK_EX)
+            stack.enter_context(file_lock(lock_path))
         if digest(path)!=expected_sha256:raise ValueError('CONTROL_CHANGED')
         for job,state_path in states:
             state=read_json(state_path)
@@ -157,8 +157,7 @@ def release_unsubmitted(state_path, expected_sha256, panel_ids):
     """Release only RESERVED requests; restore their unchanged original packets."""
     from episode_dispatch_queue import _atomic_json
     path=Path(state_path).resolve();root=path.parent.parent
-    with path.with_suffix('.runtime.lock').open('a') as lock:
-        fcntl.flock(lock,fcntl.LOCK_EX)
+    with file_lock(path.with_suffix('.runtime.lock')) as lock:
         if digest(path)!=expected_sha256:raise ValueError('STATE_CHANGED')
         state=read_json(path)
         if state.get('runtime',{}).get('dispatch_policy')!=POLICY:raise ValueError('仅租约入口')
@@ -182,8 +181,11 @@ def main():
     p.add_argument('--old-writers-stopped',action='store_true');p.add_argument('--release-panels',nargs='+')
     a=p.parse_args()
     if a.release_panels:result=release_unsubmitted(a.state,a.expected_sha256,a.release_panels)
-    else:result=allocate(a.control,a.expected_sha256,json.loads(Path(a.allocations).read_text()),old_writers_stopped=a.old_writers_stopped)
+    else:result=allocate(a.control,a.expected_sha256,json.loads(Path(a.allocations).read_text(encoding='utf-8-sig')),old_writers_stopped=a.old_writers_stopped)
     print(json.dumps(result,ensure_ascii=False))
 
 
-if __name__=='__main__':main()
+if __name__=='__main__':
+    from platform_io import configure_stdio
+    configure_stdio()
+    main()

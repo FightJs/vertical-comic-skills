@@ -95,15 +95,15 @@ class PromptFramingTests(unittest.TestCase):
         panel['framing'].update(background_treatment='clear_limited', focus='握杯表情')
         panel['visible_region'] = '画面左侧胸以上人物，下缘保留手势，后方仅露固定窗框'
         panel['prompt'] += '\n' + framing_execution_block(panel)
-        (fx.root / 'P001/prompt.txt').write_text(panel['prompt'])
+        (fx.root / 'P001/prompt.txt').write_text(panel['prompt'], encoding='utf-8', newline='\n')
         fx.write('manifest.json', fx.manifest)
         image = fx.root / fx.refs[2]['path']
         output = fx.root / 'qa'
         script = Path(__file__).resolve().parents[1] / 'scripts/make_generation_qa.py'
-        subprocess.run([sys.executable, '-B', str(script), '--package', str(fx.root),
+        subprocess.run([sys.executable, '-X', 'utf8', '-B', str(script), '--package', str(fx.root),
             '--manifest', 'manifest.json', '--images', str(fx.root), '--image-path', str(image),
             '--output', str(output), '--skip-contact-sheet'], check=True, capture_output=True)
-        report = json.loads((output / '生成图QA报告.json').read_text())
+        report = json.loads((output / '生成图QA报告.json').read_text(encoding='utf-8-sig'))
         self.assertEqual(report['errors'], [])
         row = report['panels'][0]
         self.assertEqual(row['image_sha256'], digest(image))

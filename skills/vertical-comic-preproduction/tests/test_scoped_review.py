@@ -18,7 +18,7 @@ class ScopedTests(unittest.TestCase):
 
     def state(self,n=4):
         state=self.h.state(n);state.update(optimization_policy=POLICY,half_inputs={},half_gates={})
-        source=json.loads((self.root/state['source_snapshot']['path']).read_text());self.h.plan=build_plan(state,source);state['batch_plan']=self.h.h.f.write('stable-plan.json',self.h.plan)
+        source=json.loads((self.root/state['source_snapshot']['path']).read_text(encoding='utf-8-sig'));self.h.plan=build_plan(state,source);state['batch_plan']=self.h.h.f.write('stable-plan.json',self.h.plan)
         for batch in self.h.plan['batches']:self.freeze(state,batch)
         return state
 
@@ -29,7 +29,7 @@ class ScopedTests(unittest.TestCase):
         state['half_gates'][batch['batch_id']]={'visual_basis':self.h.h.approve([state['source_script'],state['source_snapshot'],basis]),'shot_design':self.h.h.approve([basis,shot])}
 
     def record(self,state,i,status='VISUAL_PASS',round_id=1):
-        r=self.h.record(state,i,status,round_id);path=self.root/r['package_manifest']['path'];data=json.loads(path.read_text());data['optimization_policy']=POLICY;r['package_manifest']=self.h.h.f.write(path.name,data);return r
+        r=self.h.record(state,i,status,round_id);path=self.root/r['package_manifest']['path'];data=json.loads(path.read_text(encoding='utf-8-sig'));data['optimization_policy']=POLICY;r['package_manifest']=self.h.h.f.write(path.name,data);return r
 
     def route(self,state,check='status',pid=None):return self.h.route(state,check,pid)
 
@@ -94,7 +94,7 @@ class ScopedTests(unittest.TestCase):
         proof=self.h.h.f.write('original-B-approval.json',gate)
         state['approval_index']=self.h.h.f.write('approvals.json',{'policy':'approval_index_v1','entries':[{'phase':'shot_design','book_id':'UNIT','episode_ids':['E000'],'panel_ids':['P001','P002'],'approval':proof}]})
         self.assertEqual(self.route(state)['eligible_panel_ids'],['P001','P002'])
-        original=json.loads((self.root/'original-B-approval.json').read_text());self.assertEqual(original,gate)
+        original=json.loads((self.root/'original-B-approval.json').read_text(encoding='utf-8-sig'));self.assertEqual(original,gate)
 
     def test_index_metadata_cannot_expand_original_panel_scope(self):
         state=self.state();gate=state['half_gates']['H001'].pop('shot_design');gate['panel_ids']=['P001'];proof=self.h.h.f.write('limited.json',gate)
@@ -124,21 +124,21 @@ class ReuseTests(unittest.TestCase):
             self.assertEqual(memo['misses'],1);self.assertEqual(memo['hits'],1)
 
     def test_inspection_display_pass_cannot_override_original_style_fail(self):
-        qa=json.loads((self.root/self.r['qa_report']['path']).read_text());item=qa['panels'][0]
+        qa=json.loads((self.root/self.r['qa_report']['path']).read_text(encoding='utf-8-sig'));item=qa['panels'][0]
         item['inspection_plan']={'policy':'single_observation_v1','status':'PASS','groups':[]}
         item['style_review']['status']='FAIL';self.r['qa_report']=self.h.h.f.write('native-fail-plan-pass.json',qa)
         self.assertTrue(qa_errors(self.root,self.r))
 
     def test_cached_qa_invalidates_when_selected_rule_changes(self):
-        source=config_fixtures.library(self.root/'library');path=self.root/self.r['package_manifest']['path'];packet=json.loads(path.read_text());panel=packet['panels'][0]
+        source=config_fixtures.library(self.root/'library');path=self.root/self.r['package_manifest']['path'];packet=json.loads(path.read_text(encoding='utf-8-sig'));panel=packet['panels'][0]
         # Empty actual conditions leave the synthetic bed rule unselected.
         packet['memory_source']=source;panel['memory_tags']=[];panel['locked_script']['event_text']='SYNTHETIC neutral frame'
         self.r['package_manifest']=self.h.h.f.write('neutral-memory-packet.json',packet)
         from codex_reference_contract import digest
-        qa=json.loads((self.root/self.r['qa_report']['path']).read_text());qa['source_manifest_sha256']=self.r['package_manifest']['sha256'];self.r['qa_report']=self.h.h.f.write('neutral-memory-qa.json',qa)
+        qa=json.loads((self.root/self.r['qa_report']['path']).read_text(encoding='utf-8-sig'));qa['source_manifest_sha256']=self.r['package_manifest']['sha256'];self.r['qa_report']=self.h.h.f.write('neutral-memory-qa.json',qa)
         # Fingerprint routing is the behavior under test; no image verdict is fabricated.
         before=fingerprint(self.root,self.r)
-        index_path=self.root/'library/记忆索引.json';index=json.loads(index_path.read_text());index['rules'][0]['trigger']['any_tags']=['all_test_frames'];index['rules'][0]['trigger']['any_visual_terms']=['SYNTHETIC'];index['rules'][0]['version']='2';index_path.write_text(json.dumps(index))
+        index_path=self.root/'library/记忆索引.json';index=json.loads(index_path.read_text(encoding='utf-8-sig'));index['rules'][0]['trigger']['any_tags']=['all_test_frames'];index['rules'][0]['trigger']['any_visual_terms']=['SYNTHETIC'];index['rules'][0]['version']='2';index_path.write_text(json.dumps(index), encoding='utf-8', newline='\n')
         self.assertNotEqual(before,fingerprint(self.root,self.r))
 
     def test_output_tamper_invalidates_memo(self):
@@ -150,15 +150,15 @@ class ReuseTests(unittest.TestCase):
     def test_new_QA_version_does_not_reuse_old_pass(self):
         with session(True) as memo:
             self.assertEqual(qa_errors(self.root,self.r),[])
-            qa=json.loads((self.root/'qa.json').read_text());qa['panels'][0]['style_review']['status']='UNREVIEWED';self.r['qa_report']=self.h.h.f.write('qa-new.json',qa)
+            qa=json.loads((self.root/'qa.json').read_text(encoding='utf-8-sig'));qa['panels'][0]['style_review']['status']='UNREVIEWED';self.r['qa_report']=self.h.h.f.write('qa-new.json',qa)
             self.assertTrue(qa_errors(self.root,self.r));self.assertEqual(memo['hits'],0)
 
     def test_actual_prompt_file_change_invalidates_memo(self):
-        manifest=json.loads((self.root/self.r['package_manifest']['path']).read_text())
+        manifest=json.loads((self.root/self.r['package_manifest']['path']).read_text(encoding='utf-8-sig'))
         panel=manifest['panels'][0];prompt=self.root/panel.get('prompt_file',f"{panel['panel_id']}/prompt.txt")
         with session(True) as memo:
             self.assertEqual(qa_errors(self.root,self.r),[])
-            prompt.write_text('changed actual prompt',encoding='utf-8')
+            prompt.write_text('changed actual prompt',encoding='utf-8', newline='\n')
             self.assertTrue(qa_errors(self.root,self.r));self.assertEqual(memo['hits'],0)
 
     def test_shot_snapshot_package_relative_refs_do_not_disable_reuse(self):
@@ -176,9 +176,9 @@ class ReuseTests(unittest.TestCase):
         state=self.h.state;self.h.panel['generation_execution']['status']='NOT_RUN'
         self.h.h.manifest['optimization_policy']=POLICY;self.h.sync()
         state.update(optimization_policy=POLICY,half_inputs={},half_gates={})
-        original=json.loads((self.root/'shots.json').read_text());original['optimization_policy']=POLICY;shot=self.h.h.f.write('scoped-shot.json',original)
+        original=json.loads((self.root/'shots.json').read_text(encoding='utf-8-sig'));original['optimization_policy']=POLICY;shot=self.h.h.f.write('scoped-shot.json',original)
         state['half_inputs']={'H001':{'visual_basis':state['visual_basis'],'shot_manifest':shot}};state['half_gates']={'H001':{'visual_basis':self.h.h.approve([state['source_script'],state['source_snapshot'],state['visual_basis']]),'shot_design':self.h.h.approve([state['visual_basis'],shot])}}
-        source=json.loads((self.root/'snapshot.json').read_text());state['batch_plan']=self.h.h.f.write('scoped-plan.json',build_plan(state,source));self.r['status']='PENDING'
+        source=json.loads((self.root/'snapshot.json').read_text(encoding='utf-8-sig'));state['batch_plan']=self.h.h.f.write('scoped-plan.json',build_plan(state,source));self.r['status']='PENDING'
         result=evaluate(state,self.root,'generate','P001');self.assertEqual(result['status'],'PASS',result)
         self.h.h.manifest.pop('optimization_policy');self.r['package_manifest']=self.h.h.f.write('全话提示词索引.json',self.h.h.manifest)
         self.assertEqual(evaluate(state,self.root,'generate','P001')['status'],'HOLD')
@@ -191,15 +191,15 @@ class ScopedConfigTests(unittest.TestCase):
 
     def initialize(self,name):
         self.h.save();out=self.h.root/name
-        result=subprocess.run([sys.executable,str(Path(__file__).resolve().parents[1]/'scripts/init_preproduction.py'),'--config',str(self.h.path),'--output',str(out),'--book','UNIT','--episode','E001'],capture_output=True)
+        result=subprocess.run([sys.executable, '-X', 'utf8',str(Path(__file__).resolve().parents[1]/'scripts/init_preproduction.py'),'--config',str(self.h.path),'--output',str(out),'--book','UNIT','--episode','E001'],capture_output=True)
         self.assertEqual(result.returncode,0,result.stderr)
-        return out,json.loads((out/'00_输入审计/生产流程.json').read_text())
+        return out,json.loads((out/'00_输入审计/生产流程.json').read_text(encoding='utf-8-sig'))
 
     def test_opted_new_scaffold_has_scoped_inputs_but_no_approvals(self):
         self.h.config['optimization']={'policy':POLICY,'approval_scope':'half_episode','review_strategy':'on_return','unchanged_qa':'reuse_recorded'}
         out,state=self.initialize('new-scoped')
         self.assertEqual(state['optimization_policy'],POLICY);self.assertEqual(state['half_inputs'],{});self.assertEqual(state['half_gates'],{});self.assertEqual(state['gates'],{})
-        index=json.loads((out/state['approval_index']['path']).read_text());self.assertEqual(index['entries'],[])
+        index=json.loads((out/state['approval_index']['path']).read_text(encoding='utf-8-sig'));self.assertEqual(index['entries'],[])
 
     def test_episode_preparation_scaffold_has_one_basis_and_no_half_inputs(self):
         self.h.config['preparation']={'policy':'episode_preparation_v1'}

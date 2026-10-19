@@ -21,7 +21,7 @@ SCRIPTS = Path(__file__).resolve().parents[1] / 'scripts'
 def library(root):
     root.mkdir(parents=True, exist_ok=True)
     body = root / 'rule.md'
-    body.write_text('# SYNTHETIC universal support rule\n')
+    body.write_text('# SYNTHETIC universal support rule\n', encoding='utf-8', newline='\n')
     rule = {'id': 'UNIT-MEM', 'title': 'Synthetic portable rule', 'version': '1', 'status': 'active',
             'scope': 'cross_work', 'primary_stage': 'generation', 'stages': ['shot_design', 'generation', 'image_review'],
             'admission': {'portable': True, 'contains_story_facts': False, 'rationale': 'TEST production method only'},
@@ -29,7 +29,7 @@ def library(root):
             'requirements': {s: {'checks': ['support'], 'artifacts': ['spatial_diagram'] if s != 'image_review' else [],
                                 'prompt_constraints': s == 'generation'} for s in ['shot_design', 'generation', 'image_review']},
             'file': {'path': body.name, 'sha256': digest(body)}}
-    (root / '记忆索引.json').write_text(json.dumps({'policy': 'triggered_rules_v1', 'rules': [rule]}))
+    (root / '记忆索引.json').write_text(json.dumps({'policy': 'triggered_rules_v1', 'rules': [rule]}), encoding='utf-8', newline='\n')
     return {'policy': 'triggered_rules_v1', 'root': str(root), 'index': '记忆索引.json'}
 
 
@@ -37,7 +37,7 @@ def applied(source, stage, panel, artifact_root):
     match = select(source, stage, panel)[0]
     rule = match['rule']
     diagram = artifact_root / 'station.svg'
-    diagram.write_text('<svg xmlns="http://www.w3.org/2000/svg"><rect width="10" height="10"/></svg>')
+    diagram.write_text('<svg xmlns="http://www.w3.org/2000/svg"><rect width="10" height="10"/></svg>', encoding='utf-8', newline='\n')
     return {'memory_id': rule['id'], 'rule_version': rule['version'], 'rule_signature': match['rule_signature'],
             'rule_sha256': rule['file']['sha256'], 'decision': 'APPLIED', 'reviewer': 'SYNTHETIC TEST ONLY',
             'evidence': 'SYNTHETIC test evidence, not actual visual approval',
@@ -55,10 +55,10 @@ class MemoryTests(unittest.TestCase):
         self.panel = {'memory_tags': ['person_on_bed'], 'prompt': 'SYNTHETIC support constraint'}
 
     def index(self):
-        return json.loads((self.root / 'library/记忆索引.json').read_text())
+        return json.loads((self.root / 'library/记忆索引.json').read_text(encoding='utf-8-sig'))
 
     def save_index(self, data):
-        (self.root / 'library/记忆索引.json').write_text(json.dumps(data))
+        (self.root / 'library/记忆索引.json').write_text(json.dumps(data), encoding='utf-8', newline='\n')
 
     def add_rule(self,rid,tag):
         index=self.index();rule=copy.deepcopy(index['rules'][0]);rule.update(id=rid,title='SYNTHETIC '+rid)
@@ -103,7 +103,7 @@ class MemoryTests(unittest.TestCase):
     def test_preload_body_is_revalidated_and_cache_does_not_hide_tampering(self):
         self.enable_loading();selected=loading_selection(self.source,'generation')
         _,cache=load_selected(self.source,selected,{},'run','worker')
-        (self.root/'library/rule.md').write_text('SYNTHETIC changed without hash')
+        (self.root/'library/rule.md').write_text('SYNTHETIC changed without hash', encoding='utf-8', newline='\n')
         with self.assertRaises(ValueError):load_selected(self.source,selected,cache,'run','worker')
 
     def test_loading_version_change_rereads_only_changed_rule_and_rejects_stale_selection(self):
@@ -154,30 +154,30 @@ class MemoryTests(unittest.TestCase):
 
     def test_cli_stage_load_then_panel_load_reuses_actual_body_without_qa(self):
         self.enable_loading();cache=self.root/'runtime-cache.json'
-        command=[sys.executable,str(SCRIPTS/'rule_memory.py'),'--root',self.source['root'],'--loading-policy',LOADING_POLICY,
+        command=[sys.executable, '-X', 'utf8',str(SCRIPTS/'rule_memory.py'),'--root',self.source['root'],'--loading-policy',LOADING_POLICY,
                  '--stage','generation','--mode','load-stage','--cache',str(cache),'--run-id','run','--worker-id','worker']
-        result=subprocess.run(command,capture_output=True,text=True);self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+        result=subprocess.run(command,capture_output=True,text=True, encoding='utf-8');self.assertEqual(result.returncode,0,result.stdout+result.stderr)
         report=json.loads(result.stdout);self.assertEqual(report['matched_for_execution'],[])
-        self.assertIn('body',report['memories'][0]);panel=self.root/'panel.json';panel.write_text(json.dumps(self.panel))
+        self.assertIn('body',report['memories'][0]);panel=self.root/'panel.json';panel.write_text(json.dumps(self.panel), encoding='utf-8', newline='\n')
         command[command.index('load-stage')]='load';command+=['--panel',str(panel)]
-        result=subprocess.run(command,capture_output=True,text=True);self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+        result=subprocess.run(command,capture_output=True,text=True, encoding='utf-8');self.assertEqual(result.returncode,0,result.stdout+result.stderr)
         report=json.loads(result.stdout);self.assertEqual(len(report['matched_for_execution']),1)
         self.assertNotIn('body',report['memories'][0]);self.assertEqual(report['status'],'LOADED_NOT_APPROVED')
 
     def test_cli_manifest_cannot_downgrade_frozen_loading_source(self):
         self.enable_loading();manifest=self.root/'manifest.json'
         frozen=copy.deepcopy(self.source);frozen['root']=str(self.root/'different')
-        manifest.write_text(json.dumps({'memory_source':frozen,'panels':[{'panel_id':'P001',**self.panel}]}))
-        result=subprocess.run([sys.executable,str(SCRIPTS/'rule_memory.py'),'--root',self.source['root'],'--loading-policy',LOADING_POLICY,
-            '--stage','generation','--mode','select','--manifest',str(manifest),'--panel-id','P001'],capture_output=True,text=True)
+        manifest.write_text(json.dumps({'memory_source':frozen,'panels':[{'panel_id':'P001',**self.panel}]}), encoding='utf-8', newline='\n')
+        result=subprocess.run([sys.executable, '-X', 'utf8',str(SCRIPTS/'rule_memory.py'),'--root',self.source['root'],'--loading-policy',LOADING_POLICY,
+            '--stage','generation','--mode','select','--manifest',str(manifest),'--panel-id','P001'],capture_output=True,text=True, encoding='utf-8')
         self.assertEqual(result.returncode,1);self.assertIn('冻结manifest',result.stdout)
 
     def test_cli_invalid_manifest_cannot_silently_become_stage_only_load(self):
-        self.enable_loading();manifest=self.root/'empty.json';manifest.write_text('{}');cache=self.root/'cache.json'
-        result=subprocess.run([sys.executable,str(SCRIPTS/'rule_memory.py'),'--root',self.source['root'],'--loading-policy',LOADING_POLICY,
+        self.enable_loading();manifest=self.root/'empty.json';manifest.write_text('{}', encoding='utf-8', newline='\n');cache=self.root/'cache.json'
+        result=subprocess.run([sys.executable, '-X', 'utf8',str(SCRIPTS/'rule_memory.py'),'--root',self.source['root'],'--loading-policy',LOADING_POLICY,
             '--stage','generation','--mode','load','--manifest',str(manifest),'--panel-id','P001','--cache',str(cache),
-            '--run-id','run','--worker-id','worker'],capture_output=True,text=True)
-        self.assertEqual(result.returncode,1);self.assertFalse(cache.exists());self.assertEqual(manifest.read_text(),'{}')
+            '--run-id','run','--worker-id','worker'],capture_output=True,text=True, encoding='utf-8')
+        self.assertEqual(result.returncode,1);self.assertFalse(cache.exists());self.assertEqual(manifest.read_text(encoding='utf-8-sig'),'{}')
 
     def test_visible_subjects_cannot_lose_continuity_by_missing_tag(self):
         self.add_rule('MEM-005','visual_subjects_present')
@@ -217,7 +217,7 @@ class MemoryTests(unittest.TestCase):
             match=select(self.source,'generation',self.panel)[0]
             self.assertNotEqual(old,match['rule_signature']);self.assertEqual(memo['index_parses'],2)
             app=applied(self.source,'generation',self.panel,self.root)
-            (self.root/'library/rule.md').write_text('SYNTHETIC tampered body')
+            (self.root/'library/rule.md').write_text('SYNTHETIC tampered body', encoding='utf-8', newline='\n')
             self.assertTrue(application_errors(self.source,'generation',self.panel,self.root,[app]))
 
     def test_cached_index_and_match_cannot_be_mutated_by_a_caller(self):
@@ -282,7 +282,7 @@ class MemoryTests(unittest.TestCase):
 
     def test_bad_svg_is_hold_not_uncaught_error(self):
         app = applied(self.source, 'generation', self.panel, self.root)
-        (self.root / 'station.svg').write_text('not SVG')
+        (self.root / 'station.svg').write_text('not SVG', encoding='utf-8', newline='\n')
         app['artifacts'][0]['file']['sha256'] = digest(self.root / 'station.svg')
         self.assertTrue(application_errors(self.source, 'generation', self.panel, self.root, [app]))
 
@@ -314,7 +314,7 @@ class MemoryTests(unittest.TestCase):
     def test_body_tamper_is_detected_even_with_cached_body(self):
         matches = select(self.source, 'generation', self.panel)
         _, cache = load_selected(self.source, matches, {}, 'r', 'w')
-        (self.root / 'library/rule.md').write_text('changed without hash update')
+        (self.root / 'library/rule.md').write_text('changed without hash update', encoding='utf-8', newline='\n')
         with self.assertRaises(ValueError): load_selected(self.source, matches, cache, 'r', 'w')
 
     def test_nonportable_and_escaping_records_rejected(self):
@@ -332,8 +332,8 @@ class MemoryTests(unittest.TestCase):
         self.assertEqual(len(select(self.source, 'generation', {'memory_tags': [], 'operation': 'repair'})), 1)
 
     def test_cli_cannot_overwrite_panel_with_cache(self):
-        panel = self.root / 'panel.json'; panel.write_text(json.dumps(self.panel)); before = panel.read_bytes()
-        result = subprocess.run([sys.executable, str(SCRIPTS/'rule_memory.py'), '--root', self.source['root'], '--mode', 'load', '--stage', 'generation', '--panel', str(panel), '--cache', str(panel), '--run-id', 'run', '--worker-id', 'worker'], capture_output=True)
+        panel = self.root / 'panel.json'; panel.write_text(json.dumps(self.panel), encoding='utf-8', newline='\n'); before = panel.read_bytes()
+        result = subprocess.run([sys.executable, '-X', 'utf8', str(SCRIPTS/'rule_memory.py'), '--root', self.source['root'], '--mode', 'load', '--stage', 'generation', '--panel', str(panel), '--cache', str(panel), '--run-id', 'run', '--worker-id', 'worker'], capture_output=True)
         self.assertEqual(result.returncode, 1); self.assertEqual(panel.read_bytes(), before)
 
 
@@ -348,12 +348,12 @@ class ConfigTests(unittest.TestCase):
                        'memory':{'index':'记忆索引.json','cache':'run_worker_version','admission':'cross_work_only'}}
         self.path = self.root/'config.json'; self.save()
 
-    def save(self): self.path.write_text(json.dumps(self.config))
+    def save(self): self.path.write_text(json.dumps(self.config), encoding='utf-8', newline='\n')
 
     def enable_loading(self):
-        index_path=self.root/'library/记忆索引.json';data=json.loads(index_path.read_text());data['loading_policy']=LOADING_POLICY
+        index_path=self.root/'library/记忆索引.json';data=json.loads(index_path.read_text(encoding='utf-8-sig'));data['loading_policy']=LOADING_POLICY
         for rule in data['rules']:rule['load_policy']='stage_baseline'
-        index_path.write_text(json.dumps(data));self.config['memory']['loading_policy']=LOADING_POLICY;self.save()
+        index_path.write_text(json.dumps(data), encoding='utf-8', newline='\n');self.config['memory']['loading_policy']=LOADING_POLICY;self.save()
 
     def test_config_loading_contract_must_match_library_explicitly(self):
         self.enable_loading();self.assertEqual(memory_source(read_config(self.path))['loading_policy'],LOADING_POLICY)
@@ -365,23 +365,23 @@ class ConfigTests(unittest.TestCase):
 
     def test_new_init_binds_loading_contract_without_resetting_config_root_override(self):
         self.enable_loading();out=self.root/'new'
-        command=[sys.executable,str(SCRIPTS/'init_preproduction.py'),'--config',str(self.path),'--memory-root',str(self.root/'library'),
+        command=[sys.executable, '-X', 'utf8',str(SCRIPTS/'init_preproduction.py'),'--config',str(self.path),'--memory-root',str(self.root/'library'),
                  '--memory-loading-policy',LOADING_POLICY,'--output',str(out),'--book','UNIT','--episode','E001']
-        result=subprocess.run(command,capture_output=True,text=True);self.assertEqual(result.returncode,0,result.stdout+result.stderr)
-        state=json.loads((out/'00_输入审计/生产流程.json').read_text())
+        result=subprocess.run(command,capture_output=True,text=True, encoding='utf-8');self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+        state=json.loads((out/'00_输入审计/生产流程.json').read_text(encoding='utf-8-sig'))
         self.assertEqual(state['memory_source'],memory_source(read_config(self.path)));self.assertEqual(state['gates'],{})
         for filename in ('00_输入审计/本话配置.json','01_镜头改编_CANDIDATE/镜头改编表.json','04_B提示词包_CANDIDATE/全话提示词索引.json'):
-            self.assertEqual(json.loads((out/filename).read_text())['memory_source'],state['memory_source'])
+            self.assertEqual(json.loads((out/filename).read_text(encoding='utf-8-sig'))['memory_source'],state['memory_source'])
         self.assertFalse(list(out.rglob('*cache*')));self.assertEqual(state['production_authorization'],None)
 
     def test_direct_init_requires_explicit_new_loading_contract_before_writes(self):
         self.enable_loading();out=self.root/'direct'
-        command=[sys.executable,str(SCRIPTS/'init_preproduction.py'),'--memory-root',str(self.root/'library'),
+        command=[sys.executable, '-X', 'utf8',str(SCRIPTS/'init_preproduction.py'),'--memory-root',str(self.root/'library'),
                  '--output',str(out),'--book','UNIT','--episode','E001']
         result=subprocess.run(command,capture_output=True);self.assertNotEqual(result.returncode,0);self.assertFalse(out.exists())
         result=subprocess.run(command+['--memory-loading-policy',LOADING_POLICY],capture_output=True)
         self.assertEqual(result.returncode,0,result.stderr)
-        state=json.loads((out/'00_输入审计/生产流程.json').read_text());self.assertEqual(state['memory_source']['loading_policy'],LOADING_POLICY)
+        state=json.loads((out/'00_输入审计/生产流程.json').read_text(encoding='utf-8-sig'));self.assertEqual(state['memory_source']['loading_policy'],LOADING_POLICY)
 
     def test_capacity_counters_are_independent_and_runtime_capped(self):
         config = read_config(self.path)
@@ -400,12 +400,12 @@ class ConfigTests(unittest.TestCase):
 
     def test_init_binds_sources_without_approving_or_overwriting(self):
         output=self.root/'out'
-        command=[sys.executable,str(SCRIPTS/'init_preproduction.py'),'--config',str(self.path),'--output',str(output),'--book','UNIT','--episode','E001','--batch-size','3']
+        command=[sys.executable, '-X', 'utf8',str(SCRIPTS/'init_preproduction.py'),'--config',str(self.path),'--output',str(output),'--book','UNIT','--episode','E001','--batch-size','3']
         result=subprocess.run(command,capture_output=True); self.assertEqual(result.returncode,0,result.stderr)
-        state_path=output/'00_输入审计/生产流程.json'; state=json.loads(state_path.read_text())
+        state_path=output/'00_输入审计/生产流程.json'; state=json.loads(state_path.read_text(encoding='utf-8-sig'))
         self.assertEqual(state['batch_size'],3); self.assertEqual(state['gates'],{})
         for path in ['01_镜头改编_CANDIDATE/镜头改编表.json','04_B提示词包_CANDIDATE/全话提示词索引.json']:
-            self.assertEqual(json.loads((output/path).read_text())['memory_source'],state['memory_source'])
+            self.assertEqual(json.loads((output/path).read_text(encoding='utf-8-sig'))['memory_source'],state['memory_source'])
         before=state_path.read_bytes(); subprocess.run(command,check=True,capture_output=True); self.assertEqual(state_path.read_bytes(),before)
 
     def test_smaller_batch_still_preserves_first_five_boundary(self):
@@ -431,7 +431,7 @@ class MemoryGateIntegrationTests(unittest.TestCase):
         self.sync()
 
     def sync(self):
-        (self.root/'P001/prompt.txt').write_text(self.panel['prompt'])
+        (self.root/'P001/prompt.txt').write_text(self.panel['prompt'], encoding='utf-8', newline='\n')
         self.h.f.write('P001/提示词.json',self.panel)
         shots={**self.h.manifest,'panels':self.h.shots}
         self.state['shot_manifest']=self.h.f.write('shots.json',shots)
@@ -447,9 +447,9 @@ class MemoryGateIntegrationTests(unittest.TestCase):
         self.assertIn('spatial_diagram',' '.join(result['errors']))
 
     def test_loading_extension_keeps_actual_full_preflight_and_stage_checks(self):
-        index_path=self.root/'library/记忆索引.json';data=json.loads(index_path.read_text())
+        index_path=self.root/'library/记忆索引.json';data=json.loads(index_path.read_text(encoding='utf-8-sig'))
         data['loading_policy']=LOADING_POLICY;data['rules'][0].update(load_policy='stage_baseline',version='2')
-        index_path.write_text(json.dumps(data));self.source['loading_policy']=LOADING_POLICY
+        index_path.write_text(json.dumps(data), encoding='utf-8', newline='\n');self.source['loading_policy']=LOADING_POLICY
         self.panel['memory_applications']['generation']=[applied(self.source,'generation',self.panel,self.root)]
         self.h.shots[0]['memory_applications']['shot_design']=[applied(self.source,'shot_design',self.panel,self.root)];self.sync()
         _,cache=load_selected(self.source,loading_selection(self.source,'generation'),{},'run','worker')
@@ -461,11 +461,11 @@ class MemoryGateIntegrationTests(unittest.TestCase):
     def test_batch_preflight_and_source_binding_cannot_bypass(self):
         self.state['execution_mode']='batch5_v1'; self.h.manifest['execution_mode']='batch5_v1'
         for p in [self.panel,*self.h.shots]: p.update(generation_dependencies=[],requires_state_review=False)
-        self.sync(); shots=json.loads((self.root/'shots.json').read_text())
+        self.sync(); shots=json.loads((self.root/'shots.json').read_text(encoding='utf-8-sig'))
         self.state['batch_plan']=self.h.f.write('plan.json',build_plan(self.state,shots))
         result=evaluate(self.state,self.root,'generate','P001'); self.assertEqual(result['status'],'PASS',result)
         self.h.manifest.pop('memory_source'); self.sync()
-        self.state['batch_plan']=self.h.f.write('plan.json',build_plan(self.state,json.loads((self.root/'shots.json').read_text())))
+        self.state['batch_plan']=self.h.f.write('plan.json',build_plan(self.state,json.loads((self.root/'shots.json').read_text(encoding='utf-8-sig'))))
         self.assertEqual(evaluate(self.state,self.root,'generate','P001')['status'],'HOLD')
 
     def test_qa_scaffold_outputs_hash_bound_unreviewed_memory(self):

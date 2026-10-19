@@ -458,7 +458,7 @@ def main():
         plan = build_plan(state, shots, source)
         dest = Path(args.write_plan).resolve()
         dest.relative_to(root)
-        with dest.open("x", encoding="utf-8") as output:
+        with dest.open("x", encoding="utf-8", newline='\n') as output:
             json.dump(plan, output, ensure_ascii=False, indent=2)
             output.write("\n")
         print(json.dumps({"status": "PLAN_WRITTEN_NOT_APPROVED", "path": str(dest)}, ensure_ascii=False))
@@ -469,4 +469,6 @@ def main():
 
 
 if __name__ == "__main__":
+    from platform_io import configure_stdio
+    configure_stdio()
     raise SystemExit(main())

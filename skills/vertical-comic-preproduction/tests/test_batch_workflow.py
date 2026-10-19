@@ -25,7 +25,7 @@ class BatchTests(unittest.TestCase):
     def convert(self, state):
         state["execution_mode"] = "batch5_v1"
         state["batch_reviews"] = {}
-        shots = json.loads((self.root / state["shot_manifest"]["path"]).read_text())
+        shots = json.loads((self.root / state["shot_manifest"]["path"]).read_text(encoding='utf-8-sig'))
         shots["execution_mode"] = "batch5_v1"
         for p in shots["panels"]:
             p.update(generation_dependencies=[], requires_state_review=False)
@@ -51,7 +51,7 @@ class BatchTests(unittest.TestCase):
             "execution_mode": "batch5_v1", "book_id": "UNIT", "episode_id": "E000", "panels": [self.h.shots[index]]})
 
     def reviewed(self, state, batch_index=0):
-        plan = json.loads((self.root / "batch-plan.json").read_text())
+        plan = json.loads((self.root / "batch-plan.json").read_text(encoding='utf-8-sig'))
         batch = plan["batches"][batch_index]
         records = {r["panel_id"]: r for r in state["panels"]}
         prior = plan["batches"][batch_index-1]["panel_ids"] if batch_index else []
@@ -121,7 +121,7 @@ class BatchTests(unittest.TestCase):
 
     def test_short_last_batch_and_no_unnecessary_human_batch_gate(self):
         state = self.state(12)
-        plan = json.loads((self.root / "batch-plan.json").read_text())
+        plan = json.loads((self.root / "batch-plan.json").read_text(encoding='utf-8-sig'))
         self.assertEqual([len(b["panel_ids"]) for b in plan["batches"]], [5, 5, 2])
         for i in range(10):
             self.completed(state, i)
@@ -132,7 +132,7 @@ class BatchTests(unittest.TestCase):
 
     def test_return_after_basis_change_is_blocked(self):
         state = self.state()
-        (self.root / "basis.json").write_text("{}")
+        (self.root / "basis.json").write_text("{}", encoding='utf-8', newline='\n')
         self.assertEqual(self.routed(state, "generate", "P001")["status"], "HOLD")
 
     def test_new_state_inside_pilot_gets_singleton_and_review(self):
@@ -140,7 +140,7 @@ class BatchTests(unittest.TestCase):
         for p in self.h.shots[2:]:
             p["visual_state_keys"] += ["costume:NEW"]
         self.replan(state)
-        plan = json.loads((self.root / "batch-plan.json").read_text())
+        plan = json.loads((self.root / "batch-plan.json").read_text(encoding='utf-8-sig'))
         self.assertEqual([b["panel_ids"] for b in plan["batches"][:3]], [["P001", "P002"], ["P003"], ["P004", "P005"]])
         for i in range(3):
             self.completed(state, i)
@@ -154,7 +154,7 @@ class BatchTests(unittest.TestCase):
         state = self.state()
         self.h.shots[1]["requires_state_review"] = True
         self.replan(state)
-        plan = json.loads((self.root / "batch-plan.json").read_text())
+        plan = json.loads((self.root / "batch-plan.json").read_text(encoding='utf-8-sig'))
         self.assertEqual(plan["batches"][1]["panel_ids"], ["P002"])
 
     def test_dependency_waits_for_real_predecessor_review(self):
@@ -173,7 +173,7 @@ class BatchTests(unittest.TestCase):
 
     def test_edited_plan_cannot_pack_six_or_reorder(self):
         state = self.state()
-        plan = json.loads((self.root / "batch-plan.json").read_text())
+        plan = json.loads((self.root / "batch-plan.json").read_text(encoding='utf-8-sig'))
         plan["batches"][0]["panel_ids"].append("P006")
         state["batch_plan"] = self.write("batch-plan.json", plan)
         self.assertEqual(self.routed(state)["next_action"], "REBUILD_BATCH_PLAN")
@@ -243,7 +243,7 @@ class BatchTests(unittest.TestCase):
         shutil.copytree(self.root, other_root)
         other = copy.deepcopy(state)
         other["episode_id"] = "E001"
-        (other_root / state_name).write_text(json.dumps(other))
+        (other_root / state_name).write_text(json.dumps(other), encoding='utf-8', newline='\n')
         jobs = [{"job_id": "J0", "episode_id": "E000", "root": str(self.root)},
                 {"job_id": "J1", "episode_id": "E001", "root": str(other_root)}]
         for job in jobs:
@@ -284,11 +284,11 @@ class BatchTests(unittest.TestCase):
         control["epoch"] = 1
         self.write("control.json", control)
         state_path = other_root / "00_输入审计/生产流程.json"
-        other = json.loads(state_path.read_text())
+        other = json.loads(state_path.read_text(encoding='utf-8-sig'))
         new_image = other_root / "changed-output.json"
-        new_image.write_text('{"SYNTHETIC_CHANGED":true}')
+        new_image.write_text('{"SYNTHETIC_CHANGED":true}', encoding='utf-8', newline='\n')
         other["panels"][0]["output"] = {"path": new_image.name, "sha256": digest(new_image)}
-        state_path.write_text(json.dumps(other))
+        state_path.write_text(json.dumps(other), encoding='utf-8', newline='\n')
         with patch("batch_workflow.qa_errors", return_value=[]):
             self.assertTrue(cross_episode_errors(context))
     def test_real_batch_preflight_through_qa_and_delivery(self):
@@ -299,14 +299,14 @@ class BatchTests(unittest.TestCase):
         manifest["execution_mode"] = "batch5_v1"
         self.write("P001/提示词.json", panel)
         record = state["panels"][0]
-        shots = json.loads((self.root / "shots.json").read_text())
+        shots = json.loads((self.root / "shots.json").read_text(encoding='utf-8-sig'))
         record["shot_subset"] = self.write("shot-subset.json", shots)
         context = {"control_file": str(self.root / "control.json"), "job_id": "UNIT-JOB", "worker_id": "UNIT-WORKER", "epoch": 1}
         state["parallel_context"] = context
         receipt = {"job_id": "UNIT-JOB", "worker_id": "UNIT-WORKER", "epoch": 1, "permit_id": "UNIT-PERMIT"}
         manifest["dispatch_receipt"] = receipt
         record["package_manifest"] = self.write("全话提示词索引.json", manifest)
-        basis = json.loads((self.root / state["visual_basis"]["path"]).read_text())
+        basis = json.loads((self.root / state["visual_basis"]["path"]).read_text(encoding='utf-8-sig'))
         style_ref = self.write("shared-style.json", {"book_id": "UNIT", "style": basis["style"]})
         registry_ref = self.write("shared-registry.json", manifest["identity_registry"])
         shared = [dict(style_ref, role="style_basis"), dict(registry_ref, role="state_registry"), panel["reference_images"][-1]]

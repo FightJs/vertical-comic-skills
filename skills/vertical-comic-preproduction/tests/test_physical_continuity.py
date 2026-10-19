@@ -140,11 +140,11 @@ class PhysicalContinuityTests(unittest.TestCase):
         from rule_memory import select,application_errors
         with tempfile.TemporaryDirectory() as d:
             root=Path(d);source=library(root/'rules');index_path=root/'rules/记忆索引.json'
-            index=json.loads(index_path.read_text());r=index['rules'][0]
+            index=json.loads(index_path.read_text(encoding='utf-8-sig'));r=index['rules'][0]
             r.update(id='MEM-010',version='2.0.0');r['trigger']={'any_tags':['adjacent_panel_pair'],'any_visual_terms':[]}
             checks=['adjacent_pair_basis','narrative_coverage','framing_economy','physical_continuity_preserved']
             for req in r['requirements'].values():req.update(checks=checks,artifacts=[],prompt_constraints=False)
-            index_path.write_text(json.dumps(index))
+            index_path.write_text(json.dumps(index), encoding='utf-8', newline='\n')
             p={'panel_id':'P002','memory_tags':['adjacent_panel_pair']};match=select(source,'shot_design',p)[0]
             app={'memory_id':'MEM-010','rule_version':r['version'],'rule_signature':match['rule_signature'],
                  'rule_sha256':r['file']['sha256'],'decision':'APPLIED','reviewer':'SYNTHETIC','evidence':'SYNTHETIC same-scale reply',
@@ -153,7 +153,7 @@ class PhysicalContinuityTests(unittest.TestCase):
             self.assertEqual(application_errors(source,'shot_design',p,root),[])
             r['version']='1.1.0'
             for req in r['requirements'].values():req['checks']=['camera_view_distinct','shot_scale_distinct']
-            index_path.write_text(json.dumps(index))
+            index_path.write_text(json.dumps(index), encoding='utf-8', newline='\n')
             self.assertTrue(application_errors(source,'shot_design',p,root))
 
 

@@ -44,16 +44,19 @@ def export_crop(source,output,design):
         output.parent.mkdir(parents=True,exist_ok=True)
         with output.open('xb') as f:im.crop(box).save(f,format='PNG')
     report={'status':'CANDIDATE_REQUIRES_ACTUAL_QA','source_image':str(source),'source_image_sha256':actual,'output':str(output),'output_sha256':hashlib.sha256(output.read_bytes()).hexdigest(),'design':design,'image_calls':0,'production_approved':False}
-    with output.with_suffix('.crop.json').open('x') as f:json.dump(report,f,ensure_ascii=False,indent=2)
+    with output.with_suffix('.crop.json').open('x', encoding='utf-8', newline='\n') as f:json.dump(report,f,ensure_ascii=False,indent=2)
     return report
 
 def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--diagnosis');p.add_argument('--record');p.add_argument('--crop-source');p.add_argument('--crop-design');p.add_argument('--output');a=p.parse_args()
     if a.crop_source:
         if not a.crop_design or not a.output or a.diagnosis or a.record:p.error('裁切仅用crop-source/crop-design/output')
-        value=export_crop(a.crop_source,a.output,json.loads(Path(a.crop_design).read_text()))
+        value=export_crop(a.crop_source,a.output,json.loads(Path(a.crop_design).read_text(encoding='utf-8-sig')))
     else:
         if not a.diagnosis or not a.record or a.output:p.error('诊断仅用diagnosis/record，只读输出')
-        value=plan(json.loads(Path(a.diagnosis).read_text()),json.loads(Path(a.record).read_text()))
+        value=plan(json.loads(Path(a.diagnosis).read_text(encoding='utf-8-sig')),json.loads(Path(a.record).read_text(encoding='utf-8-sig')))
     print(json.dumps(value,ensure_ascii=False,indent=2))
-if __name__=='__main__':main()
+if __name__=='__main__':
+    from platform_io import configure_stdio
+    configure_stdio()
+    main()

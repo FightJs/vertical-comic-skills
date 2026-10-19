@@ -4,18 +4,17 @@
 No login is required for update/export. No credentials are included in a bundle.
 """
 from pathlib import Path
+from platform_io import codex_home, portable_relative, atomic_json
 import argparse,base64,copy,hashlib,json,os,re,shutil,subprocess,sys,tempfile,uuid,zipfile
 from builtin_memory import ROOT,read,digest,resolve,source
 from rule_memory import source_index
 
-STATE=Path.home()/'.codex/comic/rule-contributions'
+STATE=codex_home()/'comic/rule-contributions'
 
 
 def write(p,value):
     p=Path(p);p.parent.mkdir(parents=True,exist_ok=True)
-    temp=p.with_name(p.name+'.'+uuid.uuid4().hex+'.tmp')
-    try:temp.write_text(json.dumps(value,ensure_ascii=False,indent=2)+'\n');os.replace(temp,p)
-    finally:temp.unlink(missing_ok=True)
+    atomic_json(p,value)
 
 
 def portable(text):
@@ -30,7 +29,7 @@ def snapshot(library_root=None):
         if not r['id'].startswith('USR-'):raise ValueError('用户增补使用USR-前缀，不能改内置MEM规则')
         p=user/r['file']['path']
         if p.is_symlink() or not p.resolve().is_relative_to(user.resolve()) or digest(p)!=r['file']['sha256']:raise ValueError('增补正文路径或哈希错误')
-        portable(p.read_text());payload[r['file']['path']]=p.read_bytes()
+        portable(p.read_text(encoding='utf-8-sig'));payload[r['file']['path']]=p.read_bytes()
     portable(json.dumps(index,ensure_ascii=False));payload['记忆索引.json']=(json.dumps(index,ensure_ascii=False,sort_keys=True,indent=2)+'\n').encode()
     token=hashlib.sha256(b''.join(k.encode()+b'\0'+hashlib.sha256(v).digest() for k,v in sorted(payload.items()))).hexdigest()
     return index,payload,token
@@ -58,7 +57,7 @@ def enqueue(library_root=None,state_root=None):
 
 
 def update(rule_file,body_file,review_file,*,library_root=None,state_root=None):
-    root=Path(library_root or ROOT).resolve();user=root/'用户增补';rule=read(rule_file);review=read(review_file);body=Path(body_file).read_text()
+    root=Path(library_root or ROOT).resolve();user=root/'用户增补';rule=read(rule_file);review=read(review_file);body=Path(body_file).read_text(encoding='utf-8-sig')
     if (review.get('source_kind')!='user_message' or not review.get('source_locator') or not review.get('authorization') or
         review.get('portable') is not True or review.get('contains_story_facts') is not False):raise ValueError('缺真实维护授权及通用性审查；生产不得自动回写')
     if not re.fullmatch(r'USR-[A-Za-z0-9_-]+',rule.get('id','')):raise ValueError('用户规则ID须为USR-前缀')
@@ -75,7 +74,7 @@ def update(rule_file,body_file,review_file,*,library_root=None,state_root=None):
         stage=Path(tempfile.mkdtemp(prefix='.user-rules-',dir=root));shutil.copytree(user,stage/'用户增补')
         index=read(user/'记忆索引.json');old=next((r for r in index['rules'] if r['id']==rule['id']),None)
         if old and old['version']==rule['version']:raise ValueError('修改既有规则须更新版本，不原地重签同一版本')
-        filename='规则/'+rule['id']+'.md';p=stage/'用户增补'/filename;p.parent.mkdir(parents=True,exist_ok=True);p.write_text(body)
+        filename='规则/'+rule['id']+'.md';p=stage/'用户增补'/filename;p.parent.mkdir(parents=True,exist_ok=True);p.write_text(body, encoding='utf-8', newline='\n')
         rule={**rule,'file':{'path':filename,'sha256':digest(p)}}
         index['rules']=[r for r in index['rules'] if r['id']!=rule['id']]+[rule];write(stage/'用户增补/记忆索引.json',index)
         # Reuse the strict library schema and test a real built-in/user merge before activation.
@@ -118,6 +117,7 @@ def import_package(archive,state_root=None):
             infos=z.infolist();names=[i.filename for i in infos]
             if len(set(n.casefold() for n in names))!=len(names) or sum(i.file_size for i in infos)>4*1024*1024:raise ValueError('增补ZIP重复成员或超过4MiB')
             for info in infos:
+                portable_relative(info.filename)
                 name=info.filename
                 if not name.startswith('规则增补/') or '\\' in name or '..' in Path(name).parts or info.is_dir() or ((info.external_attr>>16)&0o170000)==0o120000:raise ValueError('增补ZIP成员路径不合法')
             manifest=json.loads(z.read('规则增补/manifest.json'));rows=manifest['files']
@@ -143,7 +143,7 @@ def import_package(archive,state_root=None):
 def api(path,method='GET',data=None):
     cmd=['gh','api',path,'--method',method]
     if data is not None:cmd+=['--input','-']
-    proc=subprocess.run(cmd,input=json.dumps(data) if data is not None else None,capture_output=True,text=True,timeout=30)
+    proc=subprocess.run(cmd,input=json.dumps(data) if data is not None else None,capture_output=True,text=True,timeout=30, encoding='utf-8')
     if proc.returncode:raise ValueError('GitHub不可用或无权限；保留本地待同步状态:'+proc.stderr[-350:])
     return json.loads(proc.stdout) if proc.stdout.strip() else {}
 
@@ -237,4 +237,7 @@ def main():
         else:result=enqueue()
         print(json.dumps(result,ensure_ascii=False));return 0
     except (OSError,ValueError,KeyError,TypeError) as e:print(json.dumps({'status':'HOLD','error':str(e)},ensure_ascii=False));return 1
-if __name__=='__main__':raise SystemExit(main())
+if __name__=='__main__':
+    from platform_io import configure_stdio
+    configure_stdio()
+    raise SystemExit(main())

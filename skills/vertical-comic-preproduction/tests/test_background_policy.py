@@ -64,7 +64,7 @@ def actual_background_packet(test):
     p['visual_evidence_context']=context_for(b,p)
     p['visual_execution_block']=execution_block(p)
     p['prompt']=original_prompt+'\n'+p['visual_execution_block']
-    (fx.root/'P001/prompt.txt').write_text(p['prompt'])
+    (fx.root/'P001/prompt.txt').write_text(p['prompt'], encoding='utf-8', newline='\n')
     errors,_=validate_panel(p,fx.root);test.assertEqual(errors,[])
     return fx,p
 
@@ -201,11 +201,11 @@ class BackgroundPolicyTests(unittest.TestCase):
         fx.manifest['visual_evidence_policy']=POLICY
         fx.write('manifest.json',fx.manifest)
         output=fx.root/'bg-qa'
-        subprocess.run([sys.executable,'-B',str(BASE/'scripts/make_generation_qa.py'),
+        subprocess.run([sys.executable, '-X', 'utf8','-B',str(BASE/'scripts/make_generation_qa.py'),
             '--package',str(fx.root),'--manifest','manifest.json','--images',str(fx.root),
             '--image-path',str(fx.root/fx.refs[2]['path']),'--output',str(output),
             '--skip-contact-sheet'],check=True,capture_output=True)
-        report=json.loads((output/'生成图QA报告.json').read_text())
+        report=json.loads((output/'生成图QA报告.json').read_text(encoding='utf-8-sig'))
         self.assertEqual(report['errors'],[])
         row=report['panels'][0]
         self.assertEqual(row['visual_evidence_review']['background_observation']['observed'],'')
@@ -231,27 +231,27 @@ class BackgroundPolicyTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp);snapshot=create(root/'snapshot',memory_source=memory_source(config))
             self.assertEqual(verify(snapshot)['data']['policy'],'batch_snapshot_v1')
-            subprocess.run([sys.executable,'-B',str(BASE/'scripts/init_preproduction.py'),
+            subprocess.run([sys.executable, '-X', 'utf8','-B',str(BASE/'scripts/init_preproduction.py'),
                 '--config',config_path(),
                 '--runtime-snapshot',snapshot['path'],'--book','SYNTHETIC','--episode','E021',
                 '--output',str(root/'new-rv')],check=True,capture_output=True)
             for name in ('00_输入审计/生产流程.json','01_镜头改编_CANDIDATE/镜头改编表.json','04_B提示词包_CANDIDATE/全话提示词索引.json'):
-                self.assertEqual(json.loads((root/'new-rv'/name).read_text())['background_policy'],BACKGROUND_POLICY)
-            state=json.loads((root/'new-rv/00_输入审计/生产流程.json').read_text())
+                self.assertEqual(json.loads((root/'new-rv'/name).read_text(encoding='utf-8-sig'))['background_policy'],BACKGROUND_POLICY)
+            state=json.loads((root/'new-rv/00_输入审计/生产流程.json').read_text(encoding='utf-8-sig'))
             self.assertEqual(state['gates'],{})
             self.assertEqual(state['panels'],[])
 
     def test_config_free_new_run_opts_in_but_old_config_does_not(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp)
-            subprocess.run([sys.executable,'-B',str(BASE/'scripts/init_preproduction.py'),'--book','SYNTHETIC','--episode','E000','--output',str(root/'fresh')],check=True,capture_output=True)
-            state=json.loads((root/'fresh/00_输入审计/生产流程.json').read_text())
+            subprocess.run([sys.executable, '-X', 'utf8','-B',str(BASE/'scripts/init_preproduction.py'),'--book','SYNTHETIC','--episode','E000','--output',str(root/'fresh')],check=True,capture_output=True)
+            state=json.loads((root/'fresh/00_输入审计/生产流程.json').read_text(encoding='utf-8-sig'))
             self.assertEqual(state['background_policy'],BACKGROUND_POLICY)
             from usage_config import read_config
-            config=json.loads(Path(config_path()).read_text());config.pop('background');config['runtime'].pop('snapshot_policy')
-            cp=root/'old-config.json';cp.write_text(json.dumps(config))
+            config=json.loads(Path(config_path()).read_text(encoding='utf-8-sig'));config.pop('background');config['runtime'].pop('snapshot_policy')
+            cp=root/'old-config.json';cp.write_text(json.dumps(config), encoding='utf-8', newline='\n')
             self.assertNotIn('background',read_config(cp))
-            subprocess.run([sys.executable,'-B',str(BASE/'scripts/init_preproduction.py'),'--config',str(cp),'--book','SYNTHETIC','--episode','E021','--output',str(root/'legacy')],check=True,capture_output=True)
-            self.assertNotIn('background_policy',json.loads((root/'legacy/00_输入审计/生产流程.json').read_text()))
+            subprocess.run([sys.executable, '-X', 'utf8','-B',str(BASE/'scripts/init_preproduction.py'),'--config',str(cp),'--book','SYNTHETIC','--episode','E021','--output',str(root/'legacy')],check=True,capture_output=True)
+            self.assertNotIn('background_policy',json.loads((root/'legacy/00_输入审计/生产流程.json').read_text(encoding='utf-8-sig')))
 
 if __name__=='__main__':unittest.main()

@@ -17,7 +17,7 @@ class EpisodeRepairProvenanceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp)
             def write(name,value):
-                path=root/name;path.write_text(json.dumps(value));return {'path':name,'sha256':digest(path)}
+                path=root/name;path.write_text(json.dumps(value), encoding='utf-8', newline='\n');return {'path':name,'sha256':digest(path)}
             old={'panel_id':'P001','status':'VISUAL_FAIL','round_id':1,'attempt_id':'first'}
             original={'execution_mode':'episode_async_v1','round_context':{
                 'batch_id':'EPISODE','round_id':2,'attempt_id':'second'},

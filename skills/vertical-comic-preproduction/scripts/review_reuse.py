@@ -105,7 +105,7 @@ def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--state',required=True);p.add_argument('--panel',required=True);p.add_argument('--write',required=True)
     a=p.parse_args()
     try:
-        path=Path(a.state).resolve();root=path.parent.parent;state=json.loads(path.read_text());record=next(r for r in state['panels'] if r['panel_id']==a.panel)
+        path=Path(a.state).resolve();root=path.parent.parent;state=json.loads(path.read_text(encoding='utf-8-sig'));record=next(r for r in state['panels'] if r['panel_id']==a.panel)
         from staged_workflow import qa_errors
         errors=qa_errors(root,record)
         if errors:raise ValueError(';'.join(errors))
@@ -113,9 +113,12 @@ def main():
                'output':record['output'],'qa_report':record['qa_report'],'package_manifest':record['package_manifest'],
                'status':'REUSE_RECORDED_VISUAL_QA','user_approval':'NOT_GRANTED','scope':'Original QA only; current scope/basis/dispatch gates still required'}
         dest=Path(a.write).resolve();dest.relative_to(root)
-        with dest.open('x',encoding='utf-8') as f:json.dump(value,f,ensure_ascii=False,indent=2);f.write('\n')
+        with dest.open('x',encoding='utf-8', newline='\n') as f:json.dump(value,f,ensure_ascii=False,indent=2);f.write('\n')
         print(json.dumps(value,ensure_ascii=False));return 0
     except (OSError,ValueError,TypeError,KeyError,StopIteration) as exc:
         print(json.dumps({'status':'HOLD','errors':[str(exc)]},ensure_ascii=False));return 1
 
-if __name__=='__main__':raise SystemExit(main())
+if __name__=='__main__':
+    from platform_io import configure_stdio
+    configure_stdio()
+    raise SystemExit(main())

@@ -18,7 +18,7 @@ class FrameRatios(unittest.TestCase):
         self.state={'book_id':'UNIT','episode_id':'E000','source_snapshot':self.write('snapshot.json',self.source),'frame_ratio_policy':POLICY}
         self.plan={**template(self.state,self.source),'panels':self.rows};self.state['frame_ratio_plan']=self.write('ratio-plan.json',self.plan)
     def write(self,name,data):
-        path=self.root/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_text(json.dumps(data,ensure_ascii=False));return {'path':name,'sha256':digest(path)}
+        path=self.root/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_text(json.dumps(data,ensure_ascii=False), encoding='utf-8', newline='\n');return {'path':name,'sha256':digest(path)}
     def test_previous_30_panel_distribution_remains_valid(self):
         self.assertEqual(plan_errors(self.state,self.root),[])
         stats=statistics(self.rows);self.assertEqual(stats['portrait_count'],23);self.assertEqual(stats['minimum_portrait_count'],23);self.assertEqual(stats['counts'],{'9:16':8,'3:4':8,'4:5':7,'1:1':3,'5:4':2,'16:9':2})
@@ -41,7 +41,7 @@ class FrameRatios(unittest.TestCase):
     def test_source_order_scope_and_hash_are_bound(self):
         self.plan['panels'][0],self.plan['panels'][1]=self.plan['panels'][1],self.plan['panels'][0];self.state['frame_ratio_plan']=self.write('ratio-plan.json',self.plan);self.assertTrue(plan_errors(self.state,self.root))
         self.plan['panels']=self.rows;self.plan['episode_id']='OTHER';self.state['frame_ratio_plan']=self.write('ratio-plan.json',self.plan);self.assertTrue(plan_errors(self.state,self.root))
-        (self.root/'ratio-plan.json').write_text('{}');self.assertTrue(plan_errors(self.state,self.root))
+        (self.root/'ratio-plan.json').write_text('{}', encoding='utf-8', newline='\n');self.assertTrue(plan_errors(self.state,self.root))
     def test_half_two_does_not_reset_episode_portrait_fraction(self):
         half=self.rows[15:];self.assertEqual(statistics(half)['portrait_count'],11)
         self.assertEqual(plan_errors(self.state,self.root),[]);self.assertEqual(panel_errors(self.state,self.root,half),[])
@@ -83,7 +83,7 @@ class FrameRatios(unittest.TestCase):
         shot_ref=lifecycle.write(root,'H001-shots.json',shots);s['half_inputs']['H001']['shot_manifest']=shot_ref
         audit=lifecycle.read(root,s['half_inputs']['H001']['semantic_audit']);audit['shot_manifest']=shot_ref;audit_ref=lifecycle.write(root,'semantic.json',audit);s['half_inputs']['H001']['semantic_audit']=audit_ref
         s['half_gates']['H001']['shot_design']=lifecycle.approve([s['half_inputs']['H001']['visual_basis'],shot_ref,audit_ref,ref]);s['toolchain']=toolchain()
-        (root/'P001/prompt.txt').write_text(p['prompt']);lifecycle.write(root,'P001/提示词.json',p)
+        (root/'P001/prompt.txt').write_text(p['prompt'], encoding='utf-8', newline='\n');lifecycle.write(root,'P001/提示词.json',p)
         s['panels'][0]['package_manifest']=lifecycle.write(root,'全话提示词索引.json',m);s['panels'][0]['shot_subset']=lifecycle.write(root,'shot-subset.json',{**shots,'panels':[shots['panels'][0]]})
         result=evaluate(s,root,'generate','P001');self.assertEqual(result['next_action'],'READY_FOR_HALF_PANEL',result)
         m.pop('frame_ratio_policy');s['panels'][0]['package_manifest']=lifecycle.write(root,'missing-ratio-manifest.json',m)

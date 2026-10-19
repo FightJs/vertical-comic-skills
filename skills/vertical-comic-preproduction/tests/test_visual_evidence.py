@@ -64,7 +64,7 @@ def actual_fixture(test):
     h=ActualHalfGateTests('test_real_qa_round_report_and_first_half_approval')
     h.setUp();test.addCleanup(h.doCleanups)
     extra,template=fixture();p=h.panel
-    basis=json.loads((h.root/h.state['visual_basis']['path']).read_text())
+    basis=json.loads((h.root/h.state['visual_basis']['path']).read_text(encoding='utf-8-sig'))
     layout=extra['scene_layouts']['HALL']
     layout['relations'][0]['reference_sha256']=p['reference_images'][0]['sha256']
     detail=extra['appearance_details']['earring']
@@ -74,7 +74,7 @@ def actual_fixture(test):
     p['visual_evidence_context']=context_for(basis,p)
     p['visual_execution_block']=execution_block(p)
     p['prompt']+='\n'+p['visual_execution_block']
-    (h.root/'P001/prompt.txt').write_text(p['prompt'])
+    (h.root/'P001/prompt.txt').write_text(p['prompt'], encoding='utf-8', newline='\n')
     h.h.shots[0].update(copy.deepcopy(p))
     h.h.manifest['visual_evidence_policy']=POLICY
     h.state['visual_evidence_policy']=POLICY
@@ -85,7 +85,7 @@ def actual_fixture(test):
 
 
 def finish_quality_review(h, record, *, failure=False):
-    qa=json.loads((h.root/record['qa_report']['path']).read_text());item=qa['panels'][0]
+    qa=json.loads((h.root/record['qa_report']['path']).read_text(encoding='utf-8-sig'));item=qa['panels'][0]
     visual=reviewed(h.panel)['visual_evidence_review']
     for row in visual['observations']:
         row['view'].update(image_sha256=item['image_sha256'],region=[0,0,90,160])
@@ -248,7 +248,7 @@ class VisualEvidenceTests(unittest.TestCase):
             'selection_reason':'SYNTHETIC original returned PNG','preserved_features':['保留原脸型与耳环']}
         panel['repair_focus']={'failed_transfers':['pose']}
         panel['prompt']+='\n修正手指结构\n保留原脸型与耳环'
-        (h.root/panel['prompt_file']).write_text(panel['prompt'])
+        (h.root/panel['prompt_file']).write_text(panel['prompt'], encoding='utf-8', newline='\n')
         h.h.f.write(panel['panel_json_file'],panel)
         packet={**h.h.manifest,'round_context':{'batch_id':'EPISODE','round_id':2,'attempt_id':'UNIT-R2'},'panels':[panel]}
         ref=h.h.f.write('repair-packet.json',packet)
@@ -256,9 +256,9 @@ class VisualEvidenceTests(unittest.TestCase):
             'route':'targeted_image_repair','reviewer':'SYNTHETIC','evidence':'SYNTHETIC hand failure',
             'repair_constraints':['修正手指结构'],'new_attempt_id':'UNIT-R2','new_package_manifest':ref,'new_shot_subset':old['shot_subset']}
         h.h.f.write('repair-auth.json',auth)
-        path=h.root/'00_输入审计/生产流程.json';path.parent.mkdir(exist_ok=True);path.write_text(json.dumps(h.state))
+        path=h.root/'00_输入审计/生产流程.json';path.parent.mkdir(exist_ok=True);path.write_text(json.dumps(h.state), encoding='utf-8', newline='\n')
         self.assertEqual(authorize_episode_repair(path,digest(path),'repair-auth.json')['status'],'REPAIR_AUTHORIZED')
-        state=json.loads(path.read_text());row=state['panels'][0]
+        state=json.loads(path.read_text(encoding='utf-8-sig'));row=state['panels'][0]
         self.assertEqual(input_errors(state,h.root,row,h.h.shots[0],basis,{'P001':row}),[])
         # Input gate must reject using a different panel's or unrecorded base.
         panel['repair_source']['source_attempt_id']='OTHER-PANEL'
@@ -277,7 +277,7 @@ class VisualEvidenceTests(unittest.TestCase):
             'status':'PASS','observed':'SYNTHETIC invented comparison'}]
         record['qa_report']=h.h.f.write('invented-comparison.json',qa)
         record['status']='GENERATED'
-        path=h.root/'00_输入审计/生产流程.json';path.parent.mkdir(exist_ok=True);path.write_text(json.dumps(h.state))
+        path=h.root/'00_输入审计/生产流程.json';path.parent.mkdir(exist_ok=True);path.write_text(json.dumps(h.state), encoding='utf-8', newline='\n')
         before=path.read_bytes()
         with self.assertRaises(ValueError):
             commit_updates(path,digest(path),[{'panel_id':'P001','attempt_id':record['attempt_id'],
@@ -323,11 +323,11 @@ class VisualEvidenceTests(unittest.TestCase):
         p['visual_evidence_context']=context_for(basis,p)
         p['visual_execution_block']=execution_block(p)
         p['prompt']=final_prompt(p['reference_usage_block']+'\n'+p['visual_execution_block'],p['negative_prompt'])
-        (fx.root/'P001/prompt.txt').write_text(p['prompt'])
+        (fx.root/'P001/prompt.txt').write_text(p['prompt'], encoding='utf-8', newline='\n')
         errors,plan=validate_panel(p,fx.root)
         self.assertEqual(errors,[]);self.assertIn(p['visual_execution_block'],plan['arguments']['prompt'])
         p['prompt']=final_prompt(p['reference_usage_block'],p['negative_prompt'])
-        (fx.root/'P001/prompt.txt').write_text(p['prompt'])
+        (fx.root/'P001/prompt.txt').write_text(p['prompt'], encoding='utf-8', newline='\n')
         errors,plan=validate_panel(p,fx.root)
         self.assertIsNone(plan);self.assertTrue(any('具体空间' in e for e in errors))
 
@@ -340,7 +340,7 @@ class VisualEvidenceTests(unittest.TestCase):
         # Use the existing full reference/continuity fixture; all pixels are synthetic test data.
         actual=fx.panel
         actual.update(visual_evidence_policy=POLICY,visual_evidence=p['visual_evidence'],visual_evidence_context=p['visual_evidence_context'])
-        manifest_path=fx.root/'manifest.json';manifest_path.write_text(json.dumps(fx.manifest))
+        manifest_path=fx.root/'manifest.json';manifest_path.write_text(json.dumps(fx.manifest), encoding='utf-8', newline='\n')
         image=fx.root/fx.refs[2]['path'];item=reviewed(actual)
         item.update(panel_id='P001',image=str(image),image_sha256=digest(image),image_size=[90,160],ratio_check='PASS',dimension_review=dimension_template(actual))
         for row in item['visual_evidence_review']['observations']:
@@ -356,11 +356,11 @@ class VisualEvidenceTests(unittest.TestCase):
         script=Path(__file__).resolve().parents[1]/'scripts/init_preproduction.py'
         with tempfile.TemporaryDirectory() as d:
             root=Path(d)/'episode'
-            cmd=[sys.executable,str(script),'--output',str(root),'--book','SYNTHETIC_TEST','--episode','E001','--panel-count','1']
+            cmd=[sys.executable, '-X', 'utf8',str(script),'--output',str(root),'--book','SYNTHETIC_TEST','--episode','E001','--panel-count','1']
             subprocess.run(cmd,check=True,capture_output=True)
             for name in ['00_输入审计/生产流程.json','01_镜头改编_CANDIDATE/镜头改编表.json','04_B提示词包_CANDIDATE/全话提示词索引.json']:
-                self.assertEqual(json.loads((root/name).read_text())['visual_evidence_policy'],POLICY)
-            path=root/'00_输入审计/生产流程.json';state=json.loads(path.read_text());state.pop('visual_evidence_policy');path.write_text(json.dumps(state));before=path.read_bytes()
+                self.assertEqual(json.loads((root/name).read_text(encoding='utf-8-sig'))['visual_evidence_policy'],POLICY)
+            path=root/'00_输入审计/生产流程.json';state=json.loads(path.read_text(encoding='utf-8-sig'));state.pop('visual_evidence_policy');path.write_text(json.dumps(state), encoding='utf-8', newline='\n');before=path.read_bytes()
             subprocess.run(cmd,check=True,capture_output=True)
             self.assertEqual(path.read_bytes(),before)
 

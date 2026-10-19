@@ -21,12 +21,12 @@ class TaskContextTests(unittest.TestCase):
         self.state={'book_id':'SYNTHETIC','episode_id':'E001','task_context':self.ctx,
                     'panels':[{'panel_id':'P001','attempt_id':'a1','round_id':1,'status':'PENDING'}]}
         marker=self.root/task.ORIGIN_FILE;marker.parent.mkdir(parents=True)
-        marker.write_text(json.dumps({'task_context':self.ctx,'episode_id':'E001','initial_body_calls':0,'initial_asset_calls':0}))
+        marker.write_text(json.dumps({'task_context':self.ctx,'episode_id':'E001','initial_body_calls':0,'initial_asset_calls':0}), encoding='utf-8', newline='\n')
         self.episode={'episode_id':'E001','panels':[{'panel_id':'P001','history':{
             'task_id':self.ctx['task_id'],'status':'NEVER_SUBMITTED','attempts':[]}}]}
     def errors(self):return task.history_errors(self.ctx,self.episode,self.state,self.root,lambda r:None)
     def test_other_task_missing_history_is_not_a_dependency(self):
-        old=self.root/'unrelated';old.mkdir();(old/'index.json').write_text('{"status":"UNKNOWN","missing":"old-qa.json"}')
+        old=self.root/'unrelated';old.mkdir();(old/'index.json').write_text('{"status":"UNKNOWN","missing":"old-qa.json"}', encoding='utf-8', newline='\n')
         # Neither validation nor handoff history searches the neighboring old run.
         self.assertEqual(self.errors(),[])
         self.assertNotEqual(self.ctx['task_id'],task.fresh('SYNTHETIC',['E001'])['task_id'])
@@ -60,7 +60,7 @@ class TaskContextTests(unittest.TestCase):
             'quote':'SYNTHETIC explicit reuse P001','source_locator':'synthetic://message'},
             imports=[{'source_task_id':'OLD','episode_id':'E001','panel_ids':['P001'],
                       'evidence':[{'path':'selected.json','sha256':'synthetic'}]}])
-        (self.root/task.ORIGIN_FILE).write_text(json.dumps({'task_context':self.ctx,'episode_id':'E001','initial_body_calls':0}))
+        (self.root/task.ORIGIN_FILE).write_text(json.dumps({'task_context':self.ctx,'episode_id':'E001','initial_body_calls':0}), encoding='utf-8', newline='\n')
         self.assertEqual(self.errors(),[])
         hist['attempts'][0]['status']='FAILED';self.assertTrue(self.errors())
     def test_fresh_cannot_smuggle_reuse_and_reuse_requires_user_scope(self):
@@ -69,7 +69,7 @@ class TaskContextTests(unittest.TestCase):
         self.ctx['origin']='reuse_selected'
         with self.assertRaises(ValueError):task.validate(self.ctx)
     def test_asset_ledger_does_not_claim_body_was_submitted(self):
-        (self.root/'asset-call.json').write_text('{"kind":"asset","status":"COMPLETED"}')
+        (self.root/'asset-call.json').write_text('{"kind":"asset","status":"COMPLETED"}', encoding='utf-8', newline='\n')
         self.assertEqual(self.errors(),[])
     def test_dispatch_receipt_cannot_be_hidden_by_pending_state(self):
         self.state['dispatch_ledger']=[{'panel_id':'P001','attempt_id':'a1','status':'IN_FLIGHT'}]
@@ -84,7 +84,7 @@ class AssetScopeTests(unittest.TestCase):
     def row(self,**fields):return {**self.need,**fields}
     def route(self,**fields):return audit(self.root,[self.row(**fields)])['asset_tasks'][0]['resolution']
     def test_unselected_old_index_missing_file_does_not_block_batch(self):
-        (self.root/'old-index.json').write_text('{"missing":"obsolete.png"}')
+        (self.root/'old-index.json').write_text('{"missing":"obsolete.png"}', encoding='utf-8', newline='\n')
         image=self.root/'current.bin';image.write_bytes(b'SYNTHETIC actual reference bytes')
         result=audit(self.root,[self.row(reference={'path':image.name,'sha256':hashlib.sha256(image.read_bytes()).hexdigest()})])
         self.assertEqual(result['gap_panel_ids'],[]);self.assertEqual(result['asset_tasks'][0]['resolution'],'reuse')

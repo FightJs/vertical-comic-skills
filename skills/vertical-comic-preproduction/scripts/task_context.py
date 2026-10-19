@@ -58,7 +58,7 @@ def state_errors(state, root):
         return []  # Old RV: do not silently upgrade its contract.
     try:
         validate(context)
-        origin = json.loads(marker.read_text())
+        origin = json.loads(marker.read_text(encoding='utf-8-sig'))
         if origin.get('task_context') != context or origin.get('episode_id') != state.get('episode_id') or origin.get('initial_body_calls') != 0:
             raise ValueError('初始化任务身份失配；换RV不得重写来源')
         if context['book_id'] != state.get('book_id') or state.get('episode_id') not in context['episode_ids']:

@@ -27,7 +27,7 @@ class EpisodePreparationTests(unittest.TestCase):
     def write(self, name, value):
         path = self.root / name
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(value, ensure_ascii=False))
+        path.write_text(json.dumps(value, ensure_ascii=False), encoding='utf-8', newline='\n')
         return {'path': name, 'sha256': digest(path)}
 
     def approval(self, refs):
@@ -68,7 +68,7 @@ class EpisodePreparationTests(unittest.TestCase):
 
     def test_35_panel_shots_are_one_source_with_18_and_17_production_views(self):
         state, panels = self.state(35)
-        plan = json.loads((self.root / state['batch_plan']['path']).read_text())
+        plan = json.loads((self.root / state['batch_plan']['path']).read_text(encoding='utf-8-sig'))
         self.assertEqual([len(b['panel_ids']) for b in plan['batches']], [18, 17])
         self.assertEqual(half_view(state, 'H001')['shot_manifest'],
                          half_view(state, 'H002')['shot_manifest'])
@@ -76,7 +76,7 @@ class EpisodePreparationTests(unittest.TestCase):
         self.assertEqual(audit['panel_ids'], [p['panel_id'] for p in panels])
         self.assertEqual(len(audit['panels']), 35)
         self.assertTrue(all(p['status']=='UNREVIEWED' for p in audit['panels']))
-        full = json.loads((self.root / state['shot_manifest']['path']).read_text())
+        full = json.loads((self.root / state['shot_manifest']['path']).read_text(encoding='utf-8-sig'))
         self.assertEqual(validate_shots(state, {'panel_ids': [p['panel_id'] for p in panels],
                                                 'locked_scripts': {p['panel_id']: p['locked_script'] for p in panels}},
                                         plan['batches'][1], full), panels[18:])
@@ -155,7 +155,7 @@ class EpisodePreparationTests(unittest.TestCase):
         self.addCleanup(fixture.doCleanups)
         fixture.real_input()
         state = fixture.state(1)
-        shot_data = json.loads((fixture.root / state['shot_manifest']['path']).read_text())
+        shot_data = json.loads((fixture.root / state['shot_manifest']['path']).read_text(encoding='utf-8-sig'))
         shot_data.update(execution_mode='half_episode_async_v1',
                          optimization_policy='scoped_half_review_v1',
                          preparation_policy='episode_preparation_v1')
@@ -180,7 +180,7 @@ class EpisodePreparationTests(unittest.TestCase):
                 episode_bundle(state, fixture.root)
 
             state = fixture.state(2)
-            shots = json.loads((fixture.root / state['shot_manifest']['path']).read_text())
+            shots = json.loads((fixture.root / state['shot_manifest']['path']).read_text(encoding='utf-8-sig'))
             shots.update(execution_mode='half_episode_async_v1',
                          optimization_policy='scoped_half_review_v1',
                          preparation_policy='episode_preparation_v1')

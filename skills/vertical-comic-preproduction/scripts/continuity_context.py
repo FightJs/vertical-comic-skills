@@ -23,7 +23,7 @@ def source_base(source,context_dir):
 
 def portable_context(context,context_dir):
     """Call BEFORE approval; relocation never rewrites approved context bytes."""
-    return {**context,'sources':[{**s,'root':os.path.relpath(source_base(s,context_dir),Path(context_dir).resolve()),'root_mode':'context_relative_v1'} for s in context['sources']]}
+    return {**context,'sources':[{**s,'root':Path(os.path.relpath(source_base(s,context_dir),Path(context_dir).resolve())).as_posix(),'root_mode':'context_relative_v1'} for s in context['sources']]}
 
 def uid(episode,panel):return panel if panel.startswith(episode+'-') else episode+'-'+panel
 
@@ -202,8 +202,11 @@ def main():
     try:
         path=Path(a.state).resolve();root=path.parent.parent;value=build(read(path),root,a.panel,a.candidate);dest=Path(a.write).resolve();dest.relative_to(root)
         if a.portable:value=portable_context(value,dest.parent)
-        with dest.open('x',encoding='utf-8') as f:json.dump(value,f,ensure_ascii=False,indent=2)
+        with dest.open('x',encoding='utf-8', newline='\n') as f:json.dump(value,f,ensure_ascii=False,indent=2)
         print(json.dumps({'status':'CANDIDATE_DESIGN_POINTERS_NOT_AUTHORIZED' if a.candidate else 'APPROVED_DESIGN_POINTERS_ONLY','path':str(dest)},ensure_ascii=False));return 0
     except (OSError,ValueError,TypeError,KeyError,IndexError) as exc:print(json.dumps({'status':'HOLD','errors':[str(exc)]},ensure_ascii=False));return 1
 
-if __name__=='__main__':raise SystemExit(main())
+if __name__=='__main__':
+    from platform_io import configure_stdio
+    configure_stdio()
+    raise SystemExit(main())

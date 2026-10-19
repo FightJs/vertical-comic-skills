@@ -1,5 +1,6 @@
 """One built-in rule library plus preserved user additions; immutable resolved cache."""
 from pathlib import Path
+from platform_io import codex_home
 import hashlib,json,os,shutil,tempfile
 from rule_memory import POLICY,LOADING_POLICY,source_index
 
@@ -13,7 +14,7 @@ def source(root,token=None):
     return value
 
 def resolve(*,library_root=None,cache_root=None):
-    root=Path(library_root or ROOT).resolve();cache=Path(cache_root or Path.home()/'.codex/comic/cache/rules').resolve()
+    root=Path(library_root or ROOT).resolve();cache=Path(cache_root or codex_home()/'comic/cache/rules').resolve()
     entries=[];seen=set();origin=[]
     for name in ('内置规则','用户增补'):
         base=root/name;_,index=source_index(source(base));origin.append((base/'记忆索引.json',digest(base/'记忆索引.json')))

@@ -30,13 +30,13 @@ class EpisodeAsyncTests(unittest.TestCase):
             'execution_mode': EPISODE_MODE, 'optimization_policy': EPISODE_POLICY,
             'preparation_policy': 'episode_preparation_v1', 'panels': shots})
         state['gates']['shot_design'] = self.fixture.approval([state['visual_basis'], state['shot_manifest']])
-        source = json.loads((self.root / state['source_snapshot']['path']).read_text())
+        source = json.loads((self.root / state['source_snapshot']['path']).read_text(encoding='utf-8-sig'))
         state['batch_plan'] = self.fixture.write('episode-plan.json', build_plan(state, source))
         return state, shots
 
     def test_thirty_five_panels_have_one_episode_scope(self):
         state, _ = self.state(35)
-        plan = json.loads((self.root / state['batch_plan']['path']).read_text())
+        plan = json.loads((self.root / state['batch_plan']['path']).read_text(encoding='utf-8-sig'))
         self.assertEqual([(b['batch_id'], len(b['panel_ids'])) for b in plan['batches']], [('EPISODE', 35)])
 
     def test_later_independent_panels_ready_before_first_images_or_C(self):

@@ -433,7 +433,7 @@ def main():
                 body = file.read_text(encoding="utf-8")
                 if re.search(r"\b[EP]\d{3}\b|第[0-9一二三四五六七八九十]+话|《[^》]+》", body):
                     raise ValueError(f"{rule['id']}:发现疑似作品/话格特定信息，须人工通用性审查")
-            unindexed = [str(p.relative_to(root)) for p in (root / "规则").rglob("*.md") if p.resolve() not in indexed]
+            unindexed = [p.relative_to(root).as_posix() for p in (root / "规则").rglob("*.md") if p.resolve() not in indexed]
             if unindexed:
                 raise ValueError("规则目录存在未登记正文:" + ",".join(unindexed))
             result = {"status": "PASS", "rules": len(index["rules"]), "loading_policy": index.get("loading_policy"), "semantic_portability": "REQUIRES_HUMAN_REVIEW"}
@@ -471,7 +471,7 @@ def main():
                 bodies, cache = load_selected(source, to_read, cache, args.run_id, args.worker_id, args.reload)
                 cache_file.parent.mkdir(parents=True, exist_ok=True)
                 temp = cache_file.with_name(cache_file.name + ".tmp")
-                temp.write_text(json.dumps(cache, ensure_ascii=False, indent=2)+"\n", encoding="utf-8")
+                temp.write_text(json.dumps(cache, ensure_ascii=False, indent=2)+"\n", encoding="utf-8", newline='\n')
                 temp.replace(cache_file)
                 result = {"status": "LOADED_NOT_APPROVED", "stage": args.stage, "loading_policy": source.get("loading_policy"),
                           "matched_for_execution": [{"memory_id": m["rule"]["id"], "rule_signature": m["rule_signature"]} for m in matches],
@@ -491,4 +491,6 @@ def main():
 
 
 if __name__ == "__main__":
+    from platform_io import configure_stdio
+    configure_stdio()
     raise SystemExit(main())

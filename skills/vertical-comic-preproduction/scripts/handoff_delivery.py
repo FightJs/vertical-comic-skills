@@ -3,6 +3,7 @@
 No approval synthesis, creative JSON rewriting, budget changes or image calls.
 """
 from pathlib import Path
+from platform_io import skill_entry_key
 import json,shutil
 
 DIRECT='direct_delivery_v2'
@@ -30,7 +31,7 @@ def closure(root,index):
                     if ordered.index(source)>=ordered.index((eid,pid)):errors.append(eid+'/'+pid+':前置依赖倒序或循环')
                 reference(root,dep.get('completion_plan'))
             if kind=='REUSE':
-                review=reference(root,p.get('current_design_review'));data=json.loads(review.read_text())
+                review=reference(root,p.get('current_design_review'));data=json.loads(review.read_text(encoding='utf-8-sig'))
                 if (data.get('status')!='PASS' or not data.get('reviewer') or not data.get('evidence') or
                     data.get('panel_id')!=pid or data.get('episode_id')!=eid or
                     data.get('accepted_image')!=p['accepted_image'] or data.get('accepted_qa')!=p['accepted_qa'] or
@@ -52,22 +53,29 @@ def bind(package_root,run_root):
     index=audit_index(package_root);plans=[]
     # Validate every source before creating the destination.
     for e in index['episodes']:
-        plan=json.loads(reference(package_root,e.get('run_template')).read_text())
+        plan=json.loads(reference(package_root,e.get('run_template')).read_text(encoding='utf-8-sig'))
         if plan.get('policy')!=TEMPLATE or plan.get('episode_id')!=e['episode_id']:raise ValueError('运行模板归属错误')
         source=inside(package_root,plan['root']);rows=plan.get('files')
         if not isinstance(rows,list) or sorted(rows,key=lambda x:x['path'])!=files(source):raise ValueError('运行模板文件清单不完整或字节变化')
         for ref in rows:reference(source,ref)
         state_path=inside(source,plan['state_file'])
         if state_path.parent.parent!=source:raise ValueError('模板状态须位于本话根/审计目录/状态文件')
-        state=json.loads(state_path.read_text())
+        state=json.loads(state_path.read_text(encoding='utf-8-sig'))
         if state.get('book_id')!=index['book_id'] or state.get('episode_id')!=e['episode_id']:raise ValueError('运行模板书话不符')
         snap=reference(package_root,e['runtime_manifest']);snap_ref={'path':str(snap),'sha256':sha(snap)}
-        frozen=verify(snap_ref);new_toolchain=toolchain(frozen['scripts']);old=state.get('toolchain',{})
+        frozen=verify(snap_ref)
+        if __import__('os').name == 'nt':
+            import ast
+            for script in Path(frozen['scripts']).glob('*.py'):
+                module=ast.parse(script.read_bytes())
+                if any(isinstance(node,ast.Import) and any(alias.name=='fcntl' for alias in node.names) for node in module.body):
+                    raise ValueError('FROZEN_RUNTIME_UNSUPPORTED: 旧包含Unix专用fcntl；由前期端显式迁移并重新导出，不能替换包内脚本或重签原批准')
+        new_toolchain=toolchain(frozen['scripts']);old=state.get('toolchain',{})
         # Only roots change; checker and Skill bytes must be the already-frozen ones.
         if (old.get('policy')!=new_toolchain['policy'] or old.get('release')!=new_toolchain['release'] or
             old.get('files')!=new_toolchain['files'] or
-            {Path(x['path']).parent.name:x['sha256'] for x in old.get('skill_entries',[])}!=
-            {Path(x['path']).parent.name:x['sha256'] for x in new_toolchain['skill_entries']}):
+            {skill_entry_key(x['path']):x['sha256'] for x in old.get('skill_entries',[])}!=
+            {skill_entry_key(x['path']):x['sha256'] for x in new_toolchain['skill_entries']}):
             raise ValueError('模板与冻结工具字节不符，须在前期冻结前修正')
         old_memory={k:v for k,v in (state.get('memory_source') or {}).items() if k not in {'root','runtime_snapshot'}}
         new_memory={k:v for k,v in (frozen['memory_source'] or {}).items() if k not in {'root','runtime_snapshot'}}
@@ -79,7 +87,7 @@ def bind(package_root,run_root):
     try:
         for e,plan,source,state,old_sha in plans:
             episode_root=inside(run_root,e['episode_id']);shutil.copytree(source,episode_root)
-            state_file=inside(episode_root,plan['state_file']);state_file.write_text(json.dumps(state,ensure_ascii=False,indent=2)+'\n')
+            state_file=inside(episode_root,plan['state_file']);state_file.write_text(json.dumps(state,ensure_ascii=False,indent=2)+'\n', encoding='utf-8', newline='\n')
             evidence={'policy':'runtime_only_relocation_v1','package_id':index['package_id'],'episode_id':e['episode_id'],
                       'template_state_sha256':old_sha,'local_state_sha256':sha(state_file),'changed_fields':['runtime_snapshot','toolchain','memory_source'],
                       'creative_files_unchanged':True,'approval_rewritten':False,'budget_reset':False}

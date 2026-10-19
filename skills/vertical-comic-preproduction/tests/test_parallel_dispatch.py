@@ -47,8 +47,8 @@ class DispatchTests(unittest.TestCase):
         return {"path": name, "sha256": hashlib.sha256(content).hexdigest()}
 
     def flush(self):
-        self.control_path.write_text(json.dumps(self.control))
-        self.state_path.write_text(json.dumps(self.state))
+        self.control_path.write_text(json.dumps(self.control), encoding='utf-8', newline='\n')
+        self.state_path.write_text(json.dumps(self.state), encoding='utf-8', newline='\n')
 
     def check(self, panel="P001"):
         self.flush()
@@ -78,8 +78,8 @@ class DispatchTests(unittest.TestCase):
     def test_handoff_cli_reports_hold_without_mutating_control(self):
         script=Path(__file__).resolve().parents[1]/"scripts"/"parallel_dispatch.py"
         before=self.control_path.read_bytes()
-        result=subprocess.run([sys.executable,str(script),"--state",str(self.state_path),
-                               "--handoff-check","--old-writer-stopped"],capture_output=True,text=True)
+        result=subprocess.run([sys.executable, '-X', 'utf8',str(script),"--state",str(self.state_path),
+                               "--handoff-check","--old-writer-stopped"],capture_output=True,text=True, encoding='utf-8')
         self.assertEqual(result.returncode,1)
         self.assertTrue(json.loads(result.stdout)["handoff_check_only"])
         self.assertEqual(self.control_path.read_bytes(),before)
@@ -317,7 +317,7 @@ class DispatchTests(unittest.TestCase):
 
     def test_carry_forward_hash_tamper(self):
         output_hash, old_receipt, report = self.make_carry_forward()
-        (self.episode / "qa.json").write_text('{"changed": true}')
+        (self.episode / "qa.json").write_text('{"changed": true}', encoding='utf-8', newline='\n')
         self.assertTrue(any("哈希不符" in e for e in self.receipt(output_hash, old_receipt)))
 
     def test_carry_forward_never_authorizes_new_call(self):
@@ -327,7 +327,7 @@ class DispatchTests(unittest.TestCase):
 
     def test_cli_read_only(self):
         script = Path(__file__).resolve().parents[1] / "scripts/parallel_dispatch.py"
-        result = subprocess.run([sys.executable, str(script), "--state", str(self.state_path), "--panel", "P001"], capture_output=True, text=True)
+        result = subprocess.run([sys.executable, '-X', 'utf8', str(script), "--state", str(self.state_path), "--panel", "P001"], capture_output=True, text=True, encoding='utf-8')
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertTrue(json.loads(result.stdout)["read_only"])
 

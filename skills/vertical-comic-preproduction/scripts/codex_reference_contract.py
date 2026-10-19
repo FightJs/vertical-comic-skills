@@ -326,9 +326,11 @@ def main() -> int:
             _, plan = validate_panel(panel, root)
             plans.append({"panel_id": panel["panel_id"], "status": "NOT_RUN", **plan})
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(json.dumps({"status": report["status"], "errors": report["errors"], "image_acceptance": "NOT_ASSESSED", "plans": plans}, ensure_ascii=False, indent=2) + "\n")
+    output.write_text(json.dumps({"status": report["status"], "errors": report["errors"], "image_acceptance": "NOT_ASSESSED", "plans": plans}, ensure_ascii=False, indent=2) + "\n", encoding='utf-8', newline='\n')
     return 1 if report["errors"] else 0
 
 
 if __name__ == "__main__":
+    from platform_io import configure_stdio
+    configure_stdio()
     raise SystemExit(main())

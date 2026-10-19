@@ -2,6 +2,12 @@
 
 对用户只展示总控入口，不要求粘贴内部policy/门禁/规则说明。规则库随五件套安装在总控assets/rule-memory；无需第三个路径或GitHub账号。新项目只需脚本、资产和话号；书名不明确时集中核对一次，不能猜格数或把候选当批准。
 
+## 执行环境
+
+首次运行或解释器变化时，读取本机CODEX_HOME/skill-bundles/vertical-comic-skills/installed.json中记录的python路径；有效时用它运行脚本。没有安装记录时选择实际Python 3.12+，先运行scripts/runtime_environment.py。Windows无需WSL；不要尝试pip安装fcntl。所有CLI使用UTF-8输出，路径作为独立参数传入，不拼接shell命令。PowerShell调用含空格的解释器时使用`& "解释器路径"`。
+
+prepare与receive会在创建RV前检查当前环境。实际生图能力另按当前工具定义核验。安装成功、运行检查通过、真实生图可用是三个不同结论。跨电脑只复用包内冻结内容，不复用来源电脑的Python或绝对路径。旧冻结包不支持Windows时回前期迁移重导，不在接收端热修。
+
 ## 安装后的首次配置引导
 
 用户说“第一次使用”“帮我配置”或仅调用Skill而没有提供完整输入时，先进入本节。不要要求用户先创建或找到“条漫Skill使用配置.json”，不要把长启动词或技术JSON交给用户填写。

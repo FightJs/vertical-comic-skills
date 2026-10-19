@@ -200,13 +200,13 @@ class ActualHalfGateTests(unittest.TestCase):
         r=self.returned(True);batch=self.plan['batches'][0];report=template(self.state,batch,{'P001':r},1)
         report.update(status='REVIEWED',reviewer='SYNTHETIC',evidence='TEST ONLY',diagnosis={'reviewer':'SYNTHETIC','evidence':'TEST','earliest_layer':'output','requires_basis_change':False,'repair_constraints':{'P001':['preserve style']}})
         self.assertEqual(report_errors(self.state,self.root,batch,report,1,{'P001':r}),[])
-        (self.root/'qa.json').write_text('{}')
+        (self.root/'qa.json').write_text('{}', encoding='utf-8', newline='\n')
         with self.assertRaises(ValueError):report_errors(self.state,self.root,batch,report,1,{'P001':r})
 
 
     def test_failed_image_with_other_unreviewed_dimensions_cannot_finish_round(self):
         r=self.returned(True);batch=self.plan['batches'][0]
-        qa=json.loads((self.root/'qa.json').read_text());qa['panels'][0]['dimension_review']['identity']['status']='UNREVIEWED'
+        qa=json.loads((self.root/'qa.json').read_text(encoding='utf-8-sig'));qa['panels'][0]['dimension_review']['identity']['status']='UNREVIEWED'
         r['qa_report']=self.h.f.write('qa.json',qa)
         report=template(self.state,batch,{'P001':r},1);report.update(status='REVIEWED',reviewer='SYNTHETIC',evidence='TEST',diagnosis={'reviewer':'SYNTHETIC','evidence':'TEST','earliest_layer':'output','requires_basis_change':False,'repair_constraints':{'P001':['fix']}})
         self.assertTrue(report_errors(self.state,self.root,batch,report,1,{'P001':r}))
@@ -222,8 +222,8 @@ class ActualHalfGateTests(unittest.TestCase):
 
     def test_initializer_default_episode_without_approval(self):
         out=self.root/'new'
-        command=[sys.executable,str(SCRIPTS/'init_preproduction.py'),'--output',str(out),'--book','UNIT','--episode','E000']
+        command=[sys.executable, '-X', 'utf8',str(SCRIPTS/'init_preproduction.py'),'--output',str(out),'--book','UNIT','--episode','E000']
         result=subprocess.run(command,capture_output=True);self.assertEqual(result.returncode,0,result.stderr)
-        state=json.loads((out/'00_输入审计/生产流程.json').read_text());self.assertEqual(state['execution_mode'],'episode_async_v1');self.assertEqual(state['gates'],{})
+        state=json.loads((out/'00_输入审计/生产流程.json').read_text(encoding='utf-8-sig'));self.assertEqual(state['execution_mode'],'episode_async_v1');self.assertEqual(state['gates'],{})
 
 if __name__=='__main__':unittest.main()

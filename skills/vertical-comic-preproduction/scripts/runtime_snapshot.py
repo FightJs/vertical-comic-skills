@@ -36,7 +36,7 @@ def verify(ref, *, executing_script=None):
         if not target.resolve().is_relative_to(root) or target.is_symlink() or sha(target) != item['sha256']:
             raise ValueError('SNAPSHOT_HOLD: 实际运行文件已变化: '+str(name))
     actual = {str(p.relative_to(root)) for p in root.rglob('*') if p.is_file()
-              and p != path and '__pycache__' not in p.parts and p.suffix != '.pyc'}
+              and p != path and '__pycache__' not in p.parts and '__MACOSX' not in p.parts and p.name!='.DS_Store' and p.suffix != '.pyc'}
     if actual != names:
         raise ValueError('SNAPSHOT_HOLD: 快照文件集合变化')
     scripts = root / 'skills/vertical-comic-preproduction/scripts'
@@ -61,7 +61,7 @@ def create(destination, *, skills_root=None, memory_source=None):
             folder = source / name
             if not (folder/'SKILL.md').is_file():raise ValueError('缺少skill入口:'+name)
             for p in sorted(folder.rglob('*')):
-                if not p.is_file() or any(x in p.parts for x in ('__pycache__', '.git', 'tests')) or p.suffix == '.pyc':
+                if not p.is_file() or p.name=='.DS_Store' or any(x in p.parts for x in ('__pycache__', '__MACOSX', '.git', 'tests')) or p.suffix == '.pyc':
                     continue
                 rel = Path('skills') / name / p.relative_to(folder)
                 target = stage / rel; target.parent.mkdir(parents=True, exist_ok=True)
@@ -76,6 +76,7 @@ def create(destination, *, skills_root=None, memory_source=None):
             refs = [{'path': memory_source.get('index', '记忆索引.json'),
                      'sha256': sha(root / memory_source.get('index', '记忆索引.json'))}]
             refs.extend(r['file'] for r in index['rules'])
+            if index.get('maintenance_guide'):refs.append(index['maintenance_guide'])
             for item in refs:
                 p = (root / item['path']).resolve()
                 if not p.is_relative_to(root) or sha(p) != item['sha256']:
@@ -108,6 +109,9 @@ def main():
     if a.config:
         from usage_config import read_config, memory_source
         memory = memory_source(read_config(a.config))
+    if memory is None:
+        from builtin_memory import resolve
+        memory=resolve()
     ref = create(a.destination, memory_source=memory)
     print(json.dumps({'runtime_snapshot':ref, **{k:v for k,v in verify(ref).items() if k!='data'}}, ensure_ascii=False))
 

@@ -11,6 +11,12 @@ description: Coordinate a staged vertical-comic workflow from approved scripts a
 
 首次进入运行读[共同约束](references/production-foundation.md)、[固定流程](references/staged-workflow.md)和[规则归属](references/rule-ownership.md)。具体规则只在共享正式来源维护；运行按冻结版本读取，不在生产中更新规则库。
 
+## 简易入口（首次使用优先）
+
+读[短启动与本书配置](references/quick-start.md)。用户只需脚本、资产、话号及可明确识别的书名，内部默认配置与规则自动解析，不要求填写技术JSON；“前期制作”路由分工前期并停在正文前，“接包生产”路由正式ZIP接收。用comic_start.py合并初始化或校验/解压/bind/rehearse步骤，初始化通过不等于源审计或批准通过。
+
+规则记忆默认随本Skill内置，四个阶段共用assets/rule-memory；用户增补与内置规则分开。维护/导出/可选GitHub同步读[内置规则维护](references/builtin-rule-maintenance.md)；不需要GitHub账号才能生产或本地更新。明确外置来源和旧RV保持原冻结来源，不静默改库。
+
 ## 选择任务模式
 
 - 新任务：按[整话异步](references/episode-async.md)使用episode_preparation_v1、episode_async_v1、scoped_episode_review_v1、comic_execution_v2与incremental_runtime_v2。全话准备、[逐格就绪](references/panel-readiness.md)，B与实际包合并展示并分别记录决定；缺口仅阻塞受影响格及真实依赖。默认无固定半话C。

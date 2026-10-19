@@ -12,8 +12,7 @@
   },
   "inputs": {
     "script_path": "【脚本绝对路径】",
-    "asset_root": "【本书资产绝对目录】",
-    "memory_root": "【通用规则记忆绝对目录】"
+    "asset_root": "【本书资产绝对目录】"
   },
   "generation": {
     "execution_mode": "episode_async_v1",
@@ -26,7 +25,8 @@
     "index": "记忆索引.json",
     "cache": "run_worker_version",
     "admission": "cross_work_only",
-    "loading_policy": "stage_baseline_loading_v1"
+    "loading_policy": "stage_baseline_loading_v1",
+    "source": "builtin"
   },
   "framing": {
     "policy": "content_balanced_ratios_v1"

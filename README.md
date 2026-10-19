@@ -4,19 +4,26 @@
 
 仓库是使用者同步来源：`main`提供最新提交，Release/tag提供固定版本。整套更新，避免五个Skill及规则库版本混用。生产RV按其已冻结版本继续，更新不会迁移旧RV或授予新的生图/返修权限。
 
-## 首次安装
+## 首次安装（不需要GitHub账号）
 
-需要Codex、Git、Python 3.12+。生成图片还需要当前Codex环境实际可用的生图工具；安装本仓库不自动提供工具权限。GitHub CLI用于访问私有仓库；使用者须先获仓库访问权限。
+公开仓库可直接在GitHub选择Code → Download ZIP，解压后交给Codex：
+
+```text
+请按这个目录中的tools/sync_skills.py安装完整条漫五件套。
+```
+
+也可用Git下载，无需先运行gh auth login：
 
 ```sh
-gh auth login
-gh repo clone FightJs/vertical-comic-skills
+git clone https://github.com/FightJs/vertical-comic-skills.git
 cd vertical-comic-skills
 python3 -m pip install -r requirements.txt
 python3 tools/sync_skills.py
 ```
 
-默认安装到`$CODEX_HOME/skills`（未设置时为`~/.codex/skills`），配套规则安装到`$CODEX_HOME/skill-bundles/vertical-comic-skills/memory`。
+需要Codex及兼容Python；生图还需要实际可用的图像工具，安装不自动授予服务权限。GitHub账号和CLI仅用于可选的规则贡献同步，不是制作或本地维护前提。
+
+五个Skill安装到`$CODEX_HOME/skills`（默认`~/.codex/skills`）。通用规则随总控Skill放在`assets/rule-memory/内置规则`，个人方法放`用户增补`；首次使用不需要填写memory_root。旧memory目录仍供显式外置配置兼容，不替换旧生产RV来源。
 
 若检测到已有安装或本地修改，会保留现场并停止。先查看差异：
 
@@ -54,18 +61,38 @@ python3 tools/sync_skills.py
 
 ## 配置与启动
 
-复制[配置示例](examples/comic.config.example.json)到项目目录，填写书名、准确话号、源脚本、资产和上述规则记忆的真实绝对路径。示例占位符不能直接运行。`generation.episode_workers`调整话执行者数量，并发仍受实际agent槽位和生图服务容量限制。
+首次只给脚本、资产和准确话号；书名明确时可一并给出。无需先编辑完整JSON：
 
-首次启动可使用：
+```text
+使用 $vertical-comic-preproduction，进行前期制作。
+书名：【书名】
+脚本：【脚本路径】
+资产：【资产目录】
+话号：E026–E030。
+其余用默认配置，完成后交正式ZIP。
+```
+
+本书路径保存在项目`.comic/books`，本次话号单独保存在新RV。后续只需“前期制作：【书名】E031–E035，使用本书配置”。默认输出项目下的新RV，原A/B及实际图片审核节点继续保留；初始化模板不是实际批准。
+
+接包端：
 
 ```text
 使用 $vertical-comic-preproduction。
-读取使用配置：【项目配置绝对路径】。
-本次范围：【准确话号】。
-输出到：【项目输出绝对目录】下的新RV。
-按当前固定流程完成，在约定的视觉基准、镜头/生图包及实图验收节点等我审查。
-最终只交逐格图片包，我自行拼接和加气泡。
+接包生产：【正式ZIP路径】。
+审核人是我，其余按包内流程执行。
 ```
+
+系统按同名SHA256、包内书话和运行模板完成校验、解压、bind、rehearse，通过后按原半话/高风险/D节点生产。高级设置和已有配置仍可使用[配置示例](examples/comic.config.example.json)；脚本/资产填实际路径，内置记忆不需要另一个目录。
+
+## 规则增补与同步
+
+本地规则更新不需要GitHub账号。明确说“把这个问题提炼为通用规则并更新”，由Skill先核对跨作品适用性及重复冲突，成功后只影响新运行。剧情、某格坐标、图片、聊天和凭证不进入贡献包。
+
+- **没有GitHub账号**：默认本地保存；说“导出我的规则增补”生成ZIP，交维护者用`rule_contributions.py import --zip <文件>`导入待审队列。未上传会明确标记，不能声称已同步。
+- **有账号并明确启用**：使用本机`gh auth`。有仓库写权限，提交到`users/<login>/rule-memory`；无写权限则走自己的fork同名分支和PR。只写`contributions/<login>/rule-memory/<snapshot_id>/`，不改main；同账号多机器的快照互不删除。
+- **无账号且希望自动上传**：需要另行部署接收服务。本仓库没有该服务，也不内置维护者令牌。
+
+同步授权、凭证及待同步队列留本机，不进分发包。网络/登录失败保留PENDING_SYNC，不阻塞本地规则生效；维护者审阅后再合入内置规则，不自动执行他人贡献。安装更新保留用户增补，其他本地代码修改仍要求先检查和明确替换。
 
 分工制作有两种职责，使用时明确其中一个：
 

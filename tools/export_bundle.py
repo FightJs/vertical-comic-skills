@@ -18,9 +18,14 @@ def export(skills_root,memory_root):
             if not (source/'SKILL.md').is_file():raise ValueError('Missing Skill: '+name)
             for p in sorted(source.rglob('*')):
                 if p.is_symlink():raise ValueError('Symlink not published: '+str(p))
-                if not p.is_file() or EXCLUDED.intersection(p.parts) or p.suffix=='.pyc':continue
+                if not p.is_file() or EXCLUDED.intersection(p.parts) or any(x.startswith(('.user-backup-','.user-rules-','.update-lock')) for x in p.parts) or p.suffix=='.pyc':continue
                 h=digest(p);dest=stage/'skills'/name/p.relative_to(source);dest.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(p,dest)
                 tracked.append((p,h))
+        # User additions and sync consent belong to each installation, never to a public release.
+        user=stage/'skills/vertical-comic-preproduction/assets/rule-memory/用户增补'
+        if user.exists():shutil.rmtree(user)
+        user.mkdir(parents=True,exist_ok=True)
+        (user/'记忆索引.json').write_text(json.dumps({'policy':'triggered_rules_v1','loading_policy':'stage_baseline_loading_v1','rules':[]},ensure_ascii=False,indent=2)+'\n')
         index=json.loads((memory_root/'记忆索引.json').read_text())
         memories=[memory_root/'记忆索引.json',memory_root/'规则记忆输入与增添规范.md']
         for rule in index['rules']:
@@ -42,6 +47,13 @@ def export(skills_root,memory_root):
             s=re.sub(r'[A-Z]:/Users/[^/]+/\.codex/skills','~/.codex/skills',s)
             s=s.replace('老祖心声有点野','示例作品A').replace('天灾末世','示例作品B')
             p.write_text(s)
+        # Distribution-only example sanitization changes bytes: refresh rule and guide hashes.
+        for index_path in (stage/'memory/记忆索引.json',stage/'skills/vertical-comic-preproduction/assets/rule-memory/内置规则/记忆索引.json'):
+            if not index_path.exists():continue
+            value=json.loads(index_path.read_text())
+            for rule in value.get('rules',[]):rule['file']['sha256']=digest(index_path.parent/rule['file']['path'])
+            if value.get('maintenance_guide'):value['maintenance_guide']['sha256']=digest(index_path.parent/value['maintenance_guide']['path'])
+            index_path.write_text(json.dumps(value,ensure_ascii=False,indent=2)+'\n')
         tests=stage/'skills/vertical-comic-preproduction/tests'
         needle=re.compile(r'''["']/Users/[^/]+/Desktop/条漫/条漫Skill使用配置\.json["']''')
         for p in tests.glob('test_*.py'):

@@ -2,7 +2,7 @@
 
 当前新RV先读 [整话异步生产](episode-async.md) 和 [逐格就绪](panel-readiness.md)。B与包按准确就绪范围分别批准；独立格获批且完整预检通过即可提交。旧半话RV按其原合同恢复。
 
-comic_usage_v1 JSON提供三个存在的绝对来源：inputs.script_path、asset_root、memory_root。production.book及episodes明确书与话号；从真实脚本核对格数，不把配置合法当成已授权/批准生产。
+首次使用优先走[简易启动](quick-start.md)，配置由工具生成。comic_usage_v1保留inputs.script_path、asset_root；memory_root省略时默认解析Skill内置+用户增补。显式外置memory_root仍须是有效绝对目录，失效不回退。production.book及episodes明确书与话号；从真实脚本核对格数，不把配置合法当成已授权/批准生产。
 
 当前generation配置：execution_mode=episode_async_v1、batch_strategy=full_episode、episode_workers=5、max_inflight_per_episode=episode、max_inflight_images=auto。不设batch_size。整话源格数是待提交池的上界，实际在途数仍受总控和已核定后端容量约束；后二者可设正整数上限。每话一名唯一执行者。
 

@@ -7,6 +7,7 @@ from runtime_snapshot import create
 from builtin_memory import resolve
 from handoff_zip import extract,rehearse,read,write,check_delivery_archive
 from handoff_delivery import bind
+from task_context import fresh, validate as validate_task
 
 BASE=Path(__file__).resolve().parents[1]
 
@@ -24,7 +25,7 @@ def episodes(values):
     if not out or len(set(out))!=len(out):raise ValueError('话号缺失或重复')
     return out
 
-def prepare(project,book,ids,*,script=None,assets=None,output=None,workers=None):
+def prepare(project,book,ids,*,script=None,assets=None,output=None,workers=None,request_source=None,reuse_selection=None):
     project=Path(project).resolve();ids=episodes(ids)
     if not project.is_dir():raise ValueError('项目目录不存在')
     import hashlib
@@ -37,6 +38,10 @@ def prepare(project,book,ids,*,script=None,assets=None,output=None,workers=None)
         p=Path(inputs[key] or '')
         if not inputs[key] or not p.is_absolute() or not (p.is_dir() if isdir else p.is_file()):raise ValueError('首次使用缺少有效'+key)
         if old and old[key]!=inputs[key]:raise ValueError('已有书配置路径不同；先明确更新本书配置，不自动覆盖')
+    task=fresh(book,ids,request_source)
+    if reuse_selection is not None:
+        task.update(origin='reuse_selected',imports=reuse_selection)
+        validate_task(task)
     config=read(BASE/'assets/templates/默认使用配置.json');config.update(production={'book':book,'episodes':ids},inputs=inputs)
     if workers is not None:
         if type(workers) is not int or workers<1:raise ValueError('执行agent数量须为正整数')
@@ -46,15 +51,16 @@ def prepare(project,book,ids,*,script=None,assets=None,output=None,workers=None)
     output_base=Path(output).resolve() if output else project/'条漫输出'/book.replace('/','_')/('_'.join((ids[0],ids[-1])))
     stamp=datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=8))).strftime('%Y%m%d_%H%M%S')
     run=output_base/('RV_'+stamp+'_'+uuid.uuid4().hex[:6]);run.mkdir(parents=True)
+    task_path=run/'任务来源.json';write(task_path,task)
     cfg=run/'本次配置.json';write(cfg,config);read_config(cfg)
     snap=create(run/'00_总控/运行版本',memory_source=memory_source(config))
     for eid in ids:
-        cmd=[sys.executable,'-B',str(Path(snap['path']).parent/'skills/vertical-comic-preproduction/scripts/init_preproduction.py'),'--book',book,'--episode',eid,'--config',str(cfg),'--runtime-snapshot',snap['path'],'--output',str(run/eid),'--backend','codex_builtin_imagegen']
+        cmd=[sys.executable,'-B',str(Path(snap['path']).parent/'skills/vertical-comic-preproduction/scripts/init_preproduction.py'),'--book',book,'--episode',eid,'--config',str(cfg),'--runtime-snapshot',snap['path'],'--task-context',str(task_path),'--output',str(run/eid),'--backend','codex_builtin_imagegen']
         proc=subprocess.run(cmd,capture_output=True,text=True)
         if proc.returncode:raise ValueError('初始化失败，保留诊断运行目录:'+eid+':'+proc.stderr[-1000:])
     if old is None:
         profile_dir.mkdir(parents=True,exist_ok=True);write(profile,{'policy':'comic_book_profile_v1','book':book,**inputs})
-    result={'status':'INITIALIZED_NOT_PRODUCTION_APPROVAL','book':book,'episode_ids':ids,'run_root':str(run),'config':str(cfg),'profile':str(profile),'image_calls':0,'next':'核对源稿实际格数/格序，再按A及B/包审查推进；模板没有批准'}
+    result={'status':'INITIALIZED_NOT_PRODUCTION_APPROVAL','book':book,'episode_ids':ids,'task_context':task,'run_root':str(run),'config':str(cfg),'profile':str(profile),'image_calls':0,'next':'仅审本次脚本与资产需求；不查无关旧生产账。核对实际格数/格序并按A及B/包审查；模板没有批准'}
     write(run/'启动摘要.json',result);return result
 
 def receive(zip_path,*,output=None):
@@ -71,10 +77,12 @@ def receive(zip_path,*,output=None):
 def main():
     parser=argparse.ArgumentParser(description=__doc__);sub=parser.add_subparsers(dest='action',required=True)
     p=sub.add_parser('prepare');p.add_argument('--project',required=True);p.add_argument('--book',required=True);p.add_argument('--episodes',nargs='+',required=True);p.add_argument('--script');p.add_argument('--assets');p.add_argument('--output');p.add_argument('--workers',type=int)
+    p.add_argument('--request-source',help='真实用户原话及source_locator的JSON；程序调用不冒充批准')
+    p.add_argument('--reuse-selection',help='用户明确选中的旧成果来源、准确格号与证据引用JSON数组；不自动发现旧任务')
     p=sub.add_parser('receive');p.add_argument('--zip',required=True);p.add_argument('--output')
     a=parser.parse_args()
     try:
-        result=prepare(a.project,a.book,a.episodes,script=a.script,assets=a.assets,output=a.output,workers=a.workers) if a.action=='prepare' else receive(a.zip,output=a.output)
+        result=prepare(a.project,a.book,a.episodes,script=a.script,assets=a.assets,output=a.output,workers=a.workers,request_source=read(a.request_source) if a.request_source else None,reuse_selection=read(a.reuse_selection) if a.reuse_selection else None) if a.action=='prepare' else receive(a.zip,output=a.output)
         print(json.dumps(result,ensure_ascii=False));return int(result['status']=='HOLD')
     except (OSError,ValueError,KeyError,TypeError) as e:print(json.dumps({'status':'HOLD','error':str(e)},ensure_ascii=False));return 1
 if __name__=='__main__':raise SystemExit(main())

@@ -52,6 +52,42 @@ class DirectHandoffTests(unittest.TestCase):
     def put(self,name,value):
         p=self.package/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_text(json.dumps(value,ensure_ascii=False,indent=2));return self.ref(name)
     def save(self):self.put(h.INDEX,self.index)
+    def scope_task(self):
+        from task_context import fresh,ORIGIN_FILE
+        ctx=fresh(self.state['book_id'],['E000'])
+        self.state['task_context']=ctx;self.index['task_context']=ctx
+        (self.template/ORIGIN_FILE).write_text(json.dumps({'task_context':ctx,'episode_id':'E000','initial_body_calls':0,'initial_asset_calls':0}))
+        for row in self.index['episodes'][0]['panels']:row['history']['task_id']=ctx['task_id']
+        self.refresh_template();return ctx
+    def refresh_template(self):
+        f.fixtures.write(self.template,'00_输入审计/生产流程.json',self.state)
+        self.index['episodes'][0]['run_template']=self.put('template-index.json',{'policy':d.TEMPLATE,'episode_id':'E000','root':'template/E000','state_file':self.state_ref['path'],'files':h.files(self.template)})
+        self.save()
+
+    def test_independent_task_real_receive_roundtrip_preserves_scope_and_budget(self):
+        ctx=self.scope_task()
+        # Real A asset log is separate; it must neither require old body history nor reset body budget.
+        (self.template/'asset-call.json').write_text('{"synthetic":true,"kind":"asset","status":"COMPLETED"}')
+        self.refresh_template()
+        self.test_direct_bound_run_real_full_episode_gates_and_conditional_release()
+        state=json.loads((self.base/'local-run/E000/00_输入审计/生产流程.json').read_text())
+        self.assertEqual(state['task_context'],ctx)
+        self.assertEqual(self.index['episodes'][0]['panels'][0]['history']['remaining_auto_corrections'],1)
+
+    def test_new_template_cannot_downgrade_to_unscoped_index(self):
+        self.scope_task();self.index.pop('task_context');self.save()
+        with self.assertRaisesRegex(ValueError,'TASK_SCOPE_HOLD'):h.audit_index(self.package)
+
+    def test_current_task_unknown_cannot_be_hidden_by_empty_handoff_history(self):
+        self.scope_task();self.state['panels'][0]['status']='RESULT_UNKNOWN';self.refresh_template()
+        with self.assertRaisesRegex(ValueError,'真实调用'):h.audit_index(self.package)
+
+    def test_task_identity_is_bound_by_export_digest_and_actual_template(self):
+        self.scope_task();before=d.input_review(self.package,self.index)['approved_input_digest']
+        self.index['task_context']=copy.deepcopy(self.index['task_context'])
+        self.index['task_context']['task_id']='OTHER_TASK';self.save()
+        self.assertNotEqual(before,d.input_review(self.package,self.index)['approved_input_digest'])
+        with self.assertRaisesRegex(ValueError,'TASK_SCOPE_HOLD'):h.audit_index(self.package)
     def pipeline(self):
         z=self.base/'candidate.zip';h.pack(self.package,z)
         received=Path(h.extract(z,self.base/'extracted',reserve_bytes=0)['root'])

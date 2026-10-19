@@ -71,6 +71,11 @@ def files(root):
 
 def audit_index(root):
     root=Path(root);data=read(root/INDEX)
+    from task_context import validate as validate_task, history_errors
+    context=data.get('task_context')
+    if context is not None:
+        validate_task(context)
+        if context['book_id']!=data.get('book_id'):raise ValueError('TASK_SCOPE_HOLD:交接书名与任务失配')
     if data.get('policy')!=POLICY or not data.get('package_id') or not data.get('book_id'):
         raise ValueError('缺交接验收索引策略、包ID或书ID')
     for name in REQUIRED:
@@ -125,6 +130,15 @@ def audit_index(root):
             if (unknown or h['status']=='UNRESOLVED') and kind not in {'HOLD','WAIT_DEPENDENCY'}:
                 raise ValueError(pid+':未知历史不得伪记就绪')
             if kind=='REUSE':reference(root,row.get('accepted_image'));reference(root,row.get('accepted_qa'));reference(root,row.get('acceptance'))
+        if episode.get('run_template'):
+            plan=read(reference(root,episode['run_template']))
+            template=inside(root,plan['root']);state=read(inside(template,plan['state_file']))
+            errors=history_errors(context,episode,state,template,lambda ref:reference(root,ref))
+            if errors:raise ValueError(';'.join(errors))
+        elif context is not None:
+            raise ValueError('TASK_SCOPE_HOLD:本任务零调用须由实际运行模板核对，不能只填空历史')
+    if context is not None and [eid for eid in context['episode_ids'] if eid in seen]!=[e['episode_id'] for e in episodes]:
+        raise ValueError('TASK_SCOPE_HOLD:交接范围不属于任务话序；缩小范围仍须准确输入批准')
     return data
 
 
@@ -260,6 +274,9 @@ def rehearse(zip_path,package_root,run_root,run_index,report,*,timeout=180):
         try:
             state_path=inside(run_root,run['state']);state=read(state_path)
             if state.get('book_id')!=data['book_id'] or state.get('episode_id')!=eid:raise ValueError('本地状态书话失配')
+            from task_context import history_errors
+            scoped=history_errors(data.get('task_context'),episode,state,state_path.parent.parent,lambda ref:reference(package_root,ref))
+            if scoped:raise ValueError(';'.join(scoped))
             mapping=reference(run_root,run['binding_evidence'])
             actual_source=read(reference(state_path.parent.parent,state.get('source_snapshot')))
             actual_ids=actual_source.get('panel_ids') or (actual_source.get('id_mapping') or {}).get('panel_ids')

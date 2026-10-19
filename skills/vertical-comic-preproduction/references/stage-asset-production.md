@@ -43,7 +43,7 @@ Review form and visual/spatial continuity separately before proposing acceptance
 
 Record the template comparison, generation scope, form result, continuity result, unresolved differences and user acceptance evidence. Do not promise that one image-generation pass will satisfy both reviews. Failed or unresolved candidates remain HOLD and cannot be used as approved B references or promoted into the canonical package. Candidate approval and book-package publication follow the current book's asset rules; a technical PASS alone does not authorize either.
 
-Before promoting any new scene or state board into a book-wide package, rerun the book-wide asset-closure scan. A package is not complete merely because its own folder has no HOLDs; it must also account for later episode references and user-supplied assets outside that folder.
+Before promoting a new scene or state board, reconcile the addition with the current book-wide canonical index and allowed evidence, preserving known gaps. Do not claim whole-book completeness from this incremental publication. A separately requested full-book inventory includes all provided episode references and user attachments; a fresh batch does not search unrelated old production folders. See [task origin](task-origin.md).
 
 For recurring character states, use the matching approved character board as the base evidence before generating a state board. Retain the book-specific card system and add only the script-supported or explicitly authorized state delta. For every state board, record the approved character reference actually opened, unchanged identity anchors (face, hair, body proportions, fixed marks, base palette), the state delta, and inferred fields. A visual mismatch in the base character is a blocker even when the new prop or state itself is present.
 
@@ -61,6 +61,21 @@ For recurring character states, use the matching approved character board as the
 Technical faithful_atlas_v1 crops are separate from recurring character assets: preserve each original approved owner/state, verify pixels and readability, and use only identity/costume purposes. See [execution-compatibility.md](execution-compatibility.md). Asset candidate calls use the shared asynchronous runner and complete error logging; independent missing states/views can overlap within confirmed capacity. Prepare exact board labels deterministically as needed, retaining raw candidates.
 
 ## 本批补充参考与资产入库
+
+发现缺项后执行下表，不以ASSET_HOLD代替补充工作。用户已授权前期和缺资产补充时，可准备并生成对应候选；“停在正文生图前”不禁止已授权资产生图。身份/剧情事实不明仍先确认，新增资产仍按用户保留的A亲审节点批准。
+
+| 本批实际需求 | 处理 |
+| --- | --- |
+| 当前批准资产覆盖 | 复用并实际看图核对，不重复生成 |
+| 已有资产缺必要视角/状态 | 保留身份和布局，只补视角/状态 |
+| 重要且需持续复用、确需完整板或用户指定入库 | 按本书规范生成并优化候选；形式/画风/空间/细节检查及A批准后发布增量索引 |
+| 仅服务本批/特定镜头 | 制作临时补充参考，限定身份/状态/格号；不自动入库 |
+| 真正一次性且逐格描述足够 | 直接描述，不强制独立资产板 |
+| 旧索引缺项但本批不使用 | 记录库追溯限制，不阻塞本批、不生成无关资产 |
+
+在唯一visual_basis.asset_tasks登记asset_id、episode_id、panel_ids、visible_occurrences（实际扫描范围内次数）、source_basis、当前reference（资产根相对path/sha256）及处理决定。publication_required标明确需入库；existing_asset_requires_extension标明仅缺视角/状态；inline_sufficient只用于确实单次、描述足够的对象。这些是执行者基于实际源稿/看图作出的判断，脚本不推测重要性或批准。
+
+可运行scripts/asset_tasks.py --asset-root <当前全面资产根> --visual-basis <本话基准>只核选定需求的文件/哈希并返回补充路线；不扫描旧目录、不代表视觉PASS、不授予入库批准。补充调用/失败/未知与优化过程进入A原有记录，正文调用账另记。候选获批后更新当前基准；正式资产追加版本、文件哈希和准确范围，不覆盖旧资产；临时参考只进入本批包。发布前对当前全书索引和允许证据做增量对账，已知无关缺口保留，不要求重建无关全书资产。
 
 新runtime生产审计限本批实际需求。已有批准场景/状态可用时复用，只补实际缺少的目标视角或状态细节；每次调用仍实际带批准画风及适用身份衣装。仅供本批的补充参考在A审查中明确范围，不要求重建与本批无关的整套视图。完整人物卡/场景板仍按本书规范制作于确有完整资产需求或用户要求入库时；临时补充参考不得宣称全库完备或自动发布到资产库。局部缺口只阻塞受影响格及真实依赖。
 

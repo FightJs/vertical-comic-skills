@@ -21,6 +21,8 @@ description: Coordinate a staged vertical-comic workflow from approved scripts a
 
 ## 选择任务模式
 
+先读[任务来源与历史范围](references/task-origin.md)，再选职责。明确重新制作/仅根据脚本和资产时建立独立任务，只读取本次输入，不追索同书同话其他任务的调用、旧图、QA或预算。恢复/接包保留原任务，复用仅限用户指定成果。分工制作不等于续做；任务来源必须写入新运行与交接索引。
+
 - 新任务：按[整话异步](references/episode-async.md)使用episode_preparation_v1、episode_async_v1、scoped_episode_review_v1、comic_execution_v2与incremental_runtime_v2。全话准备、[逐格就绪](references/panel-readiness.md)，B与实际包合并展示并分别记录决定；缺口仅阻塞受影响格及真实依赖。默认无固定半话C。
 - 恢复任务：先从原冻结入口运行staged_workflow.py --check status；按原模式、源序、输入、规则与预算恢复，不静默迁移旧RV。
 - 用户指定分工制作：最终只交一个正式ZIP，交接说明、哈希清单及发布证据内置；接收端直接用ZIP路径和可选输出位置启动，旧版sidecar仍兼容。读[双电脑交接](references/split-production.md)、[直接交付](references/direct-delivery.md)及[ZIP演练](references/zip-handoff.md)。只提交获批当前半话，第一半话确认后才提交后半；缺技术编译的候选不能当正式可生产包。

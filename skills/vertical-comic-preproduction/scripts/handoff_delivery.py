@@ -107,4 +107,5 @@ def input_review(root,index):
         for ref in packages:reference(root,ref)
         selected['generation_review_packages']=packages;episodes.append(selected)
     value={'policy':'approved_inputs_auto_export_v1','package_id':index['package_id'],'book_id':index['book_id'],'episodes':episodes}
+    if 'task_context' in index:value['task_context']=index['task_context']
     return {**value,'approved_input_digest':hashlib.sha256(json.dumps(value,ensure_ascii=False,sort_keys=True,separators=(',',':')).encode()).hexdigest()}

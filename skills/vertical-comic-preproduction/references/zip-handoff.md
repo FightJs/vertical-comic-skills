@@ -4,7 +4,7 @@
 
 ## 前期必须完成的顺序
 
-1. 先补齐完整技术编译与可移植上下文，再完成原输入审计、A、全话镜头B及生图包批准；核对源适配与源快照，不把技术派生编号写回源稿。核对所有话的历史状态、逐次调用账、返回图、QA、未知请求和剩余返修预算。原源稿/批准/调用证据保持字节及哈希。
+1. 先按[任务来源](task-origin.md)冻结task_id、输入与继承范围，再补齐技术编译及可移植上下文，完成输入审计、A、全话B及包批准；核对源适配与源快照，不改源编号。仅核本任务及选定继承范围的逐次调用、返回图、QA、UNKNOWN与预算。fresh不索要其他任务旧账；资产调用和正文调用分开。原证据保持字节及哈希。
 2. 建候选目录，带齐实际参考、旧结果、规则和冻结工具。写`交接说明.md`、`接包生产执行要求.md`及下述验收索引；不替换原生产索引。提供已冻结、可由bind自动验证和落盘的运行模板，不能只写“接手后自行修路径”。
 3. 用`handoff_zip.py pack`建立候选ZIP，随后`extract`到全新目录。前期工作目录仍存在也不能使用其中的绝对路径或缓存通过演练。
 4. 模拟接包人，用bind按包内模板在包外建立新本地RV与绑定索引。运行原冻结编译器的真实完整预检；`rehearse`提供覆盖全部话的只读编译检查，不调用生图、不领线上许可。实际参考必须落在解压包或新RV内。H001选集包含整半话，实际就绪格须与声明准确相等。H002此时也须通过全话readiness资料/依赖/源审计，不假造第一半话人工批准，也不提前生图。
@@ -38,6 +38,12 @@
   "delivery_policy":"direct_delivery_v2",
   "package_id":"唯一候选版本ID",
   "book_id":"实际书ID",
+  "task_context":{
+    "policy":"task_scoped_history_v1","task_id":"本次真实任务ID",
+    "book_id":"实际书ID","episode_ids":["E026"],"origin":"fresh",
+    "input_scope":"script_and_assets","imports":[],
+    "request_source":{"source_kind":"user_message","source_locator":"真实消息位置","quote":"真实重新制作原话"}
+  },
   "episodes":[{
     "episode_id":"E026",
     "panel_ids":["源格号1","源格号2"],
@@ -50,6 +56,7 @@
       "panel_id":"源格号1",
       "classification":"READY_H001",
       "history":{
+        "task_id":"本次真实任务ID",
         "status":"NEVER_SUBMITTED",
         "reviewer":"实际核对者",
         "conclusion":"核查哪些状态及原始调用账后得到的具体结论",
@@ -65,7 +72,7 @@
 
 示例省略第二格，实际必须完整覆盖`panel_ids`并保持顺序。规范化源序审计JSON根提供`panel_ids`或`id_mapping.panel_ids`，并附原始源适配/原稿哈希与审计结论；它是补充核对视图，不替代原源快照。真实编译器仍核查原source_adapter/source_snapshot合同。
 
-历史status为NEVER_SUBMITTED、RECONCILED或UNRESOLVED。逐次attempt含`attempt_id`、`kind`（initial/auto_correction/manual_authorized）、`status`（COMPLETED/FAILED/UNKNOWN）及非空`evidence`引用数组；COMPLETED须附`output`及`qa`引用，manual_authorized须附`authorization`。已知有图而缺文件必须补齐或保留未解决，不能把COMPLETED改FAILED来省略图片。UNRESOLVED或UNKNOWN只能HOLD/WAIT_DEPENDENCY；未知调用占用的轮次仍记录。最多一轮自动返修不变，另有授权的追加调用独立列账。
+历史status为NEVER_SUBMITTED、RECONCILED或UNRESOLVED，均限定本任务；新包顶层task_context、history.task_id与运行模板一致，逐次attempt另含真实task_id，导入来源须在imports准确选择。逐次attempt含`attempt_id`、`kind`（initial/auto_correction/manual_authorized）、`status`（COMPLETED/FAILED/UNKNOWN）及非空`evidence`引用数组；COMPLETED须附`output`及`qa`引用，manual_authorized须附`authorization`。NEVER_SUBMITTED由本任务来源及真实运行模板状态核对，不能仅填空账或用PENDING证明零调用。已知本任务有图而缺文件必须补齐或保留未解决，不能改FAILED省略图片。UNRESOLVED/UNKNOWN只能HOLD/WAIT_DEPENDENCY；同一任务换路径不重置预算。其他独立任务不因相同书话号被导入。
 
 HOLD/WAIT_DEPENDENCY加`blockers`数组，每项含`reason`、`owner`、`resolution`；REUSE加`accepted_image`、`accepted_qa`、`acceptance`三份引用。H001就绪仅用READY_H001，H002资料齐备用PREPARED_H002。
 

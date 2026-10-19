@@ -78,6 +78,8 @@ Skill会先检查本项目已有配置，再一次收集缺少的书名、源脚
 
 以后同一本书只需“前期制作：《书名》E026–E030，使用本书配置”。接包端只需“接包生产：【正式ZIP路径】，审核人是我”；包内完整性清单、发布证据、书话范围自动核验；可填写输出位置，无需外置校验文件。
 
+明确“只根据脚本和资产重新制作”会建立独立任务，不寻找或继承同书同话其他任务的旧图、QA和返修账。恢复与接包保留原任务及预算；仅明确选中的旧成果才进入复用核对。缺资产先判断本批实际需求，再分为正式资产候选、视角/状态补充、临时参考或一次性直接描述，按A审查决定入库；旧索引的无关断链不阻塞整批。具体规则见[任务来源与历史范围](skills/vertical-comic-preproduction/references/task-origin.md)。
+
 详细引导见[首次使用](skills/vertical-comic-preproduction/references/quick-start.md)。[JSON配置示例](examples/comic.config.example.json)只供高级用户显式配置；默认规则来自总控Skill的`assets/rule-memory`，新用户无需指定规则目录。执行agent数量和输出目录可在对话中临时指定，实际并行仍服从可用容量。
 
 ## 规则增补与同步

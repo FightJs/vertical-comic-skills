@@ -334,6 +334,11 @@ def _evaluate_with_session(state, root, check="status", requested=None):
 
 def evaluate(state, root, check="status", requested=None):
     from codex_reference_contract import file_session
+    from task_context import state_errors
+    scoped=state_errors(state,root)
+    if scoped:
+        return {'status':'HOLD','next_action':'TASK_SCOPE_HOLD','errors':scoped,
+                'ready_panel_ids':[],'reports':[],'failure_domain':'INPUT_OR_REVIEW_CONTEXT'}
     with file_session() as memo:
         result = _evaluate_with_session(state, root, check, requested)
         action=result.get('next_action','')

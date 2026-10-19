@@ -18,6 +18,7 @@ description: Lock episode-specific character identities, costume states, scenes 
 3. 按[实际执行质量](../vertical-comic-preproduction/references/execution-quality.md)复用scene_views、appearance_details与原source_region。选择正确子空间/方向；关键饰品登记清晰来源、款式和佩戴侧。有无与遮挡分开，不从低清或遮挡推导不存在。
 4. 按[参考预算](../vertical-comic-preproduction/references/reference-budget.md)准备实际可用图片。每请求最多5条路径；同图合并用途，人物图集只做忠实原像素排布。除归属和像素一致，还实际看清本格所需脸、衣领和饰品；看不清先调整选区，不靠放大猜设计。
 5. 只补确实缺失且影响当前格的资产，生成及修复实际携带批准画风；新图保持候选。独立资产可按实际容量并发，完整保存调用及未知结果。
+   缺口按[补充与入库分流](../vertical-comic-preproduction/references/stage-asset-production.md#本批补充参考与资产入库)解决：完整必要资产、局部视角/状态、临时参考、一次性直接描述分别处理。旧索引断链不等于本批缺资产，不追索无关旧工程；已授权的资产候选生成不属于正文生图。保留用户指定的A审核与正式入库边界。
 6. A材料列准确就绪/待补格、引用和状态；同版适用批准直接复用，新增内容按[合并审查](../vertical-comic-preproduction/references/grouped-review.md)处理。真实用户委托可支持执行者作范围内决定，但不能伪造逐项用户批准。
 
 输出为权威visual_basis、准确参考及缺口、真实批准/委托决定证据。场景多视图、背景及细节操作见[视觉证据](../vertical-comic-preproduction/references/visual-evidence.md)和[背景模式](../vertical-comic-preproduction/references/background-treatment.md)，无需每格新增资产图或独立审查表。

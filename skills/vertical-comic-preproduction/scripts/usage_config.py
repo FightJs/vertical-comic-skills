@@ -14,6 +14,12 @@ def read_config(path, *, frozen_memory_source=None):
     if config.get("policy") != POLICY:
         raise ValueError("配置policy必须是comic_usage_v1")
     inputs = config.get("inputs", {})
+    if config.get('memory',{}).get('source')=='builtin' or not inputs.get('memory_root'):
+        from builtin_memory import resolve
+        resolved=resolve()
+        config.setdefault('inputs',{})['memory_root']=resolved['root']
+        config.setdefault('memory',{}).update(index=resolved['index'],loading_policy=resolved['loading_policy'],index_sha256=resolved['index_sha256'])
+        inputs=config['inputs']
     for key, directory in (("script_path", False), ("asset_root", True), ("memory_root", True)):
         p = Path(inputs.get(key, ""))
         if not p.is_absolute() or not (p.is_dir() if directory else p.is_file()):
@@ -111,6 +117,7 @@ def memory_source(config):
               "index": memory.get("index", "记忆索引.json")}
     if "loading_policy" in memory:
         source["loading_policy"] = memory["loading_policy"]
+    if memory.get('index_sha256'):source['index_sha256']=memory['index_sha256']
     return source
 
 

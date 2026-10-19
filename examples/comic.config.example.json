@@ -1,20 +1,5 @@
 {
   "policy": "comic_usage_v1",
-  "production": {
-    "book": "【书名】",
-    "episodes": [
-      "E001",
-      "E002",
-      "E003",
-      "E004",
-      "E005"
-    ]
-  },
-  "inputs": {
-    "script_path": "【脚本绝对路径】",
-    "asset_root": "【本书资产绝对目录】",
-    "memory_root": "【通用规则记忆绝对目录】"
-  },
   "generation": {
     "execution_mode": "episode_async_v1",
     "batch_strategy": "full_episode",
@@ -26,7 +11,8 @@
     "index": "记忆索引.json",
     "cache": "run_worker_version",
     "admission": "cross_work_only",
-    "loading_policy": "stage_baseline_loading_v1"
+    "loading_policy": "stage_baseline_loading_v1",
+    "source": "builtin"
   },
   "framing": {
     "policy": "content_balanced_ratios_v1"
@@ -84,5 +70,16 @@
   },
   "execution_quality": {
     "policy": "execution_quality_v1"
+  },
+  "production": {
+    "book": "【书名】",
+    "episodes": [
+      "E001",
+      "E002"
+    ]
+  },
+  "inputs": {
+    "script_path": "【脚本绝对路径】",
+    "asset_root": "【资产绝对目录】"
   }
 }

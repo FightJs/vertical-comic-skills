@@ -12,6 +12,8 @@ Carry confirmed `character_bindings`, `scene_binding` and `identity_registry` in
 
 For `physical_scene_priority_v1`, derive each view from the approved room and current station state: fixed geometry and real support/contact → the specified character action and expression → a camera that can actually see the required information → crop. A script's shot description is a candidate view, not authority to add furniture or bend a body. Preserve a hard action target and outcome; if no physically possible view satisfies them, hold only the affected panel/dependencies for a scoped decision. Record any approved conflict solution in this panel's `visual_resolution`, rather than altering `locked_script`.
 
+先在原镜头记录区分三类源描述：剧情事实/动作结果、摄影机建议、抽象信息表达。剧情事实保持；机位建议按真实空间检验；“信息传递线”等先确定是否为批准的图形表现，不能自动生成现实中的发光连线。前后稿在在场人物、动作阶段或承托面上冲突时，只处理受影响格，在B内解决，不能把相反指令一起交模型。
+
 For every panel, create a `shot_design` record with at least:
 
 - `panel_id`, `script_shot_id`, `scene_id`, `station_state_id`;
@@ -100,3 +102,11 @@ B阶段具体可实现性与方向核对见[实际执行质量与返修分流](e
 framing_feasibility沿用原semantic_audit：实际核对裁切是否容得下必显动作、当前方向是否可读所属肢体与接触点、承托及反射是否成立、参考是否含相反状态。检查器验证当前expected绑定，不证明几何正确。简单手势不强制复杂接触字段；多人接触读不清先修镜头或选必要辅助图，不能只在prompt重复“严格正确”。
 
 关键局部易漏检时，在原check增加inspection_targets具体列所属前臂/腕、接触点/对象或清晰度目标。它用于返图观察覆盖，不是模型级区域控制或新增审批点。普通格不为凑字段加框。
+
+同次framing_feasibility还核对三种关系，分别写进已有characters_visible、fixed_props_visible及hand/contact/space检查：
+
+- 动作整体：先给每人左右肢体分配当前任务，再看手指；递接物说明当前由谁承重、另一只手处于靠近/接触/接稳哪一阶段。握杯、持物围绕角色用途设计，强调道具用取景解决，不以不自然前伸、扭腕或忽大忽小解决。可见全身沿肩—髋—膝—脚检查扭转与受力，床沿坐姿区分骨盆承托、脚落点与被褥覆盖。
+- 观看关系：摄影机世界位置/高度、头部朝向、目光目标独立填写。物件正面朝谁，使用者和摄影机各看到哪一面；若屏幕内容必须给读者看，选择能成立的过肩/侧向视角。无需读屏时自然呈现背面，不能翻物件迁就观众；俯拍不等于人物抬头看镜头。
+- 持续状态：沉默、熟睡或暂时没有动作的人仍在原位置。画外给取景边界依据，遮挡指明遮挡物与覆盖范围；不能凭“合理遮挡”四个字放行。床侧按固定床头/枕头/床沿定位，车辆按路沿/车道定位，区分画面左右变化与世界移位。
+
+这些是同一次B核对的具体目标，正式判据分别沿MEM-001/002/005/006/009，不增加审批、辅助图或第二份状态表。

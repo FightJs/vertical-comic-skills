@@ -4,7 +4,7 @@
     {
       "id": "MEM-001",
       "title": "床面承托与被褥遮挡",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "status": "active",
       "scope": "cross_work",
       "primary_stage": "generation",
@@ -17,7 +17,7 @@
         "portable": true,
         "contains_story_facts": false,
         "rationale": "只约束通用制作方法与检查动作，不指定作品、人物、话格或剧情事实。",
-        "basis": "用户已授权构建通用规则记忆；后续新增条目先candidate再审查。"
+        "basis": "用户于2026-10-19在完成实际图复核及通用修改方案后明确要求“好的开始修改skill文件”；据此修改既有通用方法，不保存案例剧情。"
       },
       "trigger": {
         "any_tags": [
@@ -73,14 +73,14 @@
       },
       "file": {
         "path": "规则/生图/MEM-001_床面承托与被褥遮挡.md",
-        "sha256": "a39e190ab74361c35a3e6ef6e038ffcb1dd8b8cf0a426faab03440d70ecc1e5e"
+        "sha256": "7e9a3bc7650d3e61cfad5927dece85a6250dd09dc71c0b9e71e0c7dfefb511cf"
       },
       "load_policy": "on_match"
     },
     {
       "id": "MEM-002",
       "title": "多人接触与肢体归属",
-      "version": "1.2.0",
+      "version": "1.3.0",
       "status": "active",
       "scope": "cross_work",
       "primary_stage": "generation",
@@ -93,7 +93,7 @@
         "portable": true,
         "contains_story_facts": false,
         "rationale": "只约束通用制作方法与检查动作，不指定作品、人物、话格或剧情事实。",
-        "basis": "用户已授权构建通用规则记忆；后续新增条目先candidate再审查。"
+        "basis": "用户于2026-10-19在完成实际图复核及通用修改方案后明确要求“好的开始修改skill文件”；据此修改既有通用方法，不保存案例剧情。"
       },
       "trigger": {
         "any_tags": [
@@ -136,7 +136,7 @@
       },
       "file": {
         "path": "规则/生图/MEM-002_多人接触与肢体归属.md",
-        "sha256": "f4485429da85b899c376d0463ed540f09bd1dea9f51827c2bbb31f792dc5cb83"
+        "sha256": "ad89f6e847954c55e839898fcb96895406df07b1c20b208cba9fdfd4c0ca2404"
       },
       "load_policy": "on_match"
     },
@@ -258,7 +258,7 @@
     {
       "id": "MEM-005",
       "title": "人物场景与关键道具的一致性和连续性",
-      "version": "1.3.0",
+      "version": "1.4.0",
       "status": "active",
       "scope": "cross_work",
       "primary_stage": "shot_design",
@@ -271,7 +271,7 @@
         "portable": true,
         "contains_story_facts": false,
         "rationale": "可跨话跨作品复用的制作与验收要求，不保存任何具体人物、话格或剧情事实。",
-        "basis": "用户于2026-10-12明确要求将六项制作标准规整并进入规则记忆；按此次明确授权启用。 用户于2026-10-16授权落实通用提示词优化，补充同范围方法，既有触发/阶段/检查ID不变。"
+        "basis": "用户于2026-10-19在完成实际图复核及通用修改方案后明确要求“好的开始修改skill文件”；据此修改既有通用方法，不保存案例剧情。"
       },
       "trigger": {
         "any_tags": [
@@ -317,14 +317,14 @@
       },
       "file": {
         "path": "规则/镜头/MEM-005_人物场景与关键道具的一致性和连续性.md",
-        "sha256": "82e8603bdb3a1a4671b9189dd7d0e3c615d0380867a536708467d2a2d94040c4"
+        "sha256": "94ced5a4b635386956199c0e7d3a8860cde0205850769ad8f7ceb9c69363aca8"
       },
       "load_policy": "stage_baseline"
     },
     {
       "id": "MEM-006",
       "title": "人体结构物理合理性与动作表现力",
-      "version": "1.2.0",
+      "version": "1.3.0",
       "status": "active",
       "scope": "cross_work",
       "primary_stage": "generation",
@@ -337,7 +337,7 @@
         "portable": true,
         "contains_story_facts": false,
         "rationale": "可跨话跨作品复用的制作与验收要求，不保存任何具体人物、话格或剧情事实。",
-        "basis": "用户于2026-10-12明确要求将六项制作标准规整并进入规则记忆；按此次明确授权启用。 用户于2026-10-16授权落实通用提示词优化，补充同范围方法，既有触发/阶段/检查ID不变。"
+        "basis": "用户于2026-10-19在完成实际图复核及通用修改方案后明确要求“好的开始修改skill文件”；据此修改既有通用方法，不保存案例剧情。"
       },
       "trigger": {
         "any_tags": [
@@ -383,7 +383,7 @@
       },
       "file": {
         "path": "规则/生图/MEM-006_人体结构物理合理性与动作表现力.md",
-        "sha256": "09c279bc79bade75e45b1ab0068d39f95104b898d29b9a219a58c1e18f339ef8"
+        "sha256": "78af98d34e2e8db9f09f83be144d144670b7b2acb983ec1ad37af630bb8bb04a"
       },
       "load_policy": "stage_baseline"
     },
@@ -521,7 +521,7 @@
     {
       "id": "MEM-009",
       "title": "真实透视与遮挡优先于完整展示",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "status": "active",
       "scope": "cross_work",
       "primary_stage": "shot_design",
@@ -534,7 +534,7 @@
         "portable": true,
         "contains_story_facts": false,
         "rationale": "可跨话跨作品复用的制作与验收要求，不保存任何具体人物、话格或剧情事实。",
-        "basis": "用户于2026-10-12明确要求将六项制作标准规整并进入规则记忆；按此次明确授权启用。"
+        "basis": "用户于2026-10-19在完成实际图复核及通用修改方案后明确要求“好的开始修改skill文件”；据此修改既有通用方法，不保存案例剧情。"
       },
       "trigger": {
         "any_tags": [
@@ -581,14 +581,14 @@
       },
       "file": {
         "path": "规则/镜头/MEM-009_真实透视与遮挡优先于完整展示.md",
-        "sha256": "44206da08e7e79e4a9998287f8df00ecda07095d566914cceec34e4232e3614b"
+        "sha256": "649b2344b984a4e11cb72922eb27ab71efe77fff491345d015065b8fe3d3f300"
       },
       "load_policy": "on_match"
     },
     {
       "id": "MEM-010",
-      "title": "相邻格机位视角与景别必须同时变化",
-      "version": "1.1.0",
+      "title": "叙事驱动的相邻镜头与物理连续性",
+      "version": "2.0.0",
       "status": "active",
       "scope": "cross_work",
       "primary_stage": "shot_design",
@@ -601,7 +601,7 @@
         "portable": true,
         "contains_story_facts": false,
         "rationale": "可跨话跨作品复用的制作与验收要求，不保存任何具体人物、话格或剧情事实。",
-        "basis": "用户于2026-10-12明确要求将六项制作标准规整并进入规则记忆；按此次明确授权启用。"
+        "basis": "用户在实际图复核后的修改方案中获知MEM-010调整方向，并于2026-10-19明确要求“好的开始修改skill文件”。"
       },
       "trigger": {
         "any_tags": [
@@ -614,9 +614,8 @@
         "shot_design": {
           "checks": [
             "adjacent_pair_basis",
-            "camera_view_distinct",
-            "shot_scale_distinct",
-            "actual_composition_difference",
+            "narrative_coverage",
+            "framing_economy",
             "physical_continuity_preserved"
           ],
           "artifacts": [],
@@ -625,9 +624,8 @@
         "generation": {
           "checks": [
             "adjacent_pair_basis",
-            "camera_view_distinct",
-            "shot_scale_distinct",
-            "actual_composition_difference",
+            "narrative_coverage",
+            "framing_economy",
             "physical_continuity_preserved"
           ],
           "artifacts": [],
@@ -636,9 +634,8 @@
         "image_review": {
           "checks": [
             "adjacent_pair_basis",
-            "camera_view_distinct",
-            "shot_scale_distinct",
-            "actual_composition_difference",
+            "narrative_coverage",
+            "framing_economy",
             "physical_continuity_preserved"
           ],
           "artifacts": [],
@@ -646,10 +643,10 @@
         }
       },
       "file": {
-        "path": "规则/镜头/MEM-010_相邻格机位视角与景别必须同时变化.md",
-        "sha256": "3c23021bd174f731e51b0934237323caff6596dc5ed48bc34e9f01c62eedaf01"
+        "path": "规则/镜头/MEM-010_叙事驱动的相邻镜头与物理连续性.md",
+        "sha256": "0bc1ba2832cca681cc110576e34a50a758d15209e6848e63815cd8abd2b16167"
       },
-      "precedence": "当前用户明确指定的严格相邻镜头要求，替代旧版允许同景别/不要求机位与景别同时变化的宽松约定；不授权改写锁定剧情。",
+      "precedence": "2026-10-19用户授权优化：新任务以叙事与物理连续性优先，替代v1强制双变化；旧冻结任务不静默迁移。",
       "load_policy": "on_match"
     },
     {
@@ -726,7 +723,7 @@
   ],
   "maintenance_guide": {
     "path": "规则记忆输入与增添规范.md",
-    "sha256": "04b7df48583edbace28ed636fd630813f341b2664c454f4f2c7d37787218279a",
+    "sha256": "16f67b09de8d7ad7bb3fc8aa31ffd8b309b45d10a5f7dbc3e123c1eb424a230b",
     "purpose": "只在用户授权新增/修改/启停规则时读取；不作为每格生产规则加载。"
   },
   "tagging_instruction": "按当前阶段及trigger.semantic_condition核对实际画面：结构可证明的可见对象/真实相邻关系由共享入口派生，返修按operation触发；人体、床、镜面等语义由执行者核对并冻结标签。半话审计记录准确实际命中版本清单及必要人体适用性；load_policy只管何时读，阶段预读不扩展执行范围，脚本不自动看图或理解自然语言。",

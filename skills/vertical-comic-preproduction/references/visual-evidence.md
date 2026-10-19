@@ -13,6 +13,8 @@
 
 坐标使用相对区域/座位编号即可。固定实体、反复可辨认人物和远处人群区域分别登记；远处模糊宾客不用逐人设计。布局图按复杂场景需要制作一次后复用；每格不强制画图。
 
+原relations和blocking只补影响连续镜头的关系：床头/床沿与躯干承托、人物相对固定床侧、车辆相对路沿等。相对关系足够时不编厘米坐标。没有台词或暂时不参与动作不会删除在场者；物件大小以真实形态和相对手/头比例核对，透视变化不等于物件变大。
+
 ## B：本格状态和可见性
 
 全话shot_manifest及每个panel声明同一策略。panel增加 `visual_evidence`：
@@ -46,6 +48,8 @@
 
 visibility覆盖全部blocking实体及需要检查的固定锚点。status取visible/occluded/out_of_frame/off_scene，并写具体expected和basis。画外、遮挡与离场不能混用；入画人物和visibility须由执行者按当前裁切实际核对。
 
+occluded的expected写清谁挡住哪部分、遮挡边界；out_of_frame写哪条画幅边界排除该实体。较早宽景才能证明状态时，可在同一visual_evidence增加comparison_panel_ids，只列必要的同子空间/同scene_run前序格；最近前格仍由previous_panel_id记录。此列表用于实图比较，不自动增加生图依赖或阻塞普通独立格。QA在continuity_comparisons逐项绑定这些格当前output的path/sha256；其中任何原图换版，只复核受影响比较。
+
 `detail_visibility`必须覆盖当前入画人物/衣装在基准登记的全部细节，逐项写status与basis；可见细节另有kind=accessory、detail_id对应的检查。可见手写hands.applicability=REQUIRED并有kind=hand；真实遮挡不强求五指全露。多人接触有kind=contact检查，额外写actor、actor_limb、target、target_part、visible_path，明确角色自身左右与画面左右。躯干到手腕的连接、握持和受力都要实际看图。
 
 check的kind只取space/presence/contact/hand/accessory/clarity，id唯一，subject_ids和expected具体。没有某风险不新增重复项；同一观察可支持原六项与适用MEM，但不是所有项共用一条泛泛结论。
@@ -75,6 +79,8 @@ python <scripts>/visual_evidence.py --review-image <本次真实原图> --region
 ```
 
 记录full_image_review；visibility_observations、detail_visibility_observations逐实体写status、actual_visibility、observed。计划可见却消失不能PASS，计划画外却新增也不能PASS。
+
+full_image_review先记录逐人物肢体总量与所属路径、承托、人物持续在场，再沿原尺寸观察验证局部。检查露出区域是否真的有眼部/指掌结构，不能把“模糊”“可能被挡”当成观察证据。区分确认错误与证据不足；后者保留UNREVIEWED/HOLD并说明缺哪个视图，不冒充PASS，也不猜造必然错误。
 
 continuity_comparisons引用真实同场景前序panel_id及本话output的原样 `{path,sha256}`，写status与具体observed。前序换版即比较失效，重新看受影响格对；不要重跑不变图的全部审查。独立格生成仍并发，不因设计连续性自动创建generation_dependencies。前序图未返回时，先审本格六项和局部，连续性保持未审；实际匹配后补齐，不能提前记VISUAL_PASS。批次与D仍执行整话/跨话验收。
 

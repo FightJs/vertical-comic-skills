@@ -5,6 +5,9 @@ import argparse,datetime,hashlib,json,os,shutil,subprocess,sys,tempfile
 
 ROOT=Path(__file__).resolve().parents[1]
 NAME='vertical-comic-skills'
+USER_ADDITIONS='skills/vertical-comic-preproduction/assets/rule-memory/用户增补'
+
+def user_owned(name):return name==USER_ADDITIONS or name.startswith(USER_ADDITIONS+'/')
 
 def digest(p):
     h=hashlib.sha256()
@@ -43,20 +46,21 @@ def tree_files(folder):
 
 def inspect(home,data):
     managed=home/'skill-bundles'/NAME;marker=managed/'installed.json'
-    expected={mapped(r['path']):r['sha256'] for r in data['files']}
+    expected={mapped(r['path']):r['sha256'] for r in data['files'] if not user_owned(mapped(r['path']))}
     targets=[safe(home,'skills/'+n) for n in data['skills']]+[managed/'memory']
     old=json.loads(marker.read_text()) if marker.is_file() else None
     conflicts=[]
     if old:
         for name,h in old['files'].items():
+            if user_owned(name):continue
             p=safe(home,name)
             if not p.is_file() or digest(p)!=h:conflicts.append(name)
         known=set(old['files'])
         for target in targets:
-            conflicts.extend(p.relative_to(home).as_posix() for p in tree_files(target) if p.relative_to(home).as_posix() not in known)
+            conflicts.extend(p.relative_to(home).as_posix() for p in tree_files(target) if p.relative_to(home).as_posix() not in known and not user_owned(p.relative_to(home).as_posix()))
     elif any(t.exists() for t in targets):conflicts.append('Existing installation is not managed by this updater')
     changes=[n for n,h in expected.items() if not safe(home,n).is_file() or digest(safe(home,n))!=h]
-    if old:changes.extend(n for n in old['files'] if n not in expected)
+    if old:changes.extend(n for n in old['files'] if n not in expected and not user_owned(n))
     return managed,expected,targets,conflicts,changes
 
 def install(home,*,check=False,replace_existing=False):
@@ -72,6 +76,12 @@ def install(home,*,check=False,replace_existing=False):
         for row in data['files']:
             dest=safe(stage,mapped(row['path']));dest.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(ROOT/row['path'],dest)
             if digest(dest)!=row['sha256']:raise ValueError('Staged file changed')
+        # Carry user rules forward even when another modified Skill is explicitly replaced.
+        additions=safe(home,USER_ADDITIONS)
+        if additions.exists():
+            staged=safe(stage,USER_ADDITIONS)
+            if staged.exists():shutil.rmtree(staged)
+            shutil.copytree(additions,staged,symlinks=True)
         for target in targets:
             if target.is_symlink():raise ValueError('Refusing symlink installation')
             rel=target.relative_to(home);saved=backups/rel
@@ -86,7 +96,7 @@ def install(home,*,check=False,replace_existing=False):
         for saved,target in reversed(moved):os.replace(saved,target)
         raise
     finally:shutil.rmtree(stage,ignore_errors=True)
-    return {'status':'INSTALLED','skills':data['skills'],'memory_root':str(managed/'memory'),'backup':str(backups) if moved else None,'next_step':'Start a new Codex turn/task; frozen production RVs keep their original versions.'}
+    return {'status':'INSTALLED','skills':data['skills'],'memory_root':str(managed/'memory'),'backup':str(backups) if moved else None,'next_step':'在新的Codex轮次说：使用 $vertical-comic-preproduction。第一次使用，请引导我配置，进行前期制作。原冻结生产RV不升级。'}
 
 def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--codex-home',default=os.environ.get('CODEX_HOME',str(Path.home()/'.codex')));p.add_argument('--check',action='store_true');p.add_argument('--update',action='store_true');p.add_argument('--replace-existing',action='store_true');a=p.parse_args()

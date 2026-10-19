@@ -1,0 +1,8 @@
+{
+  "policy": "rule_contribution_target_v1",
+  "repository": "FightJs/vertical-comic-skills",
+  "branch_pattern": "users/{login}/rule-memory",
+  "path_pattern": "contributions/{login}/rule-memory",
+  "default_enabled": false,
+  "no_account": "local_and_export"
+}

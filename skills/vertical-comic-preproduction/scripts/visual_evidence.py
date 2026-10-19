@@ -566,7 +566,8 @@ def review_template(panel):
 def continuity_targets(panel):
     """Nearest scene panel plus selected earlier anchors; no generation dependency."""
     ev=panel.get('visual_evidence',{})
-    ids=[ev.get('previous_panel_id'),*ev.get('comparison_panel_ids',[])]
+    extra=ev.get('comparison_panel_ids',[])
+    ids=[ev.get('previous_panel_id'),*(extra if isinstance(extra,list) else [])]
     return list(dict.fromkeys(pid for pid in ids if text(pid)))
 
 
@@ -636,11 +637,11 @@ def review_errors(panel, item, *, require_pass=True, image_size=None):
                 errors.append(entity + ':实际可见性与计划不符或未检查')
     comparisons = actual.get('continuity_comparisons', [])
     for prior in continuity_targets(panel):
-      if require_pass and (not isinstance(comparisons, list) or not any(
-            isinstance(c, dict) and c.get('panel_id') == prior and c.get('status') == 'PASS'
-            and isinstance(c.get('image'), dict) and text(c['image'].get('path')) and text(c['image'].get('sha256'))
-            and text(c.get('observed')) for c in comparisons)):
-        errors.append(f'{prior}:缺同场景真实前序图连续性比较；独立生图不必等待，但验收须补齐')
+        if require_pass and (not isinstance(comparisons, list) or not any(
+                isinstance(c, dict) and c.get('panel_id') == prior and c.get('status') == 'PASS'
+                and isinstance(c.get('image'), dict) and text(c['image'].get('path')) and text(c['image'].get('sha256'))
+                and text(c.get('observed')) for c in comparisons)):
+            errors.append(f'{prior}:缺同场景真实前序图连续性比较；独立生图不必等待，但验收须补齐')
     if panel.get('operation') == 'repair':
         repair = actual.get('repair_comparison', {})
         source = panel.get('repair_source', {})
@@ -748,6 +749,7 @@ def comparison_errors(panel, item, records, root):
     from codex_reference_contract import checked_file
     errors = []
     rows = item.get('visual_evidence_review', {}).get('continuity_comparisons', [])
+    if not isinstance(rows,list):return ['连续性比较须为实际图片记录清单']
     for prior in continuity_targets(panel):
         current = records.get(prior, {}).get('output')
         if not current:

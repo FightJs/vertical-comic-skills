@@ -66,6 +66,9 @@ def main() -> int:
             if args.memory_loading_policy:
                 memory_source["loading_policy"] = args.memory_loading_policy
         source_index(memory_source)
+    if memory_source is None and not frozen_runtime and args.execution_mode in (None,'episode_async_v1'):
+        from builtin_memory import resolve
+        memory_source=resolve()
     if args.memory_loading_policy:
         if memory_source is None or memory_source.get("loading_policy") != args.memory_loading_policy:
             parser.error("memory-loading-policy须与指定规则库/使用配置一致")

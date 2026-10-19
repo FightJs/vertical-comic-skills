@@ -1,0 +1,74 @@
+{
+  "policy": "comic_usage_v1",
+  "generation": {
+    "execution_mode": "episode_async_v1",
+    "batch_strategy": "full_episode",
+    "episode_workers": 5,
+    "max_inflight_per_episode": "episode",
+    "max_inflight_images": "auto"
+  },
+  "memory": {
+    "index": "记忆索引.json",
+    "cache": "run_worker_version",
+    "admission": "cross_work_only",
+    "loading_policy": "stage_baseline_loading_v1",
+    "source": "builtin"
+  },
+  "framing": {
+    "policy": "content_balanced_ratios_v1"
+  },
+  "readiness": {
+    "policy": "panel_readiness_v1"
+  },
+  "preparation": {
+    "policy": "episode_preparation_v1"
+  },
+  "review": {
+    "systemic_failure_count_gt": 5,
+    "max_auto_correction_rounds": 1
+  },
+  "execution": {
+    "contract": "comic_execution_v2",
+    "request_log": "structured",
+    "semantic_audit": "before_freeze",
+    "id_mapping": "source_preserving"
+  },
+  "optimization": {
+    "policy": "scoped_episode_review_v1",
+    "approval_scope": "generation_episode_only",
+    "review_strategy": "on_return",
+    "unchanged_qa": "reuse_recorded",
+    "state_dispatch_policy": "ordinary_state_parallel_v1"
+  },
+  "runtime": {
+    "policy": "incremental_runtime_v2",
+    "audit_scope": "requested_episodes",
+    "checkpoint_presentation": "grouped",
+    "episode_review_dispatch": "as_ready",
+    "review_group_size": 4,
+    "review_max_wait_seconds": 30,
+    "watchdog": {
+      "policy": "worker_watchdog_v1",
+      "preparation_warning_seconds": 300,
+      "preparation_escalation_seconds": 720,
+      "review_warning_seconds": 300,
+      "review_escalation_seconds": 720,
+      "request_warning_seconds": 900,
+      "request_escalation_seconds": 1800
+    },
+    "snapshot_policy": "batch_snapshot_v1",
+    "question_policy": "grouped_review_v1",
+    "dispatch_policy": "episode_slot_lease_v1"
+  },
+  "quality": {
+    "policy": "visual_evidence_v1"
+  },
+  "background": {
+    "policy": "narrative_background_v1",
+    "selection": "content_driven",
+    "closeup_preference": "scene_flat"
+  },
+  "execution_quality": {
+    "policy": "execution_quality_v1"
+  }
+}

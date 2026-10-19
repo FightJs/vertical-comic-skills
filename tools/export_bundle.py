@@ -21,6 +21,7 @@ def export(skills_root,memory_root):
                 if not p.is_file() or EXCLUDED.intersection(p.parts) or p.suffix=='.pyc':continue
                 h=digest(p);dest=stage/'skills'/name/p.relative_to(source);dest.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(p,dest)
                 tracked.append((p,h))
+        memory_root=memory_root or skills_root/'vertical-comic-preproduction/assets/rule-memory/内置规则'
         index=json.loads((memory_root/'记忆索引.json').read_text())
         memories=[memory_root/'记忆索引.json',memory_root/'规则记忆输入与增添规范.md']
         for rule in index['rules']:
@@ -42,6 +43,20 @@ def export(skills_root,memory_root):
             s=re.sub(r'[A-Z]:/Users/[^/]+/\.codex/skills','~/.codex/skills',s)
             s=s.replace('老祖心声有点野','示例作品A').replace('天灾末世','示例作品B')
             p.write_text(s)
+        # User additions belong to each installation, never to the shared release.
+        additions=stage/'skills/vertical-comic-preproduction/assets/rule-memory/用户增补'
+        if additions.exists():shutil.rmtree(additions)
+        additions.mkdir(parents=True)
+        (additions/'记忆索引.json').write_text(json.dumps({'policy':'triggered_rules_v1','loading_policy':'stage_baseline_loading_v1','rules':[]},ensure_ascii=False,indent=2)+'\n')
+        # Sanitized maintenance docs are content-bound by the distributed index.
+        for index_path in stage.rglob('记忆索引.json'):
+            data=json.loads(index_path.read_text())
+            for rule in data.get('rules',[]):
+                file=index_path.parent/rule['file']['path']
+                rule['file']['sha256']=digest(file)
+            guide=data.get('maintenance_guide')
+            if guide:guide['sha256']=digest(index_path.parent/guide['path'])
+            index_path.write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n')
         tests=stage/'skills/vertical-comic-preproduction/tests'
         needle=re.compile(r'''["']/Users/[^/]+/Desktop/条漫/条漫Skill使用配置\.json["']''')
         for p in tests.glob('test_*.py'):
@@ -66,4 +81,4 @@ def export(skills_root,memory_root):
     print(json.dumps({'skills':len(SKILLS),'rules':len(index['rules']),'files':len(rows)},ensure_ascii=False))
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--skills-root',type=Path,required=True);parser.add_argument('--memory-root',type=Path,required=True);args=parser.parse_args();export(args.skills_root.resolve(),args.memory_root.resolve())
+    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--skills-root',type=Path,required=True);parser.add_argument('--memory-root',type=Path);args=parser.parse_args();export(args.skills_root.resolve(),args.memory_root.resolve() if args.memory_root else None)

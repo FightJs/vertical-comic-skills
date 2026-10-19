@@ -185,3 +185,5 @@ phases使用现有review_policy.PHASES精确枚举，不能填通配符。执行
 追加授权如包含additional_repair阶段，grant还须additional_attempt_ids={话号:{格号:[准确新attempt编号]}}，具体proposal/proof用attempt_ids={格号:[准确新attempt编号]}绑定。只记录明确已授予的次数，不创建或复用旧attempt，不替代执行门禁。technical_operations仍要求operations与constraints。
 
 局部扩展沿原字段：check.inspection_targets=[具体观察目标]；观察view.covered_targets=[实际覆盖目标]，可选source_size=[原宽,原高]/resampled。ref.detail_readability=[{subject_id,detail_id,region,status,observed}]对应图集原像素。repair_focus.structural_change={remove,replace,connect}；repair_source.preservation_regions={名称:[x0,y0,x1,y1]}对应真实底图；repair_comparison.preserved_observations={名称:{status,observed}}。模板不预填PASS，文本与像素范围校验不能替代实际观察。
+
+物理连续性扩展不新增根策略：同一actor/actor_limb在hand/contact中用稳定标识；同一肢体有多个target时，只有各项一致且具体的combined_grip_basis才可交原B可实现性核对。visual_evidence.comparison_panel_ids为可选的补充同场景/同连续状态前序格ID数组，不替代previous_panel_id、不建立生图依赖；QA的continuity_comparisons逐项绑定当前真实output。结构返修增加repair_comparison.whole_subject_recheck={status,observed}，模板UNREVIEWED，实际整体复核后填写。旧批次继续其冻结工具，不用新增代码重签历史输入。

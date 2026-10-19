@@ -1,0 +1,5 @@
+{
+  "policy": "triggered_rules_v1",
+  "loading_policy": "stage_baseline_loading_v1",
+  "rules": []
+}

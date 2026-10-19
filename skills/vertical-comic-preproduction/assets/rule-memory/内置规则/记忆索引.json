@@ -1,0 +1,732 @@
+{
+  "policy": "triggered_rules_v1",
+  "rules": [
+    {
+      "id": "MEM-001",
+      "title": "床面承托与被褥遮挡",
+      "version": "1.2.0",
+      "status": "active",
+      "scope": "cross_work",
+      "primary_stage": "generation",
+      "stages": [
+        "shot_design",
+        "generation",
+        "image_review"
+      ],
+      "admission": {
+        "portable": true,
+        "contains_story_facts": false,
+        "rationale": "只约束通用制作方法与检查动作，不指定作品、人物、话格或剧情事实。",
+        "basis": "用户于2026-10-19在完成实际图复核及通用修改方案后明确要求“好的开始修改skill文件”；据此修改既有通用方法，不保存案例剧情。"
+      },
+      "trigger": {
+        "any_tags": [
+          "person_on_bed"
+        ],
+        "any_visual_terms": [
+          "躺在床",
+          "躺床",
+          "床上",
+          "被窝",
+          "盖着被子",
+          "被褥"
+        ]
+      },
+      "requirements": {
+        "shot_design": {
+          "checks": [
+            "support_surface",
+            "body_on_mattress",
+            "bedding_overlap",
+            "bed_floor_relation",
+            "camera_visibility"
+          ],
+          "artifacts": [
+            "spatial_diagram"
+          ],
+          "prompt_constraints": false
+        },
+        "generation": {
+          "checks": [
+            "support_surface",
+            "body_on_mattress",
+            "bedding_overlap",
+            "bed_floor_relation",
+            "camera_visibility"
+          ],
+          "artifacts": [
+            "spatial_diagram"
+          ],
+          "prompt_constraints": true
+        },
+        "image_review": {
+          "checks": [
+            "support_surface",
+            "body_on_mattress",
+            "bedding_overlap",
+            "bed_floor_relation",
+            "camera_visibility"
+          ],
+          "artifacts": [],
+          "prompt_constraints": false
+        }
+      },
+      "file": {
+        "path": "规则/生图/MEM-001_床面承托与被褥遮挡.md",
+        "sha256": "7e9a3bc7650d3e61cfad5927dece85a6250dd09dc71c0b9e71e0c7dfefb511cf"
+      },
+      "load_policy": "on_match"
+    },
+    {
+      "id": "MEM-002",
+      "title": "多人接触与肢体归属",
+      "version": "1.3.0",
+      "status": "active",
+      "scope": "cross_work",
+      "primary_stage": "generation",
+      "stages": [
+        "shot_design",
+        "generation",
+        "image_review"
+      ],
+      "admission": {
+        "portable": true,
+        "contains_story_facts": false,
+        "rationale": "只约束通用制作方法与检查动作，不指定作品、人物、话格或剧情事实。",
+        "basis": "用户于2026-10-19在完成实际图复核及通用修改方案后明确要求“好的开始修改skill文件”；据此修改既有通用方法，不保存案例剧情。"
+      },
+      "trigger": {
+        "any_tags": [
+          "multi_person_contact"
+        ],
+        "any_visual_terms": [
+          "搀扶",
+          "抓住对方",
+          "握住对方"
+        ]
+      },
+      "requirements": {
+        "shot_design": {
+          "checks": [
+            "hand_ownership",
+            "contact_geometry",
+            "occlusion"
+          ],
+          "artifacts": [],
+          "prompt_constraints": false
+        },
+        "generation": {
+          "checks": [
+            "hand_ownership",
+            "contact_geometry",
+            "occlusion"
+          ],
+          "artifacts": [],
+          "prompt_constraints": true
+        },
+        "image_review": {
+          "checks": [
+            "hand_ownership",
+            "contact_geometry",
+            "occlusion"
+          ],
+          "artifacts": [],
+          "prompt_constraints": false
+        }
+      },
+      "file": {
+        "path": "规则/生图/MEM-002_多人接触与肢体归属.md",
+        "sha256": "ad89f6e847954c55e839898fcb96895406df07b1c20b208cba9fdfd4c0ca2404"
+      },
+      "load_policy": "on_match"
+    },
+    {
+      "id": "MEM-003",
+      "title": "换机位保持固定空间锚点",
+      "version": "1.2.0",
+      "status": "active",
+      "scope": "cross_work",
+      "primary_stage": "shot_design",
+      "stages": [
+        "shot_design",
+        "generation",
+        "image_review"
+      ],
+      "admission": {
+        "portable": true,
+        "contains_story_facts": false,
+        "rationale": "只约束通用制作方法与检查动作，不指定作品、人物、话格或剧情事实。",
+        "basis": "用户已授权构建通用规则记忆；后续新增条目先candidate再审查。"
+      },
+      "trigger": {
+        "any_tags": [
+          "camera_change"
+        ],
+        "any_visual_terms": [
+          "换机位",
+          "反打"
+        ]
+      },
+      "requirements": {
+        "shot_design": {
+          "checks": [
+            "fixed_anchors",
+            "camera_visibility",
+            "occlusion"
+          ],
+          "artifacts": [],
+          "prompt_constraints": false
+        },
+        "generation": {
+          "checks": [
+            "fixed_anchors",
+            "camera_visibility",
+            "occlusion"
+          ],
+          "artifacts": [],
+          "prompt_constraints": true
+        },
+        "image_review": {
+          "checks": [
+            "fixed_anchors",
+            "camera_visibility",
+            "occlusion"
+          ],
+          "artifacts": [],
+          "prompt_constraints": false
+        }
+      },
+      "file": {
+        "path": "规则/镜头/MEM-003_换机位保持固定空间锚点.md",
+        "sha256": "c80702645015027981222e2dbf55c72988e57ad835f3f2c05c40779099b19bbb"
+      },
+      "load_policy": "on_match"
+    },
+    {
+      "id": "MEM-004",
+      "title": "局部返修保留批准特征",
+      "version": "1.2.0",
+      "status": "active",
+      "scope": "cross_work",
+      "primary_stage": "generation",
+      "stages": [
+        "generation",
+        "image_review"
+      ],
+      "admission": {
+        "portable": true,
+        "contains_story_facts": false,
+        "rationale": "只约束通用制作方法与检查动作，不指定作品、人物、话格或剧情事实。",
+        "basis": "用户已授权构建通用规则记忆；后续新增条目先candidate再审查。 用户于2026-10-16授权落实通用提示词优化，补充同范围方法，既有触发/阶段/检查ID不变。"
+      },
+      "trigger": {
+        "any_tags": [
+          "image_repair"
+        ],
+        "any_visual_terms": []
+      },
+      "requirements": {
+        "generation": {
+          "checks": [
+            "repair_scope",
+            "identity_preserved",
+            "style_preserved",
+            "costume_preserved",
+            "unaffected_composition"
+          ],
+          "artifacts": [],
+          "prompt_constraints": true
+        },
+        "image_review": {
+          "checks": [
+            "repair_scope",
+            "identity_preserved",
+            "style_preserved",
+            "costume_preserved",
+            "unaffected_composition"
+          ],
+          "artifacts": [],
+          "prompt_constraints": false
+        }
+      },
+      "file": {
+        "path": "规则/生图/MEM-004_局部返修保留批准特征.md",
+        "sha256": "678bb7cb6e8251ee41d4307b60ace6222863fdc769d6c51d919945eb54d16f08"
+      },
+      "load_policy": "on_match"
+    },
+    {
+      "id": "MEM-005",
+      "title": "人物场景与关键道具的一致性和连续性",
+      "version": "1.4.0",
+      "status": "active",
+      "scope": "cross_work",
+      "primary_stage": "shot_design",
+      "stages": [
+        "shot_design",
+        "generation",
+        "image_review"
+      ],
+      "admission": {
+        "portable": true,
+        "contains_story_facts": false,
+        "rationale": "可跨话跨作品复用的制作与验收要求，不保存任何具体人物、话格或剧情事实。",
+        "basis": "用户于2026-10-19在完成实际图复核及通用修改方案后明确要求“好的开始修改skill文件”；据此修改既有通用方法，不保存案例剧情。"
+      },
+      "trigger": {
+        "any_tags": [
+          "visual_subjects_present"
+        ],
+        "any_visual_terms": [],
+        "semantic_condition": "画面中可见人物、场景或关键道具时标记 visual_subjects_present；依据画面语义，不靠对白或命名关键词。"
+      },
+      "requirements": {
+        "shot_design": {
+          "checks": [
+            "character_consistency",
+            "scene_consistency",
+            "key_prop_continuity",
+            "camera_background_validity",
+            "adjacent_state_continuity"
+          ],
+          "artifacts": [],
+          "prompt_constraints": false
+        },
+        "generation": {
+          "checks": [
+            "character_consistency",
+            "scene_consistency",
+            "key_prop_continuity",
+            "camera_background_validity",
+            "adjacent_state_continuity"
+          ],
+          "artifacts": [],
+          "prompt_constraints": true
+        },
+        "image_review": {
+          "checks": [
+            "character_consistency",
+            "scene_consistency",
+            "key_prop_continuity",
+            "camera_background_validity",
+            "adjacent_state_continuity"
+          ],
+          "artifacts": [],
+          "prompt_constraints": false
+        }
+      },
+      "file": {
+        "path": "规则/镜头/MEM-005_人物场景与关键道具的一致性和连续性.md",
+        "sha256": "94ced5a4b635386956199c0e7d3a8860cde0205850769ad8f7ceb9c69363aca8"
+      },
+      "load_policy": "stage_baseline"
+    },
+    {
+      "id": "MEM-006",
+      "title": "人体结构物理合理性与动作表现力",
+      "version": "1.3.0",
+      "status": "active",
+      "scope": "cross_work",
+      "primary_stage": "generation",
+      "stages": [
+        "shot_design",
+        "generation",
+        "image_review"
+      ],
+      "admission": {
+        "portable": true,
+        "contains_story_facts": false,
+        "rationale": "可跨话跨作品复用的制作与验收要求，不保存任何具体人物、话格或剧情事实。",
+        "basis": "用户于2026-10-19在完成实际图复核及通用修改方案后明确要求“好的开始修改skill文件”；据此修改既有通用方法，不保存案例剧情。"
+      },
+      "trigger": {
+        "any_tags": [
+          "human_figure_visible"
+        ],
+        "any_visual_terms": [],
+        "semantic_condition": "画面可见人物全身、半身或任何身体局部时标记 human_figure_visible；包含静态姿态。"
+      },
+      "requirements": {
+        "shot_design": {
+          "checks": [
+            "anatomy_integrity",
+            "joint_pose_validity",
+            "physical_support_and_force",
+            "action_readability",
+            "expression_intensity_fit"
+          ],
+          "artifacts": [],
+          "prompt_constraints": false
+        },
+        "generation": {
+          "checks": [
+            "anatomy_integrity",
+            "joint_pose_validity",
+            "physical_support_and_force",
+            "action_readability",
+            "expression_intensity_fit"
+          ],
+          "artifacts": [],
+          "prompt_constraints": true
+        },
+        "image_review": {
+          "checks": [
+            "anatomy_integrity",
+            "joint_pose_validity",
+            "physical_support_and_force",
+            "action_readability",
+            "expression_intensity_fit"
+          ],
+          "artifacts": [],
+          "prompt_constraints": false
+        }
+      },
+      "file": {
+        "path": "规则/生图/MEM-006_人体结构物理合理性与动作表现力.md",
+        "sha256": "78af98d34e2e8db9f09f83be144d144670b7b2acb983ec1ad37af630bb8bb04a"
+      },
+      "load_policy": "stage_baseline"
+    },
+    {
+      "id": "MEM-007",
+      "title": "相邻格同角色微表情必须有可见变化",
+      "version": "1.1.0",
+      "status": "active",
+      "scope": "cross_work",
+      "primary_stage": "shot_design",
+      "stages": [
+        "shot_design",
+        "generation",
+        "image_review"
+      ],
+      "admission": {
+        "portable": true,
+        "contains_story_facts": false,
+        "rationale": "可跨话跨作品复用的制作与验收要求，不保存任何具体人物、话格或剧情事实。",
+        "basis": "用户于2026-10-12明确要求将六项制作标准规整并进入规则记忆；按此次明确授权启用。"
+      },
+      "trigger": {
+        "any_tags": [
+          "same_character_adjacent_expression"
+        ],
+        "any_visual_terms": [],
+        "semantic_condition": "按源阅读顺序比较紧邻两格：同一角色均出现且面部可供表情比较时，在后格标记 same_character_adjacent_expression；跨批次同样比较。"
+      },
+      "requirements": {
+        "shot_design": {
+          "checks": [
+            "same_character_pair_basis",
+            "observable_expression_change",
+            "prompt_expression_specificity",
+            "emotion_story_fit"
+          ],
+          "artifacts": [],
+          "prompt_constraints": false
+        },
+        "generation": {
+          "checks": [
+            "same_character_pair_basis",
+            "observable_expression_change",
+            "prompt_expression_specificity",
+            "emotion_story_fit"
+          ],
+          "artifacts": [],
+          "prompt_constraints": true
+        },
+        "image_review": {
+          "checks": [
+            "same_character_pair_basis",
+            "observable_expression_change",
+            "prompt_expression_specificity",
+            "emotion_story_fit"
+          ],
+          "artifacts": [],
+          "prompt_constraints": false
+        }
+      },
+      "file": {
+        "path": "规则/镜头/MEM-007_相邻格同角色微表情必须有可见变化.md",
+        "sha256": "d96a98540850db7e9c0ba9575bf9eb73987b9bd55f80eb19caeab863a9c55a78"
+      },
+      "load_policy": "on_match"
+    },
+    {
+      "id": "MEM-008",
+      "title": "镜面统一磨砂且不呈现真实反射",
+      "version": "1.1.0",
+      "status": "active",
+      "scope": "cross_work",
+      "primary_stage": "generation",
+      "stages": [
+        "shot_design",
+        "generation",
+        "image_review"
+      ],
+      "admission": {
+        "portable": true,
+        "contains_story_facts": false,
+        "rationale": "可跨话跨作品复用的制作与验收要求，不保存任何具体人物、话格或剧情事实。",
+        "basis": "用户于2026-10-12明确要求将六项制作标准规整并进入规则记忆；按此次明确授权启用。"
+      },
+      "trigger": {
+        "any_tags": [
+          "mirror_visible"
+        ],
+        "any_visual_terms": [
+          "镜子",
+          "镜面",
+          "梳妆镜",
+          "穿衣镜"
+        ],
+        "semantic_condition": "画面实际可见镜子或镜面时标记 mirror_visible；对白提及但画面不出现不触发。"
+      },
+      "requirements": {
+        "shot_design": {
+          "checks": [
+            "frosted_mirror_surface",
+            "no_recognizable_reflection",
+            "mirror_geometry_preserved",
+            "reflection_story_conflict"
+          ],
+          "artifacts": [],
+          "prompt_constraints": false
+        },
+        "generation": {
+          "checks": [
+            "frosted_mirror_surface",
+            "no_recognizable_reflection",
+            "mirror_geometry_preserved",
+            "reflection_story_conflict"
+          ],
+          "artifacts": [],
+          "prompt_constraints": true
+        },
+        "image_review": {
+          "checks": [
+            "frosted_mirror_surface",
+            "no_recognizable_reflection",
+            "mirror_geometry_preserved",
+            "reflection_story_conflict"
+          ],
+          "artifacts": [],
+          "prompt_constraints": false
+        }
+      },
+      "file": {
+        "path": "规则/生图/MEM-008_镜面统一磨砂且不呈现真实反射.md",
+        "sha256": "4d57461a67520ff2f8cc16d8c07a76ea6e7bec8fb8af2482998ae2db273c4a14"
+      },
+      "load_policy": "on_match"
+    },
+    {
+      "id": "MEM-009",
+      "title": "真实透视与遮挡优先于完整展示",
+      "version": "1.2.0",
+      "status": "active",
+      "scope": "cross_work",
+      "primary_stage": "shot_design",
+      "stages": [
+        "shot_design",
+        "generation",
+        "image_review"
+      ],
+      "admission": {
+        "portable": true,
+        "contains_story_facts": false,
+        "rationale": "可跨话跨作品复用的制作与验收要求，不保存任何具体人物、话格或剧情事实。",
+        "basis": "用户于2026-10-19在完成实际图复核及通用修改方案后明确要求“好的开始修改skill文件”；据此修改既有通用方法，不保存案例剧情。"
+      },
+      "trigger": {
+        "any_tags": [
+          "physical_occlusion",
+          "perspective_overlap"
+        ],
+        "any_visual_terms": [
+          "遮挡",
+          "挡住"
+        ],
+        "semantic_condition": "构图涉及前后遮挡、透视重叠，或存在为完整展示主体而移动/扭曲遮挡物的风险时标记 physical_occlusion 或 perspective_overlap。"
+      },
+      "requirements": {
+        "shot_design": {
+          "checks": [
+            "physical_perspective",
+            "occlusion_order",
+            "occluder_geometry_preserved",
+            "no_visibility_driven_displacement"
+          ],
+          "artifacts": [],
+          "prompt_constraints": false
+        },
+        "generation": {
+          "checks": [
+            "physical_perspective",
+            "occlusion_order",
+            "occluder_geometry_preserved",
+            "no_visibility_driven_displacement"
+          ],
+          "artifacts": [],
+          "prompt_constraints": true
+        },
+        "image_review": {
+          "checks": [
+            "physical_perspective",
+            "occlusion_order",
+            "occluder_geometry_preserved",
+            "no_visibility_driven_displacement"
+          ],
+          "artifacts": [],
+          "prompt_constraints": false
+        }
+      },
+      "file": {
+        "path": "规则/镜头/MEM-009_真实透视与遮挡优先于完整展示.md",
+        "sha256": "649b2344b984a4e11cb72922eb27ab71efe77fff491345d015065b8fe3d3f300"
+      },
+      "load_policy": "on_match"
+    },
+    {
+      "id": "MEM-010",
+      "title": "叙事驱动的相邻镜头与物理连续性",
+      "version": "2.0.0",
+      "status": "active",
+      "scope": "cross_work",
+      "primary_stage": "shot_design",
+      "stages": [
+        "shot_design",
+        "generation",
+        "image_review"
+      ],
+      "admission": {
+        "portable": true,
+        "contains_story_facts": false,
+        "rationale": "可跨话跨作品复用的制作与验收要求，不保存任何具体人物、话格或剧情事实。",
+        "basis": "用户在实际图复核后的修改方案中获知MEM-010调整方向，并于2026-10-19明确要求“好的开始修改skill文件”。"
+      },
+      "trigger": {
+        "any_tags": [
+          "adjacent_panel_pair"
+        ],
+        "any_visual_terms": [],
+        "semantic_condition": "按源阅读顺序，每个存在紧邻前格的当前格均标记 adjacent_panel_pair；跨批次、换场景和更换执行者不免除。首格确无前格时不触发。"
+      },
+      "requirements": {
+        "shot_design": {
+          "checks": [
+            "adjacent_pair_basis",
+            "narrative_coverage",
+            "framing_economy",
+            "physical_continuity_preserved"
+          ],
+          "artifacts": [],
+          "prompt_constraints": false
+        },
+        "generation": {
+          "checks": [
+            "adjacent_pair_basis",
+            "narrative_coverage",
+            "framing_economy",
+            "physical_continuity_preserved"
+          ],
+          "artifacts": [],
+          "prompt_constraints": true
+        },
+        "image_review": {
+          "checks": [
+            "adjacent_pair_basis",
+            "narrative_coverage",
+            "framing_economy",
+            "physical_continuity_preserved"
+          ],
+          "artifacts": [],
+          "prompt_constraints": false
+        }
+      },
+      "file": {
+        "path": "规则/镜头/MEM-010_叙事驱动的相邻镜头与物理连续性.md",
+        "sha256": "0bc1ba2832cca681cc110576e34a50a758d15209e6848e63815cd8abd2b16167"
+      },
+      "precedence": "2026-10-19用户授权优化：新任务以叙事与物理连续性优先，替代v1强制双变化；旧冻结任务不静默迁移。",
+      "load_policy": "on_match"
+    },
+    {
+      "id": "MEM-011",
+      "title": "掌掴完成后的结果瞬间表达",
+      "version": "1.0.0",
+      "status": "active",
+      "scope": "cross_work",
+      "primary_stage": "generation",
+      "stages": [
+        "shot_design",
+        "generation",
+        "image_review"
+      ],
+      "load_policy": "on_match",
+      "admission": {
+        "portable": true,
+        "contains_story_facts": false,
+        "rationale": "跨作品复用已完成掌掴的单帧结果表达与人体检查方法；不指定人物、话格、左右手或剧情状态。",
+        "basis": "用户在本会话审阅规则及文件方案后明确要求“好的开始修改”；候选完成结构与触发验证后启用。"
+      },
+      "trigger": {
+        "any_tags": [
+          "slap_completed_result"
+        ],
+        "any_visual_terms": [
+          "扇巴掌",
+          "掌掴",
+          "耳光",
+          "打脸"
+        ],
+        "semantic_condition": "源脚本明确掌掴已经发生，且当前画面可用紧邻的结果瞬间表达时标记slap_completed_result。准备动手、未接触、被阻止、躲开、未打中、仅对白提及或比喻性的打脸不标记。关键词仅召回，不能推定动作已完成；误召回须按原合同记录NOT_APPLICABLE及依据。"
+      },
+      "requirements": {
+        "shot_design": {
+          "checks": [
+            "source_action_phase",
+            "single_result_instant",
+            "hand_arm_ownership",
+            "support_and_reaction",
+            "no_unapproved_injury"
+          ],
+          "artifacts": [],
+          "prompt_constraints": false
+        },
+        "generation": {
+          "checks": [
+            "source_action_phase",
+            "single_result_instant",
+            "hand_arm_ownership",
+            "support_and_reaction",
+            "no_unapproved_injury"
+          ],
+          "artifacts": [],
+          "prompt_constraints": true
+        },
+        "image_review": {
+          "checks": [
+            "source_action_phase",
+            "single_result_instant",
+            "hand_arm_ownership",
+            "support_and_reaction",
+            "no_unapproved_injury"
+          ],
+          "artifacts": [],
+          "prompt_constraints": false
+        }
+      },
+      "file": {
+        "path": "规则/生图/MEM-011_掌掴完成后的结果瞬间表达.md",
+        "sha256": "d43611860efd323dc050e177ae2b881d65f84f6c1a7fa9f3173552b691a4765e"
+      }
+    }
+  ],
+  "maintenance_guide": {
+    "path": "规则记忆输入与增添规范.md",
+    "sha256": "16f67b09de8d7ad7bb3fc8aa31ffd8b309b45d10a5f7dbc3e123c1eb424a230b",
+    "purpose": "只在用户授权新增/修改/启停规则时读取；不作为每格生产规则加载。"
+  },
+  "tagging_instruction": "按当前阶段及trigger.semantic_condition核对实际画面：结构可证明的可见对象/真实相邻关系由共享入口派生，返修按operation触发；人体、床、镜面等语义由执行者核对并冻结标签。半话审计记录准确实际命中版本清单及必要人体适用性；load_policy只管何时读，阶段预读不扩展执行范围，脚本不自动看图或理解自然语言。",
+  "loading_policy": "stage_baseline_loading_v1",
+  "loading_instruction": "stage_baseline进入其stages时load-stage预读，on_match实际命中后load；同agent/运行/版本共用缓存。新agent、上下文丢失或版本变化须重读；只读库，缓存不作为执行/图片通过证据。"
+}

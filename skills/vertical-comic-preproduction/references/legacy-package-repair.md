@@ -2,7 +2,7 @@
 
 两版修复器先执行 [identity-confirmation.md](identity-confirmation.md) 门禁。旧包必须先补齐真实身份/称呼关系/外观/场景确认及实际资产绑定；缺失或冲突时在创建新包前停止。可传 `--identity-root <本话确认依据根目录>`，默认旧包的父目录；修复授权及 `--accepted-basis` 不代替身份确认，不自动给“傅妈”等称呼补姓名。确认合同、逐格绑定与锁定正文须随新包保留；新增未决项继续 HOLD。
 
-**先读 `repair-contract-v2.md`、`shot-framing.md` 和 [规则归属](rule-ownership.md)。旧版修复器仅做技术迁移，不能把候选变为可生图。本文原宽松正反打说明只用于其原冻结历史合同；启用当前规则的新任务按实际索引、正文及准确用户例外执行，不能用历史说明覆盖 MEM-010。保留一次出镜资产豁免、实际证据核验、脚本锁定和适用批准范围。**
+**先读 `repair-contract-v2.md`、`shot-framing.md` 和 [规则归属](rule-ownership.md)。旧版修复器仅做技术迁移，不能把候选变为可生图。旧包按原冻结规则恢复；新任务按实际索引、正文及准确用户例外执行，MEM-010 v2允许有依据的同景别正反打，不以此静默放宽旧v1。保留一次出镜资产豁免、实际证据核验、脚本锁定和适用批准范围。**
 
 有新 `framing` 时，旧版修复器将旧正文和负向词保留在审计字段，按新裁切重建执行正文，避免旧全景指令冲突。`LEGACY_PROMPT_REVIEW_HOLD` 解除前，核对既定画风等非构图约束与必显信息均完整迁移。两版修复器依赖同目录 `validate_preproduction.py` 与 `legacy_spatial_cleanup.py`，应保留完整脚本目录。
 

@@ -20,11 +20,17 @@ visual_basis增加scene_views对象，索引每个已核对视图：view_id、sc
 
 不新增动作表：原checks中的contact检查增加action_stage、support、occlusion、forbidden_substitute；原关键hand检查沿用actor/actor_limb/target/target_part/visible_path，并增加action_stage、support、occlusion、palm_orientation、thumb_side、forbidden_substitute。字段写具体当前状态，不能填“正常/按脚本”。如“已接稳手机下缘”不同于“手靠近手机”，“指臀侧”不同于“指腹前”；孩子前探仍须说明臀腿承托在后排。局部不适用写有依据的具体状态，不猜角色左右手。
 
+同一人物/肢体在本格统一用同一个actor/actor_limb值，推荐自身left_hand/right_hand；不能换近义词掩盖重复占用。检查器拒绝同一声明肢体被分配不同对象；确实一手共同握持多个对象时，相关check给出相同combined_grip_basis，解释具体接触与共同受力，并在原可实现性审查核对。它不是几何证明。递接中的两个不同人物可以接触同一物件，不应被“一个物件只能一只手”误拦。
+
+input_quality按已有hand/contact、人物blocking、space检查有条件编译肢体唯一归属、自然持物、摄影机与目光分离、物件正反面及露出部位完整性，不再手工重复通用负面词。具体左右、对象、视线与屏幕朝向仍写原check/人物字段；检查器不能读懂自然语言矛盾，framing_feasibility在B同次明确核对这些事实。
+
 input_quality.execution_block合入visual_execution_block，进入真实prompt及同步JSON。动作、参考、必显信息变化会改变原语义审计expected和QA指纹。framing_feasibility与提问UI解耦，原审计一次核对本格动作字段、当前镜头及适用参考；不能只用通用PASS代替看图判断。普通格不强制辅助图；复杂关系无法说清时先修候选镜头，只对必要高风险格按原流程准备简洁图。
 
 ## QA：一次观察与误判处理
 
 原图先核对承托/接触/遮挡，再看身份、衣装、动作阶段与结果；五官、剧情手、重要首饰与物件看原尺寸。机器验证记录与哈希，不证明手部已经正确。尺寸归一、PNG格式或插值不能把模糊图判为清晰。皮肤高光不是自动新增耳钉；褶皱或被遮住的裤缝不自动证明衣装变裙。怀疑时看对应原尺寸局部和清晰原板再下结论；判断仍写原QA，不新建第二份审查表。
+
+先在全图按人逐一追踪可见掌/腕/袖口到所属躯干，查多出的结构，再看局部是否接触；局部“手已托住”不证明总数量正确。比较连续性时选同场景最近前格，必要时补能证明固定床侧、路沿或持物状态的较早图。只把可观察矛盾判FAIL；看不见的区域保留未核实，不凭用户提示或模型想象确认移位。已看清的裸露眼部不能用另一侧头发遮挡来解释消失。
 
 背景根据叙事干扰、漂移风险与必要空间选择模式，不因近景自动留白；优先减少不重要纹理，保留接触、承托、线索和正确方向。背景控制的实图收益需独立验证，不能由模式字段通过推导质量提高。
 
@@ -70,6 +76,8 @@ B的framing_feasibility同次核对关键接触能否在当前裁切中看清，
 局部编辑若容易损伤正确脸/服饰/背景，在repair_source可声明preservation_regions={名称:原图整数xyxy}。范围须落在真实所选底图内；不能用较大的声明尺寸或新图尺寸代替旧底图。修复QA的repair_comparison增加preserved_observations={名称:{status,observed}}，同尺度实际比较并记PASS/FAIL。保留区不是工具执行的像素锁定，不改变修复图六项重审。
 
 改变肢体姿态时，在repair_focus.structural_change写remove（旧结构移除）、replace（新结构）、connect（所属连接路径），三者进入实际prompt；不能只添加一条新手臂。已有错误更少、更清晰的本格原图优先，连续编辑发生退化或相同问题持续时先stop_diagnose。
+
+返图在原repair_comparison.whole_subject_recheck记status和observed，重新核对整个人物的手/腕/袖口数量、旧结构确已移除、连接归属及承托；有structural_change而缺该实际复核不能通过。多手、错误肢体所属或整条腿扭转归limb_ownership/support输入问题，不伪装成finger局部编辑。手指局部问题只有在整体归属、动作、空间已成立时才走local_edit。
 
 
 新整话再叠加[服饰与单画面](appearance-and-single-frame.md)的appearance_lock_v1/single_frame_v1。规则增加具体身体位置、当前衣装核心与可见配饰检查；衣料褶皱、自然摆动、真实反射按批准状态判断，不锁死像素位置。原局部返修与并发/预算不变。

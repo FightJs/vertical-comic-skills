@@ -16,7 +16,7 @@ python3 -m pip install -r requirements.txt
 python3 tools/sync_skills.py
 ```
 
-默认安装到`$CODEX_HOME/skills`（未设置时为`~/.codex/skills`），配套规则安装到`$CODEX_HOME/skill-bundles/vertical-comic-skills/memory`。
+默认安装到`$CODEX_HOME/skills`（未设置时为`~/.codex/skills`），默认规则随总控Skill安装到`assets/rule-memory`；`$CODEX_HOME/skill-bundles/vertical-comic-skills/memory`保留外置来源兼容副本，新用户不用配置它。
 
 若检测到已有安装或本地修改，会保留现场并停止。先查看差异：
 
@@ -40,32 +40,45 @@ python3 tools/sync_skills.py --replace-existing
 python3 tools/sync_skills.py --update
 ```
 
-它先执行`git pull --ff-only`，再验证整套文件哈希并更新五个Skill和规则。仓库工作区或安装目录有本地改动时不会静默覆盖。更新前的安装保留备份，当前运行中的RV、源剧本、资产、项目使用配置和批准记录不属于更新目标。
+它先执行`git pull --ff-only`，再验证整套文件哈希并更新五个Skill和规则。仓库工作区或安装目录有本地改动时不会静默覆盖。更新前的安装保留备份，当前运行中的RV、源剧本、资产、项目使用配置和批准记录不属于更新目标。本机用户规则增补独立保留，不上传到共享发布版，也不被更新覆盖。
 
 需要保持固定版本时，先切换对应tag，再运行安装工具，不使用`--update`：
 
 ```sh
 git fetch --tags
-git checkout v2026.10.19.1
+git checkout v2026.10.19.2
 python3 tools/sync_skills.py
 ```
 
 同步由使用者主动运行；本仓库未创建后台自动更新任务。可在GitHub设置Watch/Releases接收新版本通知。私有仓库使用者需要被所有者邀请；变更仓库可见性由所有者决定。
 
-## 配置与启动
+## 首次使用：让Skill引导配置
 
-复制[配置示例](examples/comic.config.example.json)到项目目录，填写书名、准确话号、源脚本、资产和上述规则记忆的真实绝对路径。示例占位符不能直接运行。`generation.episode_workers`调整话执行者数量，并发仍受实际agent槽位和生图服务容量限制。
-
-首次启动可使用：
+安装后在Codex里只需说：
 
 ```text
 使用 $vertical-comic-preproduction。
-读取使用配置：【项目配置绝对路径】。
-本次范围：【准确话号】。
-输出到：【项目输出绝对目录】下的新RV。
-按当前固定流程完成，在约定的视觉基准、镜头/生图包及实图验收节点等我审查。
-最终只交逐格图片包，我自行拼接和加气泡。
+第一次使用，请引导我配置，进行前期制作。
 ```
+
+Skill会先检查本项目已有配置，再一次收集缺少的书名、源脚本文件、资产目录和话号。用户可拖入文件/文件夹或提供本机路径；规则库、默认并发和输出位置自动设置，无需先创建或编辑JSON，也无需GitHub登录才能制作。
+
+信息齐全后自动校验路径，保存项目`.comic/books`中的本书配置，建立本次配置和全新RV，并展示保存位置。源剧本审计、视觉基准和镜头/生图包审查仍正常执行；初始化不等于批准生产。已有配置不重复填写，路径变化或真实冲突才集中询问。
+
+完整填写也可以直接开始：
+
+```text
+使用 $vertical-comic-preproduction，进行前期制作。
+书名：【书名】
+脚本：【本机源脚本路径】
+资产：【本机资产目录】
+话号：E021–E025。
+其余用默认配置，完成后交正式ZIP，停在正文生图前。
+```
+
+以后同一本书只需“前期制作：《书名》E026–E030，使用本书配置”。接包端只需“接包生产：【正式ZIP路径】，审核人是我”；同名SHA256、书话范围和默认接收目录自动解析。
+
+详细引导见[首次使用](skills/vertical-comic-preproduction/references/quick-start.md)。[JSON配置示例](examples/comic.config.example.json)只供高级用户显式配置；默认规则来自总控Skill的`assets/rule-memory`，新用户无需指定规则目录。执行agent数量和输出目录可在对话中临时指定，实际并行仍服从可用容量。
 
 分工制作有两种职责，使用时明确其中一个：
 
@@ -83,7 +96,8 @@ python3 tools/sync_skills.py
 | `skills/vertical-comic-shot-design` | 逐格镜头、空间、接触及比例 |
 | `skills/vertical-comic-panel-generation` | 实际输入编译及生图生产 |
 | `skills/vertical-comic-image-review` | 真实QA、返修及逐格交付 |
-| `memory` | 11条可跨作品复用的规则及维护说明 |
+| `skills/vertical-comic-preproduction/assets/rule-memory` | 内置11条通用规则及本机用户增补入口 |
+| `memory` | 外置规则兼容副本及维护说明 |
 | `bundle.json` | 整套文件的SHA256清单 |
 
 本仓库不包含实际项目脚本、角色资产、批准消息、生产结果或个人配置。Skill内示例插图属于方法示例，不能替代本书批准素材。索引通过不等于图片质量通过，必须保留实际看图审查。
@@ -102,7 +116,7 @@ GitHub Actions会在push和pull request后执行这些检查。测试使用隔�
 推荐在本仓库维护，再测试、提交和推送。若仍先维护本机安装版，可用以下工具导出新副本；它不修改源安装目录，不复制其他项目目录，并将测试中的本机配置依赖替换成隔离夹具：
 
 ```sh
-python3 tools/export_bundle.py --skills-root /实际/skills目录 --memory-root /实际/通用规则目录
+python3 tools/export_bundle.py --skills-root /实际/skills目录
 python3 tools/check_bundle.py
 python3 -B -m unittest discover -s skills/vertical-comic-preproduction/tests
 python3 -B -m unittest discover -s tests

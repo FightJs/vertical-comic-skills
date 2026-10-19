@@ -1,5 +1,7 @@
 # 条漫五件套使用指南
 
+首次使用优先读[简易启动](quick-start.md)：前期只给书名/脚本/资产/话号；接包只给正式ZIP。规则默认内置，GitHub不是制作或本地规则更新依赖；可选同步见[内置规则维护](builtin-rule-maintenance.md)。
+
 日常调用$vertical-comic-preproduction，按阶段进入visual-assets、shot-design、panel-generation、image-review。最终交逐格成品图片，拼接与气泡由用户处理。
 
 未指定分工制作时，当前新RV使用episode_preparation_v1、episode_async_v1、scoped_episode_review_v1和incremental_runtime_v2。每话一次准备必要视觉依据、全话镜头和生图包；保留完整源序，实际就绪范围的B及包分别批准，独立格持续异步提交。没有固定半话C。普通新状态按B约定合并D，高风险、用户指定确认和真实前格实图依赖保留屏障。详见usage-configuration.md、episode-async.md、panel-readiness.md。

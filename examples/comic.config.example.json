@@ -1,19 +1,5 @@
 {
   "policy": "comic_usage_v1",
-  "production": {
-    "book": "【书名】",
-    "episodes": [
-      "E001",
-      "E002",
-      "E003",
-      "E004",
-      "E005"
-    ]
-  },
-  "inputs": {
-    "script_path": "【脚本绝对路径】",
-    "asset_root": "【本书资产绝对目录】"
-  },
   "generation": {
     "execution_mode": "episode_async_v1",
     "batch_strategy": "full_episode",
@@ -84,5 +70,16 @@
   },
   "execution_quality": {
     "policy": "execution_quality_v1"
+  },
+  "production": {
+    "book": "【书名】",
+    "episodes": [
+      "E001",
+      "E002"
+    ]
+  },
+  "inputs": {
+    "script_path": "【脚本绝对路径】",
+    "asset_root": "【资产绝对目录】"
   }
 }

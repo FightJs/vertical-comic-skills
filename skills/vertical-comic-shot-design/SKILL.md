@@ -17,6 +17,8 @@ description: Design approved-script-driven per-panel shots, crop and physical co
 
 写明摄影机位置/高度/朝向、景别、比例、逐人物身体范围、视线、背景锚点及必显信息。世界站位与屏幕左右分开，画外/遮挡不等于离场。简单手势不套复杂接触模板，非剧情手不强求五指全露。只有确有需要才做站位图或干净目标机位构图图；辅助图不是空间正确或新身份的证明。
 
+同次核对肢体任务、全身扭转、承托、持续在场人物，以及摄影机/头部/目光和物件正反面是否相容；抽象信息表达不自动画成实物。狭小空间已建立后优先评估足够表达剧情的连续近景。相邻镜头按冻结MEM-010版本执行，新v2不强制机位与景别同时变化。
+
 使用现有visual_evidence及framing_feasibility记录，按[原尺寸与连续性合同](../vertical-comic-preproduction/references/visual-evidence.md)列关键观察目标。为复杂接触可在原check添加inspection_targets，覆盖所属前臂、手腕、接触点和对象；普通格不增加局部框。
 
 全话B前完成[比例计划](../vertical-comic-preproduction/references/frame-ratio-plan.md)，保留六种比例和竖版>75%要求；按内容选择，不为变景别或交错牺牲接触、裁切和物理成立。背景按[背景模式](../vertical-comic-preproduction/references/background-treatment.md)保必要锚点和清晰主体，不要求每格全套家具。

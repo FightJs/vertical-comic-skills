@@ -5,7 +5,8 @@ import argparse,datetime,hashlib,json,os,shutil,subprocess,sys,tempfile
 
 ROOT=Path(__file__).resolve().parents[1]
 NAME='vertical-comic-skills'
-USER_RULES='skills/vertical-comic-preproduction/assets/rule-memory/用户增补/'
+USER_ADDITIONS='skills/vertical-comic-preproduction/assets/rule-memory/用户增补'
+USER_RULES=USER_ADDITIONS+'/'
 def user_rule(name):return name.startswith(USER_RULES)
 
 def digest(p):
@@ -101,7 +102,7 @@ def install(home,*,check=False,replace_existing=False):
         for saved,target in reversed(moved):os.replace(saved,target)
         raise
     finally:shutil.rmtree(stage,ignore_errors=True)
-    return {'status':'INSTALLED','skills':data['skills'],'memory_root':str(managed/'memory'),'backup':str(backups) if moved else None,'next_step':'Start a new Codex turn/task; frozen production RVs keep their original versions.'}
+    return {'status':'INSTALLED','skills':data['skills'],'memory_root':str(managed/'memory'),'backup':str(backups) if moved else None,'next_step':'在新的Codex轮次说：使用 $vertical-comic-preproduction。第一次使用，请引导我配置，进行前期制作。原冻结生产RV不升级。'}
 
 def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--codex-home',default=os.environ.get('CODEX_HOME',str(Path.home()/'.codex')));p.add_argument('--check',action='store_true');p.add_argument('--update',action='store_true');p.add_argument('--replace-existing',action='store_true');a=p.parse_args()

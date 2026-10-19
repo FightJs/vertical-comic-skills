@@ -1,6 +1,6 @@
 # 从 screenwriting master 蒸馏的镜头设计方法
 
-来源：`~/.codex/skills/screenwriting-master/SKILL.md`、`references/core-methodology.md` 和 `references/format-series.md`。本文件只移植有助于画面设计、镜头功能和连续性控制的部分；不移植改写剧本、重写对白或改变故事结构的权限。
+来源：`C:~/.codex/skills/screenwriting-master/SKILL.md`、`references/core-methodology.md` 和 `references/format-series.md`。本文件只移植有助于画面设计、镜头功能和连续性控制的部分；不移植改写剧本、重写对白或改变故事结构的权限。
 
 ## 1. 把已有戏剧动作变成可见证据
 

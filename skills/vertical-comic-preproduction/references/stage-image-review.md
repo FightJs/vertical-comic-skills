@@ -84,7 +84,13 @@ v2验收核对真实前格相邻关系、实际可比较脸部、适用规则与
 
 inspection_targets存在时，原尺寸view.covered_targets须准确覆盖该check的目标；复杂接触结合原图看所属前臂、手腕及对象，不能截掉目标只凭手掌局部通过。scale=original_pixels，声明resampled=true或source_size与真实原图不同不能冒充原生细节。
 
+固定观察顺序为全图→原尺寸局部→必要连续图，不新增一次审查。全图先逐人物追踪掌/腕/袖口的数量和所属身体，再看局部握持、指掌、眼部与遮挡边界，最后按床头/床沿/路沿等固定锚点比较世界位置。缩略总览只用于定位，不能作为手指、眼睛或清晰度通过证据。补充comparison_panel_ids时使用其真实最新原图；没有看见的另一侧路沿、被裁掉的床面不能作为确定移位/消失的证据。
+
+分别记录已确认缺陷与尚无足够证据。图中裸露眼区没有结构、多出掌/腕/袖口、可见承托矛盾应FAIL；合理画外或真实遮挡不能误判成缺失；不能分辨则保留UNREVIEWED/HOLD并指出缺少什么证据。用户标注后的复核不宣称盲测，代码测试不宣称模型已能稳定识别这些错误。
+
 preservation_regions存在时，repair_comparison逐区填写preserved_observations，并同时检查修复部位、原清晰度和先前有效修正。整体涂抹或主体过小先分辨构图/输入原因，插值及锐化不是清晰度通过证据。发现旧QA误判则追加更正依据和新结论，保留旧记录，不为迎合错误图回写冻结标准。
+
+有structural_change的返修，repair_comparison.whole_subject_recheck另记录全人物重新计数与连接、旧结构移除和承托的实际结果；局部正确而全图多手仍FAIL。此项复用六项重审，不增人工停点。
 
 
 新整话按[服饰与单画面](appearance-and-single-frame.md)填写原visual_evidence_review的frame_observation与appearance_observations。自身左右结合全图朝向判断，原尺寸局部核对归属/部位/手指/数量/款式及附着；任何可见关键项不清楚不得PASS。发现上下/左右分格或漫画内嵌格，原framing维度FAIL；服饰位置错记原costume维度FAIL。真实镜面不是独立漫画格。

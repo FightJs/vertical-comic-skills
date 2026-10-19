@@ -1,0 +1,8 @@
+interface:
+  display_name: "条漫逐格成品生产总控"
+  short_description: "按话并行、每次半话异步生成并自审修正，保留一致性检查与人工审查"
+  brand_color: "#5B6C8F"
+  default_prompt: "使用 $vertical-comic-preproduction 按话并行，每次异步生成半话，自审后并发修正失败格，在视觉基准、镜头、第一半话、新状态和最终成品处审查，只交逐格图片包。"
+
+policy:
+  allow_implicit_invocation: true

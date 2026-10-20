@@ -43,3 +43,5 @@ python <scripts>/review_policy.py --root <本话RV> --proposal <已展示proposa
 review_policy.py对同一已保存proposal可用--selection、--authority、--reviewer、--evidence生成决定proof，selection仍准确选accepted_item_ids；随后按原approval_index登记。此入口核对结构和范围，不替模型认证消息或判断画面。亲审证明继续走原approvals，不混用两者。前格上下文同样按准确阶段和原格号验证。
 
 technical_operations须在委托operations内且保留具体constraints。additional_repair须逐格绑定已明确获准的additional_attempt_ids，proposal/proof的attempt_ids保留准确次数与新编号；记录本身不创建attempt、不重置自动次数，也不绕过原追加执行门禁。旧版已冻结流程不因新proof格式自动升级。
+
+最终B/包合并提交前须有[最终输入逐格审查](final-input-semantics.md)。执行者的REVIEWED是审查证据，不是用户APPROVED。差异明确区分画面变更、引用同步和正常实图补齐；仅真正变化与保留亲审范围请求决定，未变化依据复用适用原批准。

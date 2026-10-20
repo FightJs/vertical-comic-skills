@@ -244,6 +244,9 @@ def validate_panel(panel: dict[str, Any], root: Path, *, enforce_input_budget: b
     elif final_prompt(prompt, str(panel.get("negative_prompt") or "")) != prompt.strip():
         errors.append("Codex必要负向约束尚未编入最终prompt")
     prompt_file = panel.get("prompt_file", f"{panel.get('panel_id')}/prompt.txt")
+    if 'semantic_facts' in panel or 'subject_visibility' in panel:
+        from input_semantics import conflict_errors
+        errors.extend(conflict_errors(panel, prompt))
     try:
         file = (root / str(prompt_file)).resolve()
         if Path(str(prompt_file)).is_absolute() or not file.is_relative_to(root) or file.read_text(encoding="utf-8-sig").strip() != prompt.strip():

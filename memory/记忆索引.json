@@ -390,7 +390,7 @@
     {
       "id": "MEM-007",
       "title": "相邻格同角色微表情必须有可见变化",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "status": "active",
       "scope": "cross_work",
       "primary_stage": "shot_design",
@@ -403,7 +403,7 @@
         "portable": true,
         "contains_story_facts": false,
         "rationale": "可跨话跨作品复用的制作与验收要求，不保存任何具体人物、话格或剧情事实。",
-        "basis": "用户于2026-10-12明确要求将六项制作标准规整并进入规则记忆；按此次明确授权启用。"
+        "basis": "用户于2026-10-20批准具体到文件的最终输入语义审查方案，并明确要求“好的按照这个开始执行”；据此澄清原规则适用边界，不保存作品或格号事实。"
       },
       "trigger": {
         "any_tags": [
@@ -446,7 +446,7 @@
       },
       "file": {
         "path": "规则/镜头/MEM-007_相邻格同角色微表情必须有可见变化.md",
-        "sha256": "d96a98540850db7e9c0ba9575bf9eb73987b9bd55f80eb19caeab863a9c55a78"
+        "sha256": "8c4ba291921293113ab1c1ce791de35443cc02b8025a4a41d764a9f89c5b4ade"
       },
       "load_policy": "on_match"
     },

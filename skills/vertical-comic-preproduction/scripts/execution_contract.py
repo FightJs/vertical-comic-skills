@@ -18,6 +18,8 @@ def toolchain(base=None):
 
 def state_errors(state,root):
     try:
+        from input_semantics import enabled as semantics_enabled
+        semantics_enabled(state)
         from visual_evidence import binding_errors as visual_binding_errors
         visual_errors = visual_binding_errors(state)
         if visual_errors: raise ValueError(";".join(visual_errors))

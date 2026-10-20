@@ -14,7 +14,7 @@ from rule_memory import application_errors as memory_errors, binding_errors as m
 MODE = "batch5_v1"
 SHOT_FIELDS = ("locked_script", "framing", "frame_ratio", "camera_view_signature",
                "character_bindings", "scene_binding", "continuity_contract", "visual_state_keys",
-               "generation_dependencies", "design_dependencies", "requires_state_review", "memory_tags", "state_review_policy", "adjacent_face_comparison", "calibration_anchor", "rule_exceptions", "source_panel_id", "visual_resolution", "frame_ratio_reason", "visual_evidence_policy", "visual_evidence")
+               "generation_dependencies", "design_dependencies", "requires_state_review", "memory_tags", "state_review_policy", "adjacent_face_comparison", "calibration_anchor", "rule_exceptions", "source_panel_id", "visual_resolution", "frame_ratio_reason", "visual_evidence_policy", "visual_evidence", "semantic_facts", "subject_visibility")
 
 
 def build_plan(state, shots, source=None):
@@ -278,6 +278,8 @@ def input_errors(state, root, record, shot, basis, records, *, candidate=False, 
         errors.append("MEMORY_HOLD:返修执行包必须声明operation=repair")
     if panel.get("panel_id") != pid or any(panel.get(k) != shot.get(k) for k in SHOT_FIELDS):
         errors.append("执行格号/画面/依赖与批准镜头不一致")
+    from input_semantics import panel_errors as final_input_errors
+    errors.extend(final_input_errors(state, root, shot, packet, manifest_path.parent))
     effective_basis = dependency_basis(root, manifest_path, packet, shot, basis, records,state)
     errors.extend(basis_errors(panel, effective_basis))
     if dispatch_audit and (candidate or state.get('parallel_context') or packet.get('dispatch_receipt')):

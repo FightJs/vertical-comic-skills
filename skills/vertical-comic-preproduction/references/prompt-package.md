@@ -110,3 +110,5 @@ contact的actor/actor_limb/target/target_part/visible_path进入正文。真实�
 execution_quality_v1使用build_prompt的紧凑分支：具体裁切、可见内容、动作、场景及饰品由visual_execution_block统一编译，人物描述和实际参考用途随后补齐。不要再次附加同义的可见范围、必显清单或整套通用禁令。签名、预算、审批和历史轮次留JSON/审计，不作为绘图命令。原始locked_script继续独立保存。
 
 缺失角度/景别的旧包默认值只是待审候选，不证明已有镜头依据；参考编号必须按最终真实数组重编译。模型不提供的seed/权重/区域锁定等不能在prompt或报告中虚构。
+
+最终实际请求编译完再按[最终输入审查](final-input-semantics.md)逐格核对，不能只审镜头初稿。身份/衣装资产不提供本格默认表情；通用模块不得覆盖源稿明确的睁眼、微张嘴、失焦或可见范围。修正权威记录后同步生成prompt.txt、逐格JSON、全话包及判据，禁止只替换一处旧文字。

@@ -201,6 +201,18 @@ class RuntimeTests(unittest.TestCase):
             "arguments":args,"reference_files":refs,"output_spec":p["output_spec"]}]})
         bundle={"dependency_completion_plan":plan};batch={"batch_id":"H002"}
         self.assertTrue(dependency_plan_matches(bundle,s,self.root,batch,self.r,packet,self.root))
+        # Same exact approved request with fixed references relative to the new
+        # run root; no front-computer path is needed after receiving the package.
+        portable=json.loads((self.root/plan['path']).read_text(encoding='utf-8'))
+        row=portable['inputs'][0];row['reference_path_basis']='run_root'
+        for i,token in enumerate(row['arguments']['referenced_image_paths']):
+            if token.startswith('@DEPENDENCY:'):
+                row['reference_files'][i]={'path':token};continue
+            relative=Path(token).resolve().relative_to(self.root.resolve()).as_posix()
+            row['arguments']['referenced_image_paths'][i]=relative
+            row['reference_files'][i]['path']=relative
+        bundle={'dependency_completion_plan':self.h.h.f.write('portable-dependency-plan.json',portable)}
+        self.assertTrue(dependency_plan_matches(bundle,s,self.root,batch,self.r,packet,self.root))
         p["prompt"]+="\nSYNTHETIC unauthorized composition change"
         (self.root/p.get("prompt_file","P001/prompt.txt")).write_text(p["prompt"], encoding='utf-8', newline='\n')
         self.assertFalse(dependency_plan_matches(bundle,s,self.root,batch,self.r,packet,self.root))

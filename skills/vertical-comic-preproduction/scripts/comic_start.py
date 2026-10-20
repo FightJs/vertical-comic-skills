@@ -84,7 +84,7 @@ def receive(zip_path=None,*,package_root=None,output=None):
     write(target/'接收校验.json',checked)
     bound=bind(originals,target/'本地运行')
     result=rehearse(archive,originals,bound['run_root'],bound['run_index'],target/'接包预检')
-    return {'status':'READY_FOR_PRODUCTION_ROUTING' if result['status']=='RELEASE_CANDIDATE' else 'HOLD','run_root':str(target),'originals_root':str(originals),'reception':checked,'episode_results':result['results'],'image_calls':0,'next':'通过后仍按H001/高风险/D审核节点及真实许可生产'}
+    return {'status':'READY_FOR_PRODUCTION_ROUTING' if result['status']=='RELEASE_CANDIDATE' else 'HOLD','run_root':str(target),'originals_root':str(originals),'reception':checked,'episode_results':result['results'],'image_calls':0,'next':'复用内容一致的前期最终输入审查；只补查变化和新增实图。通过后仍按H001/高风险/D审核节点及真实许可生产'}
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__);sub=parser.add_subparsers(dest='action',required=True)

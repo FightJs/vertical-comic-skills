@@ -17,7 +17,7 @@ description: Coordinate a staged vertical-comic workflow from approved scripts a
 
 用户首次使用或缺配置时，按[首次配置引导](references/quick-start.md#安装后的首次配置引导)一次收集缺少的书名、脚本、资产和话号，自动校验并生成本书配置；不要求用户预建JSON。已有配置只询问差异。
 
-读[短启动与本书配置](references/quick-start.md)。用户只需脚本、资产、话号及可明确识别的书名，内部默认配置与规则自动解析，不要求填写技术JSON；“前期制作”路由分工前期并停在正文前，“接包生产”路由正式ZIP接收。用comic_start.py合并初始化或校验/解压/bind/rehearse步骤，初始化通过不等于源审计或批准通过。
+读[短启动与本书配置](references/quick-start.md)。用户只需脚本、资产、话号及可明确识别的书名，内部默认配置与规则自动解析，不要求填写技术JSON；“前期制作”路由分工前期并停在正文前，“接包生产”接收正式ZIP或其已解压目录。用comic_start.py合并初始化或校验/解压/bind/rehearse步骤，初始化通过不等于源审计或批准通过。
 
 规则记忆默认随本Skill内置，四个阶段共用assets/rule-memory；用户增补与内置规则分开。维护/导出/可选GitHub同步读[内置规则维护](references/builtin-rule-maintenance.md)；不需要GitHub账号才能生产或本地更新。明确外置来源和旧RV保持原冻结来源，不静默改库。
 
@@ -31,7 +31,7 @@ description: Coordinate a staged vertical-comic workflow from approved scripts a
 
 - 新任务：按[整话异步](references/episode-async.md)使用episode_preparation_v1、episode_async_v1、scoped_episode_review_v1、comic_execution_v2与incremental_runtime_v2。全话准备、[逐格就绪](references/panel-readiness.md)，B与实际包合并展示并分别记录决定；缺口仅阻塞受影响格及真实依赖。默认无固定半话C。
 - 恢复任务：先从原冻结入口运行staged_workflow.py --check status；按原模式、源序、输入、规则与预算恢复，不静默迁移旧RV。
-- 用户指定分工制作：最终只交一个正式ZIP，交接说明、哈希清单及发布证据内置；接收端直接用ZIP路径和可选输出位置启动，旧版sidecar仍兼容。读[双电脑交接](references/split-production.md)、[直接交付](references/direct-delivery.md)及[ZIP演练](references/zip-handoff.md)。只提交获批当前半话，第一半话确认后才提交后半；缺技术编译的候选不能当正式可生产包。
+- 用户指定分工制作：最终只交一个正式ZIP，交接说明、哈希清单及发布证据内置；接收端可用ZIP路径或其已解压包根目录及可选输出位置启动，旧版sidecar仍兼容。目录校验与发布证据完整时直接接包，不索回原ZIP、不要求重压；接收入口用安装版，生产编译仍用包内冻结工具。读[双电脑交接](references/split-production.md)、[直接交付](references/direct-delivery.md)及[ZIP演练](references/zip-handoff.md)。只提交获批当前半话，第一半话确认后才提交后半；缺技术编译的候选不能当正式可生产包。
 
 核对准确书话、源脚本、真实格数及源序、资产、批准画风和输出RV，不按估计格数初始化。配置存在时读[使用配置](references/usage-configuration.md)，新任务用init_preproduction.py创建未批准模板。
 

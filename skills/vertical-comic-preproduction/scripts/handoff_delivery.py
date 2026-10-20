@@ -10,7 +10,7 @@ DIRECT='direct_delivery_v2'
 TEMPLATE='portable_run_template_v1'
 
 
-def closure(root,index):
+def closure(root,index,*,verify_runtime=True):
     from handoff_zip import reference
     errors=[];known={(e['episode_id'],p) for e in index['episodes'] for p in e['panel_ids']}
     for e in index['episodes']:
@@ -38,6 +38,36 @@ def closure(root,index):
                     data.get('visual_basis')!=e.get('visual_basis') or data.get('shot_manifest')!=e.get('shot_manifest')):
                     errors.append(eid+'/'+pid+':旧图尚未对本次A/B实际复核')
                 reference(root,e.get('visual_basis'));reference(root,e.get('shot_manifest'))
+        if e.get('input_semantics_policy'):
+            plan=json.loads(reference(root,e['run_template']).read_text(encoding='utf-8-sig'))
+            from input_semantics import POLICY, coverage
+            if e['input_semantics_policy']!=POLICY:errors.append(eid+':未知最终输入审查策略')
+            audit=reference(root,e.get('semantic_audit'))
+            audit_data=json.loads(audit.read_text(encoding='utf-8-sig'))
+            if (audit_data.get('episode_id')!=eid or audit_data.get('book_id')!=index['book_id']
+                    or audit_data.get('panel_ids')!=e['panel_ids']
+                    or [r.get('panel_id') for r in audit_data.get('panels',[])]!=e['panel_ids']):
+                errors.append(eid+':最终输入审查范围不完整')
+            for row in audit_data.get('panels',[]):
+                from input_semantics import CHECKS
+                review=row.get('execution_review',{})
+                if (review.get('policy')!=POLICY or review.get('status')!='REVIEWED'
+                        or not review.get('input_digest') or not review.get('reviewer') or not review.get('evidence')
+                        or review.get('unresolved_issues') or any(review.get('checks',{}).get(k,{}).get('status')!='PASS'
+                        or not review.get('checks',{}).get(k,{}).get('evidence') for k in CHECKS)):
+                    errors.append(eid+'/'+row['panel_id']+':最终输入语义审查未闭合')
+            if verify_runtime:
+                from handoff_zip import inside
+                template_root=inside(root,plan['root'])
+                state=json.loads(inside(template_root,plan['state_file']).read_text(encoding='utf-8-sig'))
+                checked=coverage(state,template_root)
+                if checked['status']!='PREPRODUCTION_INPUTS_REVIEWED':
+                    errors.append(eid+':最终输入语义审查未闭合:'+json.dumps(checked['errors'],ensure_ascii=False))
+                if e.get('input_semantics_policy')!=state['input_semantics_policy']:
+                    errors.append(eid+':交接索引缺最终输入审查策略')
+                from codex_reference_contract import checked_file, digest
+                if digest(audit)!=digest(checked_file(template_root,state['semantic_audit'])):
+                    errors.append(eid+':交接审查与运行模板不一致')
         first=[p for p in e['panels'] if p['panel_id'] in e['halves']['H001']]
         if not any(p['classification']=='READY_H001' for p in first) and not all(p['classification']=='REUSE' for p in e['panels']):
             errors.append(eid+':本话没有可启动格，不能让其他话代替本话通过')
@@ -113,7 +143,13 @@ def input_review(root,index):
         packages=e.get('generation_review_packages')
         if not isinstance(packages,list) or not packages:raise ValueError('缺最终实际生图包审查输入')
         for ref in packages:reference(root,ref)
-        selected['generation_review_packages']=packages;episodes.append(selected)
+        selected['generation_review_packages']=packages
+        if e.get('input_semantics_policy'):
+            from input_semantics import POLICY
+            if e['input_semantics_policy']!=POLICY:raise ValueError('未知最终输入审查策略')
+            reference(root,e.get('semantic_audit'))
+            selected.update(input_semantics_policy=POLICY,semantic_audit=e['semantic_audit'])
+        episodes.append(selected)
     value={'policy':'approved_inputs_auto_export_v1','package_id':index['package_id'],'book_id':index['book_id'],'episodes':episodes}
     if 'task_context' in index:value['task_context']=index['task_context']
     return {**value,'approved_input_digest':hashlib.sha256(json.dumps(value,ensure_ascii=False,sort_keys=True,separators=(',',':')).encode()).hexdigest()}

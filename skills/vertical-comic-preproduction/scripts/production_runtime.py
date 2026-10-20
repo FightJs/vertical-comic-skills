@@ -137,6 +137,9 @@ def receiver_audit(state, root, h001_ids, all_ids):
                'h001':first,'preparation':prepared,'all_inputs':full,
                'audit_reuse_statistics':copy.deepcopy(memo['audit_statistics']),
                'dispatch_authorized':False,'image_calls':0,'user_approval':'NOT_GRANTED'}
+        from input_semantics import enabled as semantics_enabled, coverage as semantic_coverage
+        if semantics_enabled(state):
+            value['final_input_semantics'] = semantic_coverage(state, root)
         mark('snapshot_verification',completed=len(order),total=len(order),force=True)
     value.update(elapsed_seconds=round(time.monotonic()-started,4),cpu_seconds=round(time.process_time()-cpu_started,4))
     return value
@@ -204,6 +207,12 @@ def package_review_errors(state, root, batch, record):
     from scoped_inputs import approval_for, half_view, full_preparation
     from panel_readiness import enabled as scoped_preparation
     try:
+        from input_semantics import enabled as semantics_enabled, panel_errors as final_input_errors
+        if semantics_enabled(state):
+            shot = next(p for p in _shots(state, root, batch["batch_id"]) if p["panel_id"] == record["panel_id"])
+            path = checked_file(Path(root), record["package_manifest"])
+            issues = final_input_errors(state, root, shot, read_json(path), path.parent)
+            if issues: return issues
         view = half_view(state, batch["batch_id"])
         whole=full_preparation(state)
         source=read_json(checked_file(Path(root),state['source_snapshot'])) if whole else None
@@ -276,8 +285,14 @@ def dependency_plan_matches(bundle, state, root, batch, record, packet, package_
                 return False
             expected["referenced_image_paths"][i] = str(path)
             observed.add(dep)
-        elif ref.get("path") != token or digest(Path(token)) != ref.get("sha256"):
-            return False
+        else:
+            if ref.get('path') != token: return False
+            if row.get('reference_path_basis') == 'run_root':
+                try: path = checked_file(Path(root), ref)
+                except (OSError, ValueError): return False
+                expected['referenced_image_paths'][i] = str(path)
+            elif row.get('reference_path_basis') is not None or not Path(token).is_absolute() or digest(Path(token)) != ref.get('sha256'):
+                return False
     return observed == set(deps) and expected == actual["arguments"]
 
 
@@ -362,7 +377,12 @@ def episode_bundle(state, root, dependency_plan=None):
             if not isinstance(token,str) or not isinstance(ref,dict) or ref.get('path')!=token:raise ValueError(f'{pid}:参考路径记录与实际参数不一致')
             if token.startswith('@DEPENDENCY:'):found.append(token.split(':',1)[1])
             else:
-                if not Path(token).is_absolute() or digest(Path(token))!=ref.get('sha256') or ref['sha256'] not in approved_hashes:
+                if row.get('reference_path_basis') == 'run_root':
+                    fixed_path = checked_file(Path(root), ref)
+                elif row.get('reference_path_basis') is None and Path(token).is_absolute():
+                    fixed_path = Path(token)
+                else: raise ValueError(f'{pid}:固定参考缺明确路径基准')
+                if digest(fixed_path)!=ref.get('sha256') or ref['sha256'] not in approved_hashes:
                     raise ValueError(f'{pid}:固定参考路径/哈希不是全话已批准依据')
                 fixed_hashes.append(ref['sha256'])
         if sorted(found)!=sorted(deps) or len(found)!=len(deps):raise ValueError(f'{pid}:真实前格替换槽必须逐一对应依赖')
@@ -384,7 +404,11 @@ def episode_bundle(state, root, dependency_plan=None):
                 if pid not in dependency_ids:continue
                 try:
                     if pid not in row_by_id:raise ValueError(f'{pid}:尚未准备实图依赖补齐方案')
-                    validate_dependency(row_by_id[pid]);deferred.add(pid)
+                    validate_dependency(row_by_id[pid])
+                    from input_semantics import panel_errors as final_input_errors
+                    semantic_issues = final_input_errors(state, root, by_shot[pid], plan_row=row_by_id[pid])
+                    if semantic_issues: raise ValueError(';'.join(semantic_issues))
+                    deferred.add(pid)
                 except (OSError,ValueError,TypeError,KeyError,AttributeError) as exc:
                     if not readiness:raise
                     technical_errors[pid]=[str(exc)]
@@ -417,6 +441,11 @@ def episode_bundle(state, root, dependency_plan=None):
            'episode_id':state['episode_id'],'visual_basis':state['visual_basis'],'shot_manifest':state['shot_manifest'],
            'panel_ids':order,'inputs':inputs,'status':'CANDIDATE','user_approval':'NOT_GRANTED'}
     if plan_ref:value['dependency_completion_plan']=plan_ref
+    from input_semantics import enabled as semantics_enabled, coverage as semantic_coverage
+    if semantics_enabled(state):
+        value['input_semantics_policy'] = state['input_semantics_policy']
+        value['final_input_semantics'] = semantic_coverage(state, root, dependency_plan)
+        value['semantic_audit'] = state['semantic_audit']
     if readiness:
         approved_ids={r['panel_id'] for r in inputs}|deferred
         value.update(readiness_policy=state['readiness_policy'],coverage='complete' if len(approved_ids)==len(order) else 'partial',

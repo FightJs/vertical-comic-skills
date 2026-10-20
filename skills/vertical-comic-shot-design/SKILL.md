@@ -24,3 +24,5 @@ description: Design approved-script-driven per-panel shots, crop and physical co
 全话B前完成[比例计划](../vertical-comic-preproduction/references/frame-ratio-plan.md)，保留六种比例和竖版>75%要求；按内容选择，不为变景别或交错牺牲接触、裁切和物理成立。背景按[背景模式](../vertical-comic-preproduction/references/background-treatment.md)保必要锚点和清晰主体，不要求每格全套家具。
 
 generation_dependencies只记录真实前图依赖，普通剧情先后不自动串行；requires_state_review、calibration_anchor及用户明确实图停点照范围保留。semantic_audit按真实规则命中及人体适用性核对，缺口仅阻塞受影响格。B与候选生图包按[合并审查](../vertical-comic-preproduction/references/grouped-review.md)一次展示、分别记录决定；技术PASS不授予生产批准。新增身份或真实改基准回A，批准变化只重审受影响部分。
+
+新运行按[最终输入语义审查](../vertical-comic-preproduction/references/final-input-semantics.md)执行：先审设计，再核对完整实际prompt、参考和判据；前期闭合后交接，接包只复查实际变化与新实图。审查沿用semantic_audit，不新增用户停点、不热改旧冻结包。

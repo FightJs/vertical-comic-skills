@@ -52,10 +52,20 @@ def feasibility_questions(panel):
             'blocking':panel.get('visual_evidence',{}).get('blocking'),
             'visibility':panel.get('visual_evidence',{}).get('visibility'),
             'check':'分别核对摄影机、头部与视线目标；使用者和摄影机各看到物件哪一面；全身肢体任务、承托及持续在场实体是否相容。抽象表现不得未经解释变成实物。'}
+    if 'semantic_facts' in panel or 'subject_visibility' in panel:
+        value['explicit_execution_scope'] = {
+            'body_crop': panel.get('framing', {}).get('body_crop'),
+            'subject_visibility': panel.get('subject_visibility', {}),
+            'semantic_facts': panel.get('semantic_facts', []),
+            'adjacent_face_comparison': panel.get('adjacent_face_comparison', {}),
+            'check': '源指定状态、逐人物可见面、下沿及必显手势须相容；身份可辨与面部可比较分别判断'}
     return copy.deepcopy(value)
 
 
 def feasibility_errors(panel, check):
+    from input_semantics import conflict_errors
+    conflicts = conflict_errors(panel, '')
+    if conflicts: return conflicts
     if (check.get('status')!='PASS' or not text(check.get('evidence'))
             or check.get('expected')!=feasibility_questions(panel)):
         return [str(panel.get('panel_id'))+':镜头可实现性与实际输入尚未按当前镜头核对']

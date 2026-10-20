@@ -329,9 +329,15 @@ def character_details(panel: dict[str, Any], event: str, angle: str, visible: st
             position_map[key.strip()] = value.strip()
     lines: list[str] = []
     for item, name in zip(records, names):
+        visibility = panel.get('subject_visibility', {})
+        subject_scope = visibility.get(item.get('character_id') or item.get('subject_id'), {}) or next(
+            (v for v in visibility.values() if v.get('subject_name') == name), {})
+        hidden_face = subject_scope.get('face_visible') is False
         action = executable_text(item.get("action") or item.get("body_pose"), event)
-        gaze = executable_text(item.get("head_gaze") or item.get("gaze"), "头部和视线朝向本格互动对象")
-        expression = executable_text(item.get("expression"), f"表情/状态以锁定事件为准：{event}")
+        gaze = executable_text(item.get("head_gaze") or item.get("gaze"),
+                               "仅表现批准的头部朝向" if hidden_face else "头部和视线朝向本格互动对象")
+        expression = executable_text(item.get("expression"),
+                                    "" if hidden_face else f"表情/状态以锁定事件为准：{event}")
         relation = executable_text(item.get("orientation_relative_to") or item.get("relative_position"), "按场景锚点保持相对位置")
         face_visibility = executable_text(
             item.get("visible_face") or item.get("face_visibility") or item.get("head_orientation"),
@@ -341,7 +347,11 @@ def character_details(panel: dict[str, Any], event: str, angle: str, visible: st
         lines.append(
             f"- {name}：屏幕位置={position}；动作/身体={action}；头部/视线={gaze}；微表情={expression}；可见面={face_visibility}；朝向关系={relation}；身体裁切={item.get('body_crop') or (panel.get('framing') or {}).get('body_crop', '')}。"
         )
-    return "逐人物执行：\n" + "\n".join(lines)
+    result = "逐人物执行：\n" + "\n".join(lines)
+    from input_semantics import conflict_errors
+    issues = conflict_errors(panel, result)
+    if issues: raise ValueError(';'.join(issues))
+    return result
 
 
 def visible_text(panel: dict[str, Any], event: str, angle: str) -> str:
@@ -416,6 +426,9 @@ def build_prompt(panel: dict[str, Any], angle: str, scale: str, ratio: str,
     content_start = body.index("【画面内容锁定】")
     camera_block = "\n".join(x for x in body[:content_start] if x)
     content_block = "\n".join(x for x in body[content_start:] if x)
+    from input_semantics import conflict_errors
+    issues = conflict_errors(panel, final_prompt(prompt, negative))
+    if issues: raise ValueError(';'.join(issues))
     return prompt, negative, camera_block + "\n\n" + content_block
 
 
@@ -648,7 +661,7 @@ def main() -> int:
             "status": "PROMPT_REPAIRED_V2",
             "repair_note": "综合修复v2：保留已有镜头与信息优先构图，不机械轮换景别；比例来自正向设计；实际提示词、参考图和索引已重建。",
         })
-        for field in ("framing", "characters_visible", "background_anchors_visible", "fixed_props_visible", "adjacent_change_reason", "camera_exception_approval", "continuity_contract", "reference_bindings", "composition_reference", "composition_required", "ratio_tolerance", "transparent_background", "visual_resolution", "visual_evidence_policy", "visual_evidence", "visual_evidence_context"):
+        for field in ("framing", "characters_visible", "background_anchors_visible", "fixed_props_visible", "adjacent_change_reason", "camera_exception_approval", "continuity_contract", "reference_bindings", "composition_reference", "composition_required", "ratio_tolerance", "transparent_background", "visual_resolution", "visual_evidence_policy", "visual_evidence", "visual_evidence_context", "semantic_facts", "subject_visibility", "adjacent_face_comparison"):
             if field in panel:
                 repaired[field] = panel[field]
         if usage:

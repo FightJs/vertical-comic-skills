@@ -20,3 +20,5 @@ description: Compile frozen generation inputs and generate vertical-comic panels
 7. 原格最多一轮自动修正，超过5张真实失败先原子登记共因诊断。修正绑定真实失败、新包和具体约束，保留有效修正；额外授权单独记次数，不重置旧历史。未知请求先查证，不按超时重发或占用返修轮次。
 
 B和实际包按[合并审查](../vertical-comic-preproduction/references/grouped-review.md)准确决定；明确用户委托可由执行者在范围内作有证据决定，不伪造用户逐项批准。原比例、源稿和身份资产不因模型失败擅自放宽。最终由验收阶段完成实际QA、连续性和逐格成品包。
+
+新运行按[最终输入语义审查](../vertical-comic-preproduction/references/final-input-semantics.md)执行：先审设计，再核对完整实际prompt、参考和判据；前期闭合后交接，接包只复查实际变化与新实图。审查沿用semantic_audit，不新增用户停点、不热改旧冻结包。

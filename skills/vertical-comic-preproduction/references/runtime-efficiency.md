@@ -45,3 +45,7 @@ review_group_size默认4、review_max_wait_seconds默认30，仅合并通知。�
 编译、恢复与QA使用准确范围的权威上下文；已有有效未变图片只复用原真实QA，不把整话共享JSON的无关变化当作全部重绘理由。先确认失效的具体输入、判据或相邻比较，再执行原门禁。evaluate输出failure_domain只帮助区分运行/输入上下文问题，不能替代实际QA或自动决定返修。
 
 async_generation.js保存submitted_at、returned_at、save_started_at和saved_at；可注入onPersisted在同一单写通道记录最终保存时间，再通知QA。该回调仅存元数据，不重发请求、不填视觉结论。ready_at只在实际观察到该格就绪时登记，qa_completed_at只在真实QA保存后登记。未记录值留未知。production_metrics分别输出阶段区间并集和累计时间，两者不可互相替代，各阶段也不相加冒充互斥总历时。编辑退化率仅统计图片hash绑定且清晰度与保留区域都有明确结论的实际编辑QA。
+
+### 最终输入审查复用
+
+`receiver_audit`在现有读取事务中核验[最终输入语义证据](final-input-semantics.md)。复用的是绑定内容的执行者观察，不是永久缓存技术PASS；文件、规则/工具、判据或参考用途变化使受影响审查失效，许可/预算/批准撤销仍实时核验。

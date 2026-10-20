@@ -22,6 +22,15 @@ class DirectHandoffTests(unittest.TestCase):
         s['runtime']=copy.deepcopy(EPISODE_DEFAULTS)
         self.shots.update(execution_mode=s['execution_mode'],optimization_policy=s['optimization_policy'])
         for p in self.shots['panels']:p['state_review_policy']='merge_into_D'
+        if getattr(self, 'FINAL_SEMANTICS', False):
+            from input_semantics import POLICY
+            s['input_semantics_policy'] = POLICY
+            for p in self.shots['panels']:
+                p['semantic_facts'] = []
+                p['subject_visibility'] = {c['character_id']: {'subject_name':c['canonical_name'],
+                    'face_visible':True,'identity_observable':True,'evidence':'SYNTHETIC visible face'}
+                    for c in p['character_bindings']}
+
         s['shot_manifest']=f.fixtures.write(self.template,'portable-shots.json',self.shots)
         audit=f.fixtures.read(self.template,s['semantic_audit']);audit['shot_manifest']=s['shot_manifest'];s['semantic_audit']=f.fixtures.write(self.template,'portable-audit.json',audit)
         s['gates']['shot_design']={**f.fixtures.approve([s['visual_basis'],s['shot_manifest'],s['semantic_audit']]),'panel_ids':['P001','P002','P003','P004']}
@@ -36,6 +45,16 @@ class DirectHandoffTests(unittest.TestCase):
         source=f.fixtures.read(self.template,s['source_snapshot'])
         from scoped_inputs import build_plan
         s['batch_plan']=f.fixtures.write(self.template,'episode-plan.json',build_plan(s,source))
+        if getattr(self, 'FINAL_SEMANTICS', False):
+            from input_semantics import actual_input, review_template
+            audit=f.fixtures.read(self.template,s['semantic_audit'])
+            for row,p,r in zip(audit['panels'],self.shots['panels'],s['panels']):
+                packet=f.fixtures.read(self.template,r['package_manifest'])
+                review=review_template(actual_input(s,self.template,p,packet,self.template))
+                review.update(status='REVIEWED',reviewer='SYNTHETIC',evidence='Synthetic exact input review, no human approval')
+                for check in review['checks'].values():check.update(status='PASS',evidence='Synthetic scoped review')
+                row['execution_review']=review
+            s['semantic_audit']=f.fixtures.write(self.template,'portable-final-audit.json',audit)
         bundle=episode_bundle(s,self.template);f.approve_package(self.template,s,bundle,source['panel_ids'])
         compiled=compile_jobs(s,self.template,['P001','P002']);self.assertEqual([r['panel_id'] for r in compiled['jobs']],['P001','P002'],compiled)
         # Freeze only after all installed code/docs are stable. Rebind addresses in bind.
@@ -47,6 +66,9 @@ class DirectHandoffTests(unittest.TestCase):
         (self.package/'binding-plan.md').write_text('SYNTHETIC portable runtime-only binding', encoding='utf-8', newline='\n')
         template_ref=self.put('template-index.json',{'policy':d.TEMPLATE,'episode_id':'E000','root':'template/E000','state_file':self.state_ref['path'],'files':h.files(self.template)})
         self.index={'policy':h.POLICY,'delivery_policy':d.DIRECT,'package_id':'SYNTHETIC_DIRECT','book_id':s['book_id'],'episodes':[{'episode_id':'E000','panel_ids':source['panel_ids'],'halves':{'H001':['P001','P002'],'H002':['P003','P004']},'source_snapshot':self.ref('template/E000/'+s['source_snapshot']['path']),'production_source_snapshot':self.ref('template/E000/'+s['source_snapshot']['path']),'source_script':self.ref('template/E000/'+s['source_script']['path']),'visual_basis':self.ref('template/E000/'+s['visual_basis']['path']),'shot_manifest':self.ref('template/E000/'+s['shot_manifest']['path']),'runtime_manifest':self.ref('runtime/manifest.json'),'approval_evidence':self.ref('template/E000/'+s['approval_index']['path']),'path_binding_plan':self.ref('binding-plan.md'),'run_template':template_ref,'generation_review_packages':[self.ref('template/E000/'+r['path']) for r in s['generation_packages']['EPISODE']],'panels':[{'panel_id':pid,'classification':'READY_H001' if i<2 else 'PREPARED_H002','history':{'status':'NEVER_SUBMITTED','reviewer':'SYNTHETIC','conclusion':'Isolated synthetic fixture; not real calls','evidence':[self.ref('history.json')],'attempts':[],'auto_corrections_used':0,'remaining_auto_corrections':1}} for i,pid in enumerate(source['panel_ids'])]}]}
+        if getattr(self, 'FINAL_SEMANTICS', False):
+            self.index['episodes'][0].update(input_semantics_policy=s['input_semantics_policy'],
+                semantic_audit=self.ref('template/E000/'+s['semantic_audit']['path']))
         self.save()
     def ref(self,name):return {'path':name,'sha256':h.sha(self.package/name)}
     def put(self,name,value):

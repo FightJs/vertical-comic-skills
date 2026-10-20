@@ -148,6 +148,14 @@ def audit_index(root):
             plan=read(reference(root,episode['run_template']))
             template=inside(root,plan['root']);state=read(inside(template,plan['state_file']))
             errors=handoff_history_errors(root,episode,context,state,template)
+            from input_semantics import enabled as semantics_enabled
+            if semantics_enabled(state):
+                if episode.get('input_semantics_policy')!=state['input_semantics_policy']:
+                    errors.append(eid+':交接索引与运行模板的语义审查策略不同')
+                audit=reference(root,episode.get('semantic_audit'))
+                from codex_reference_contract import checked_file
+                if sha(audit)!=sha(checked_file(template,state['semantic_audit'])):
+                    errors.append(eid+':交接语义证据与运行模板不同')
             if errors:raise ValueError(';'.join(errors))
         elif context is not None:
             raise ValueError('TASK_SCOPE_HOLD:本任务零调用须由实际运行模板核对，不能只填空历史')
@@ -427,6 +435,14 @@ def rehearse(zip_path,package_root,run_root,run_index,report,*,timeout=180):
                     prep=run_gate(prep_argv,eid,'preparation',state_path)
                     prepared=json.loads(prep.stdout)
                 required=[p['panel_id'] for p in episode['panels'] if p['classification']!='REUSE']
+                if state.get('input_semantics_policy'):
+                    semantic = bundle.get('final_input_semantics', {}) if combined else prepared.get('final_input_semantics', {})
+                    if (semantic.get('policy') != state['input_semantics_policy']
+                            or semantic.get('status') != 'PREPRODUCTION_INPUTS_REVIEWED'
+                            or semantic.get('reviewed_panel_ids') != episode['panel_ids']
+                            or semantic.get('dispatch_authorized') is not False):
+                        raise ValueError('全话最终输入语义审查未闭合或范围失配')
+                    write(report/(eid+'_final_input_semantics.json'),semantic)
                 if (rc if combined else prep.returncode) or prepared.get('global_errors') or prepared.get('errors') or not set(required).issubset(prepared.get('prepared_panel_ids',[])):
                     raise ValueError('全话准备预检未通过，不能以首半话可启动代替全话交付')
                 if not combined:
@@ -483,6 +499,7 @@ def release(candidate_zip,rehearsal_report,approval_file,output):
             for e in delivery_index['episodes']:
                 refs.extend(e.get(k) for k in ('run_template','source_script','production_source_snapshot','visual_basis','shot_manifest','runtime_manifest'))
                 refs.extend(e.get('generation_review_packages',[]))
+                if e.get('input_semantics_policy'):refs.append(e.get('semantic_audit'))
                 for p in e['panels']:
                     if p['classification']=='WAIT_DEPENDENCY':refs.append(p.get('production_dependency',{}).get('completion_plan'))
                     if p['classification']=='REUSE':refs.extend(p.get(k) for k in ('current_design_review','accepted_image','accepted_qa','acceptance'))
@@ -490,7 +507,7 @@ def release(candidate_zip,rehearsal_report,approval_file,output):
                 if not isinstance(ref,dict):raise ValueError('缺直接交付闭环引用')
                 dest=inside(root,ref['path']);dest.parent.mkdir(parents=True,exist_ok=True)
                 with archive.open(top+'/'+ref['path']) as src,dest.open('wb') as dst:shutil.copyfileobj(src,dst)
-            errors=closure(root,delivery_index)
+            errors=closure(root,delivery_index,verify_runtime=False)
             if errors:raise ValueError(';'.join(errors))
             reviewed=input_review(root,delivery_index)
     if (report.get('policy')!=POLICY or report.get('source_kind')!='observed_frozen_gate_rehearsal' or

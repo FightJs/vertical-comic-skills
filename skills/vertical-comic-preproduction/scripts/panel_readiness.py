@@ -216,7 +216,13 @@ def _report(state,root):
                 changed=True
             if set(design)&design_blocked and pid not in design_blocked:
                 design_blocked.add(pid);changed=True
-    return {'global_errors':[],'pending_comparison_panel_ids':sorted({p for h in comparison_holds(state) for p in h['panel_ids']}),
+    from input_semantics import enabled as semantics_enabled, coverage as semantic_coverage
+    execution_status = {}
+    if semantics_enabled(state):
+        # Keep design readiness separate: final input review is downstream of
+        # candidate construction and must not create a preparation cycle.
+        execution_status['final_input_semantics'] = semantic_coverage(state, root)
+    return {**execution_status, 'global_errors':[],'pending_comparison_panel_ids':sorted({p for h in comparison_holds(state) for p in h['panel_ids']}),
             'ready_for_review_ids':[pid for pid in order if pid not in design_blocked],
             'prepared_panel_ids':[pid for pid in order if pid not in blocked],
             'blocked_panel_ids':[pid for pid in order if pid in blocked],'blockers':reasons,'user_approval':'NOT_GRANTED'}

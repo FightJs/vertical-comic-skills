@@ -191,3 +191,7 @@ phases使用现有review_policy.PHASES精确枚举，不能填通配符。执行
 局部扩展沿原字段：check.inspection_targets=[具体观察目标]；观察view.covered_targets=[实际覆盖目标]，可选source_size=[原宽,原高]/resampled。ref.detail_readability=[{subject_id,detail_id,region,status,observed}]对应图集原像素。repair_focus.structural_change={remove,replace,connect}；repair_source.preservation_regions={名称:[x0,y0,x1,y1]}对应真实底图；repair_comparison.preserved_observations={名称:{status,observed}}。模板不预填PASS，文本与像素范围校验不能替代实际观察。
 
 物理连续性扩展不新增根策略：同一actor/actor_limb在hand/contact中用稳定标识；同一肢体有多个target时，只有各项一致且具体的combined_grip_basis才可交原B可实现性核对。visual_evidence.comparison_panel_ids为可选的补充同场景/同连续状态前序格ID数组，不替代previous_panel_id、不建立生图依赖；QA的continuity_comparisons逐项绑定当前真实output。结构返修增加repair_comparison.whole_subject_recheck={status,observed}，模板UNREVIEWED，实际整体复核后填写。旧批次继续其冻结工具，不用新增代码重签历史输入。
+
+## 最终输入审查扩展
+
+新运行使用`input_semantics_policy=final_input_semantics_v1`；沿用semantic_audit_v1，每格增加execution_review（实图补齐另有dependency_completion_review）。字段、摘要、逐人物semantic_facts/subject_visibility与只读接包复用见[最终执行输入审查](final-input-semantics.md)。新字段进入镜头/实际包一致性核验；模板不填PASS。

@@ -42,3 +42,5 @@ make_generation_qa 生成 inspection_plan，将原基础 QA、命中 memory_revi
 visual_evidence_v1负责把本话具体布局、状态、细节预期和图片观察绑定到现有记录；通用方法继续以MEM-002/003/004/005/006为正式来源。生产只读规则库。本次维护更新规则版本后，旧RV须用原工具/规则快照恢复或显式迁移，不能重签旧哈希。
 
 物理与连续性方法分别维护在MEM-001/002/005/006/009，MEM-010 v2维护叙事驱动的相邻镜头判据。提示词模块在prompt-package.md，背景字段合同在shot-framing.md/schemas.md；编译器只查执行文字与依据一致性。生产只读规则库，冻结旧RV不自动重签或迁移。
+
+最终prompt与全部执行判据的一致性由[final-input-semantics.md](final-input-semantics.md)维护，input_semantics.py验证内容绑定和少数确定矛盾；仍由执行者逐格阅读与看参考。MEM-007负责表情变化原则，不负责给每格指定专注/闭嘴等默认状态。

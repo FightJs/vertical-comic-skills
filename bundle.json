@@ -20,8 +20,8 @@
     },
     {
       "path": "skills/vertical-comic-panel-generation/SKILL.md",
-      "sha256": "9308ee2452d0f5e182bc6d78c0e2a2946a9590e7e6840128bfd624378a3de276",
-      "bytes": 4210
+      "sha256": "f2ca302732b6375e6f9a87b7263ebe89538699f590e30f8721147aa48dad47a9",
+      "bytes": 4534
     },
     {
       "path": "skills/vertical-comic-panel-generation/agents/openai.yaml",
@@ -30,8 +30,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/SKILL.md",
-      "sha256": "e803731425b33609b8f7d2be507005401f55c7ff58feb56d4e846cae3e7c7765",
-      "bytes": 8213
+      "sha256": "78a530323d69e270f37144bb36c96eaa9ab59a9fd57cf90571ab207c5618dd5f",
+      "bytes": 8505
     },
     {
       "path": "skills/vertical-comic-preproduction/agents/openai.yaml",
@@ -90,8 +90,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/assets/rule-memory/内置规则/规则/镜头/MEM-007_相邻格同角色微表情必须有可见变化.md",
-      "sha256": "d96a98540850db7e9c0ba9575bf9eb73987b9bd55f80eb19caeab863a9c55a78",
-      "bytes": 1731
+      "sha256": "8c4ba291921293113ab1c1ce791de35443cc02b8025a4a41d764a9f89c5b4ade",
+      "bytes": 2423
     },
     {
       "path": "skills/vertical-comic-preproduction/assets/rule-memory/内置规则/规则/镜头/MEM-009_真实透视与遮挡优先于完整展示.md",
@@ -110,8 +110,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/assets/rule-memory/内置规则/记忆索引.json",
-      "sha256": "2a57a948e3ba21d05318a0841ce0432c6f33cf55d5eea1a9d25784ca9ada89d7",
-      "bytes": 24348
+      "sha256": "ad4921c71a989e65cfb014775113d869a01bdbcf3fa4bed8f4bc0a3c34b6d3c6",
+      "bytes": 24435
     },
     {
       "path": "skills/vertical-comic-preproduction/assets/rule-memory/同步目标.json",
@@ -125,8 +125,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/assets/templates/ZIP交接说明模板.md",
-      "sha256": "848d0b4b09fc85a33352ab4564dfd80bc32760fea589bbe3706a88eab697d262",
-      "bytes": 5548
+      "sha256": "735d95297b605cfcc54efa48c6d48a76021f055659a2f00868ff74ebb58af22b",
+      "bytes": 6140
     },
     {
       "path": "skills/vertical-comic-preproduction/assets/templates/runtime-requirements.txt",
@@ -190,8 +190,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/references/direct-delivery.md",
-      "sha256": "fb198fdf7c0b9a26d4d356f4ea912f736028b8ca5bff70a9cc71a18717c8f219",
-      "bytes": 10278
+      "sha256": "ffab50bd5d117531729262458b39791ae34a84828dcf65eb4b6e8ea136db8151",
+      "bytes": 10611
     },
     {
       "path": "skills/vertical-comic-preproduction/references/episode-async.md",
@@ -209,6 +209,11 @@
       "bytes": 11500
     },
     {
+      "path": "skills/vertical-comic-preproduction/references/final-input-semantics.md",
+      "sha256": "0f7995b33d7935afb4ffa110b48a89439936e3f01651f24524274483e0ac48e6",
+      "bytes": 7533
+    },
+    {
       "path": "skills/vertical-comic-preproduction/references/frame-ratio-plan.md",
       "sha256": "7f027ae7194bbb461da5c33d69ec87b81cd8bb88fb9b9a9d103d6f3bc637bba5",
       "bytes": 5528
@@ -220,8 +225,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/references/grouped-review.md",
-      "sha256": "b46ef2bad715e5d4c852570970bb302799d698709cd711617124a5d0735efd4b",
-      "bytes": 4971
+      "sha256": "f201f4ac416d9d85027d08c2a3a7976cbd7ecfebbd774586bc1e9761592c718c",
+      "bytes": 5280
     },
     {
       "path": "skills/vertical-comic-preproduction/references/half-episode.md",
@@ -255,8 +260,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/references/prompt-package.md",
-      "sha256": "f42710ec332c6883c4b4b0e5a4c327687f3eac0914ecaf9e3fe95bec6c7956c3",
-      "bytes": 11765
+      "sha256": "ecc91f1070bf1baedfebfd6d8cc0c5d36119c5a1a0f01855ff77a040053940fc",
+      "bytes": 12134
     },
     {
       "path": "skills/vertical-comic-preproduction/references/quality-gates.md",
@@ -310,13 +315,13 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/references/rule-ownership.md",
-      "sha256": "f81a6a82f84701974eb851cfce2944fb470e68d45ab7a69e8fe0aa0174d671d5",
-      "bytes": 6203
+      "sha256": "4bb967e9e2fc698ce37bc0fa20cd0e107d28d08fa3091a4bf7d06b700f144669",
+      "bytes": 6505
     },
     {
       "path": "skills/vertical-comic-preproduction/references/runtime-efficiency.md",
-      "sha256": "b1fc75dccdcebcf22c86905e4d6b0a605c755c4d7addea5242661939de3a8a82",
-      "bytes": 6471
+      "sha256": "56da67120041b5cb21fee23eb691fe0f95d905cf862935456f44c8d483104d55",
+      "bytes": 6803
     },
     {
       "path": "skills/vertical-comic-preproduction/references/runtime-half-legacy.md",
@@ -325,8 +330,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/references/schemas.md",
-      "sha256": "0a8224f56e3594ad32b26029a733fc44ab55bd9e53b2546c32c5c6be5258cfb3",
-      "bytes": 17300
+      "sha256": "9b295f987bac1b64ebb62807edf341d57ee441d88c72833d9a52247ba2db5a70",
+      "bytes": 17714
     },
     {
       "path": "skills/vertical-comic-preproduction/references/screenwriting-distillate.md",
@@ -335,13 +340,13 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/references/shot-framing.md",
-      "sha256": "161f7eeb643a93d1dd5f58c02bd9c0b7364f6276ad73c1af00d5306e6b098d74",
-      "bytes": 9019
+      "sha256": "2718cfbb76a5d7267c1900ba34ab3d35305d7f93eff1e95729d40c6aeb7ecf53",
+      "bytes": 9340
     },
     {
       "path": "skills/vertical-comic-preproduction/references/split-production.md",
-      "sha256": "1ace89149178859858a29478d5d9915f6197cb361b07b0bf1489c40283eb5408",
-      "bytes": 16481
+      "sha256": "5a50d8559b8cfe6baac54a5a26a34e78515ad369417550205c9c9f4b310b1af5",
+      "bytes": 16873
     },
     {
       "path": "skills/vertical-comic-preproduction/references/stage-asset-production.md",
@@ -365,8 +370,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/references/stage-shot-design.md",
-      "sha256": "0bfa09334c068db8147fc9f17606fbcfd64aa0b126854e3b5119cee2a97b82da",
-      "bytes": 15757
+      "sha256": "4e63dad14fb357e53a14978d13ca06fd39f15b865ad124c4cb849a7670836092",
+      "bytes": 16022
     },
     {
       "path": "skills/vertical-comic-preproduction/references/staged-workflow-legacy.md",
@@ -415,8 +420,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/references/zip-handoff.md",
-      "sha256": "c7fddc3ec4762278e8ed0b8d6a6cbe6c102af4618839e0608a79bc9f5f026249",
-      "bytes": 17090
+      "sha256": "b2575dc87bbd80605f40cd5accb7663d69d025197608a0c8ef3554464352532f",
+      "bytes": 17387
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/appearance_lock.py",
@@ -455,8 +460,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/batch_workflow.py",
-      "sha256": "f1aabb0333cb3e0fcaf83c0f6d98d17c67c7ad63eecd8301e77f408ff919fa5b",
-      "bytes": 32019
+      "sha256": "e52302bec9e1bcf854295f9e7eadcc627c4d3a3fbfaff0e5f189ad06f4201665",
+      "bytes": 32213
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/builtin_memory.py",
@@ -475,18 +480,18 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/codex_reference_contract.py",
-      "sha256": "dd27c5170052c703912f523132bf1ef4f80895cce3999d6e5743455d8ac52e58",
-      "bytes": 20238
+      "sha256": "002121053edadce1297014df21c606cdb7219023c1c3035a131fc5bb75a0486c",
+      "bytes": 20411
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/comic_start.py",
-      "sha256": "231c254eb9dd0d21d0c88b6ecbaf42ac2ce11ff24eb57eb0b78b7c1f19377f71",
-      "bytes": 7931
+      "sha256": "ad901aceaaf2597848421275e39a19dddbf76ff2c49a38ecbdd39a224e3e8656",
+      "bytes": 8012
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/continuity_context.py",
-      "sha256": "3928b2e8e2e5ebb351a13a3821d5ba26720af318249845be6fc97abf2c35266f",
-      "bytes": 20350
+      "sha256": "bc493942012b3ff7a2b32336bc0603028531537d2aed7339543d522c6a60a60c",
+      "bytes": 20515
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/continuity_contract.py",
@@ -505,8 +510,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/execution_contract.py",
-      "sha256": "4af005858be76b784a699174e6c2168942c20f18d298a2648265575312211c99",
-      "bytes": 13184
+      "sha256": "c7d8ea153350ee3dee98c5c5fcc621b29d9a2c9b7c7edf6330972dde28045f47",
+      "bytes": 13282
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/frame_ratio_plan.py",
@@ -520,13 +525,13 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/handoff_delivery.py",
-      "sha256": "2717342f7d37e3f1ae6d807b5c5d1f7dd2cbf4ce992b1aa744325475d168944c",
-      "bytes": 8708
+      "sha256": "5880555a7c5b8dcf7b3368bc741fdad1d265b4c6a07b5a4a54b79f7bdb852971",
+      "bytes": 11427
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/handoff_zip.py",
-      "sha256": "3b40b9ca34bfa609321137ad22c640900d293696eae0beb6999c078349024cf5",
-      "bytes": 42589
+      "sha256": "600b6a73eb3918478a5ca7c05a4a5df2814a9a3892dfdefca9fe17cda42e21d1",
+      "bytes": 44003
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/identity_confirmation.py",
@@ -540,8 +545,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/init_preproduction.py",
-      "sha256": "484230529559b9eddbec3108fce28247dbf635952a82107b999877a7862eaf35",
-      "bytes": 15653
+      "sha256": "e9187bdf46c42eea350de61ac75581b942cfb2c3d5e4b5e705afeb48498503c8",
+      "bytes": 15775
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/input_priority.py",
@@ -552,6 +557,11 @@
       "path": "skills/vertical-comic-preproduction/scripts/input_quality.py",
       "sha256": "df2cbeccf2d3715e9b108a27130bda0a2187d5de0f5837050ff69886f908b0fa",
       "bytes": 11508
+    },
+    {
+      "path": "skills/vertical-comic-preproduction/scripts/input_semantics.py",
+      "sha256": "b9a11c8f7160700cc2d048edb43d2f939fb92389b537fbbe1565643c44e24dc4",
+      "bytes": 21218
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/installation_state.py",
@@ -570,8 +580,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/panel_readiness.py",
-      "sha256": "b615d4423aa2c058b2e929e41fed390ba8d3d4deccb85ed3bb337eaa2327d75a",
-      "bytes": 15173
+      "sha256": "99d14290de0a78f093034514601bda3afe7894c2b06d97a78321da10cd93e8b6",
+      "bytes": 15579
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/parallel_dispatch.py",
@@ -590,8 +600,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/production_runtime.py",
-      "sha256": "3d4e8ecb17de731111bc59b3e428052b63fe7ab3ebacb4bd74b3524cdffa77f0",
-      "bytes": 53456
+      "sha256": "094e25bbdf46eab99ef1637fb9788bf2a7261dcb7d06396241f824910b408d3d",
+      "bytes": 55445
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/reference_atlas.py",
@@ -615,8 +625,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/repair_prompt_package_v2.py",
-      "sha256": "268cb9232943900082faa1d85a2faaa6001212e1e60efa37262b6605860b1232",
-      "bytes": 47856
+      "sha256": "8101fb69a423f2d53e43ce7ba02b62a37451b6d06471d5224eb25a6d140fb574",
+      "bytes": 48704
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/repair_routes.py",
@@ -655,8 +665,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/runtime_capabilities.json",
-      "sha256": "8c17585d0c0d4948fed0fd6ec4f8294282116ef1f95910e93cc6456c14ea35ec",
-      "bytes": 175
+      "sha256": "ad092908a5835b268a02ff5f04aaddb827c1ffaf8163f9838eb81d95ac358286",
+      "bytes": 230
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/runtime_environment.py",
@@ -730,8 +740,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/visual_evidence.py",
-      "sha256": "478e1ec6cbbb8e7f97f0a2067e8e781d7bfd855c8a89faff0d80308d64e5cd74",
-      "bytes": 52825
+      "sha256": "7a5c681a11f5f543734ea94748a06f0edadf9bf4cf01e50ba4b58e615edd44f0",
+      "bytes": 53488
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/worker_watchdog.py",
@@ -805,8 +815,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/tests/test_direct_handoff.py",
-      "sha256": "1529da9ffac041e0cdfb51df4815e29ecc2345024e42ad571eb552749c60cb56",
-      "bytes": 16931
+      "sha256": "04df7d301500496f28bd9b9306dabd0552cfa962d73f8b1a6e4e98af6da6cdf9",
+      "bytes": 18491
     },
     {
       "path": "skills/vertical-comic-preproduction/tests/test_easy_start.py",
@@ -889,6 +899,11 @@
       "bytes": 2502
     },
     {
+      "path": "skills/vertical-comic-preproduction/tests/test_input_semantics.py",
+      "sha256": "21e86546986e2792ab83be8f90ec2795315a606a692d43a27d6957cbf1823b4e",
+      "bytes": 14605
+    },
+    {
       "path": "skills/vertical-comic-preproduction/tests/test_panel_readiness.py",
       "sha256": "02ed200d0e06a8949ed64f575f9478b82a9fa807c97e9e9a063657c399305c07",
       "bytes": 17864
@@ -915,8 +930,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/tests/test_production_runtime.py",
-      "sha256": "30cc3139a0e52d5a03ed6f09105597ee7866cfe003d3dde666723d7afbeecf5a",
-      "bytes": 13467
+      "sha256": "c2bb800f8d904836837d2010b00aa4ddcb64d819212f81671a5d7568dc8d1873",
+      "bytes": 14390
     },
     {
       "path": "skills/vertical-comic-preproduction/tests/test_prompt_framing.py",
@@ -970,8 +985,8 @@
     },
     {
       "path": "skills/vertical-comic-shot-design/SKILL.md",
-      "sha256": "d6fabc9a5561d7ec5c7b7bb91687d727362f3a4b03061eff8197d34375174ee1",
-      "bytes": 3989
+      "sha256": "bf36a4dde4f973a10f92f8ea06df1369a0edee88da19db887c8c6d5dddd54137",
+      "bytes": 4313
     },
     {
       "path": "skills/vertical-comic-shot-design/agents/openai.yaml",
@@ -1030,8 +1045,8 @@
     },
     {
       "path": "memory/规则/镜头/MEM-007_相邻格同角色微表情必须有可见变化.md",
-      "sha256": "d96a98540850db7e9c0ba9575bf9eb73987b9bd55f80eb19caeab863a9c55a78",
-      "bytes": 1731
+      "sha256": "8c4ba291921293113ab1c1ce791de35443cc02b8025a4a41d764a9f89c5b4ade",
+      "bytes": 2423
     },
     {
       "path": "memory/规则/镜头/MEM-009_真实透视与遮挡优先于完整展示.md",
@@ -1050,8 +1065,8 @@
     },
     {
       "path": "memory/记忆索引.json",
-      "sha256": "2a57a948e3ba21d05318a0841ce0432c6f33cf55d5eea1a9d25784ca9ada89d7",
-      "bytes": 24348
+      "sha256": "ad4921c71a989e65cfb014775113d869a01bdbcf3fa4bed8f4bc0a3c34b6d3c6",
+      "bytes": 24435
     }
   ]
 }

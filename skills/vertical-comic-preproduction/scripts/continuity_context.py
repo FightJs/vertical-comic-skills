@@ -171,6 +171,9 @@ def binding_errors(state,root,packet,package_root):
     except (OSError,ValueError,TypeError,KeyError,IndexError,StopIteration) as exc:return [f'CONTINUITY_CONTEXT_HOLD:{exc}']
 
 def contextual_tags(manifest,root,panel):
+    from input_semantics import conflict_errors
+    semantic_issues = conflict_errors(panel, '')
+    if semantic_issues: raise ValueError(';'.join(semantic_issues))
     from panel_readiness import local_tags_manifest
     manifest=local_tags_manifest(manifest,panel)
     previous,errors=load_context(manifest,root,readonly=True)

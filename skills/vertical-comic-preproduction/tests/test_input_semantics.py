@@ -127,7 +127,7 @@ class RealInputBinding(unittest.TestCase):
         record = self.state['panels'][1]; path = checked_file(self.root, record['package_manifest'])
         packet = read_json(path); panel = packet['panels'][0]
         panel['prompt'] += '\nSYNTHETIC new expression requirement'
-        (self.root / panel['prompt_file']).write_text(panel['prompt'])
+        (self.root / panel['prompt_file']).write_text(panel['prompt'], encoding='utf-8', newline='\n')
         record['package_manifest'] = fixture.fixtures.write(self.root, path.name, packet)
         self.assertTrue(any('已变化' in e for e in self.check()))
         self.assertEqual(self.check(2), [])
@@ -135,7 +135,7 @@ class RealInputBinding(unittest.TestCase):
     def test_unsynchronized_prompt_and_manifest_block_before_review(self):
         record = self.state['panels'][1]; path = checked_file(self.root, record['package_manifest'])
         packet = read_json(path)
-        (self.root / packet['panels'][0]['prompt_file']).write_text('SYNTHETIC changed only txt')
+        (self.root / packet['panels'][0]['prompt_file']).write_text('SYNTHETIC changed only txt', encoding='utf-8', newline='\n')
         self.assertTrue(any('prompt.txt' in e for e in self.check()))
 
     def test_criteria_change_invalidates_review_even_with_same_prompt(self):
@@ -175,7 +175,7 @@ class RealInputBinding(unittest.TestCase):
                 self.assertEqual(self.check(), [])
                 self.assertEqual(self.check(), [])
                 path = self.root / 'P002/prompt.txt'
-                path.write_text(path.read_text() + '\nSYNTHETIC mutation')
+                path.write_text(path.read_text(encoding='utf-8') + '\nSYNTHETIC mutation', encoding='utf-8', newline='\n')
                 self.assertTrue(self.check())
 
     def test_template_cli_preserves_design_and_never_overwrites(self):
@@ -187,7 +187,7 @@ class RealInputBinding(unittest.TestCase):
                    '--output', str(dest), '--panels', 'P002']
         result = subprocess.run(command, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        value = json.loads(dest.read_text())
+        value = json.loads(dest.read_text(encoding='utf-8'))
         self.assertEqual(value['panels'][1]['execution_review']['status'], 'UNREVIEWED')
         self.assertEqual(value['panels'][0], self.audit['panels'][0])
         self.assertEqual(value['panels'][1]['checks'], self.audit['panels'][1]['checks'])

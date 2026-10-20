@@ -900,8 +900,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/tests/test_input_semantics.py",
-      "sha256": "83ff8c46c998d7d7e5dfaea427fa82710c25a2fade73b6735b0c33e500f5cb32",
-      "bytes": 14477
+      "sha256": "21e86546986e2792ab83be8f90ec2795315a606a692d43a27d6957cbf1823b4e",
+      "bytes": 14605
     },
     {
       "path": "skills/vertical-comic-preproduction/tests/test_panel_readiness.py",

@@ -780,8 +780,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/tests/test_audit_progress.py",
-      "sha256": "f205ea2f924d1c4fb0c1b06c0af3523a47ca8a54e4e563ea7b39c5eafb62a59d",
-      "bytes": 4405
+      "sha256": "6ca9849100e43a5e7f691875999d1b7d57616e388cdb26cde24dfaebe47e2b72",
+      "bytes": 4786
     },
     {
       "path": "skills/vertical-comic-preproduction/tests/test_background_policy.py",

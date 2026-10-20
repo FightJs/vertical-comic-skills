@@ -6,7 +6,6 @@ import subprocess
 import sys
 import tempfile
 import threading
-import time
 import unittest
 from unittest.mock import patch
 
@@ -26,10 +25,17 @@ class AuditProgressTests(unittest.TestCase):
             timeout=kwargs.pop('timeout',3),progress_stream=kwargs.pop('progress_stream',io.StringIO()),**kwargs)
 
     def test_heartbeat_reports_long_step_without_approval(self):
-        stream=io.StringIO()
+        observed=threading.Event()
+        class HeartbeatSink(io.StringIO):
+            def write(inner,line):
+                count=super().write(line)
+                event=json.loads(line)
+                if event.get('panel_id')=='P003' and event['status']=='RUNNING':observed.set()
+                return count
+        stream=HeartbeatSink()
         with audit_progress.session('E000',enabled=True,stream=stream,interval=.02):
             audit_progress.mark('all_inputs',panel_id='P003',total=4)
-            time.sleep(.08)
+            self.assertTrue(observed.wait(3),'No heartbeat arrived while the step was still running')
         events=[json.loads(line) for line in stream.getvalue().splitlines()]
         self.assertGreaterEqual(len(events),3)
         self.assertTrue(any(e['panel_id']=='P003' and e['status']=='RUNNING' for e in events))

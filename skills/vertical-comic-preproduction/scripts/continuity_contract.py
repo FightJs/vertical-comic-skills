@@ -294,7 +294,7 @@ def validate_manifest(manifest: dict[str, Any], *, prompt: bool = True, root: Pa
     if not isinstance(panels, list) or not panels:
         return ["连续性合同panels不能为空"], []
     from continuity_context import load_context
-    previous, errors = load_context(manifest,root)
+    previous, errors = load_context(manifest,root,readonly=True)
     for panel in panels:
         if not isinstance(panel, dict):
             errors.append("逐格合同须为对象")

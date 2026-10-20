@@ -1,8 +1,10 @@
 """Read approved prior shots for a single-panel package; no invented prior output."""
 import json
 import os
+import copy
 from pathlib import Path
-from codex_reference_contract import checked_file,read_json
+from codex_reference_contract import checked_file,read_json,read_json_readonly
+from audit_cache import derived,content_key
 
 POLICY='approved_shot_context_v1'
 SOURCE_FILES=('source_script','source_snapshot','visual_basis','shot_manifest','visual_approval','shot_approval')
@@ -10,7 +12,27 @@ SOURCE_FILES=('source_script','source_snapshot','visual_basis','shot_manifest','
 def read(path):return read_json(path)
 def approval(source,key,base):
     value=source[key]
-    return read(checked_file(base,value)) if isinstance(value,dict) and value.get('path') else value
+    return read_json_readonly(checked_file(base,value)) if isinstance(value,dict) and value.get('path') else value
+
+def runtime_source_state(source,base,book):
+    """Support frozen contexts whose literal approvals live in the source RV."""
+    if source.get('approval_resolution')!='source_runtime_gates_v1':
+        raise ValueError('未知来源批准解析策略')
+    if any(k in source for k in ('visual_approval','shot_approval','shot_approvals')):
+        raise ValueError('运行门禁解析不得混入内嵌批准')
+    name=Path(source.get('source_state_file',''))
+    if not str(name) or name.is_absolute() or '..' in name.parts or str(name)=='.':
+        raise ValueError('来源状态须为来源根内安全相对路径')
+    path=(Path(base)/name).resolve()
+    if not path.is_relative_to(Path(base).resolve()) or not path.is_file():
+        raise ValueError('来源状态不存在或逃逸来源根')
+    state=read_json_readonly(path)
+    if state.get('book_id')!=book or state.get('episode_id')!=source.get('episode_id'):
+        raise ValueError('来源运行状态书话不一致')
+    for key in SOURCE_FILES[:4]:
+        if state.get(key)!=source.get(key):raise ValueError('来源运行状态不是上下文冻结输入:'+key)
+        checked_file(Path(base),source[key])
+    return state
 
 def source_base(source,context_dir):
     value=Path(source['root'])
@@ -32,13 +54,38 @@ class PriorShots(dict):
     def get(self,key,default=None):return super().get(uid(self.episode,key) if isinstance(key,str) and key.startswith('P') else key,default)
     def __setitem__(self,key,value):super().__setitem__(uid(self.episode,key) if key.startswith('P') else key,value)
 
-def load_context(manifest,root):
+def load_context(manifest,root,*,readonly=False):
+    """Share verified evidence, but give callers their own predecessor mapping.
+
+    Legacy callers retain mutable nested copies. Validators opt into immutable
+    rows; adding a current row never modifies the cached predecessor map.
+    """
+    from panel_readiness import _REVIEW
+    episode=manifest.get('episode_id')
+    previous=PriorShots(episode) if isinstance(episode,str) else {}
+    if not manifest.get('continuity_context'):return previous,[]
+    active=_REVIEW.get()
+    review=None if active is None else [str(active[1]),{k:active[0].get(k) for k in
+        ('episode_id','source_script','source_snapshot','visual_basis','shot_manifest')}]
+    try:
+        panels=manifest.get('panels',[])
+        key=content_key([str(Path(root).resolve()) if root is not None else None,
+                         manifest.get('book_id'),episode,manifest['continuity_context'],
+                         panels[0].get('panel_id') if panels else None,review])
+        rows,errors=derived('continuity_context',key,lambda:_load_context(manifest,root),
+                            accept=lambda result:not result[1])
+        previous.update(rows if readonly else copy.deepcopy(rows))
+        return previous,list(errors)
+    except (OSError,ValueError,TypeError,KeyError,AttributeError,IndexError) as exc:
+        return previous,[f'CONTINUITY_CONTEXT_HOLD:{exc}']
+
+def _load_context(manifest,root):
     episode=manifest.get('episode_id');previous=PriorShots(episode) if isinstance(episode,str) else {}
     if not manifest.get('continuity_context'):return previous,[]
     errors=[]
     try:
         if root is None:raise ValueError('带前格上下文的包须提供实际包根目录')
-        context_path=checked_file(Path(root),manifest['continuity_context']);context=read(context_path)
+        context_path=checked_file(Path(root),manifest['continuity_context']);context=read_json_readonly(context_path)
         panels=manifest.get('panels',[])
         if not panels or context.get('policy')!=POLICY or context.get('book_id')!=manifest.get('book_id') or context.get('current')!={'episode_id':episode,'panel_id':panels[0]['panel_id']}:raise ValueError('上下文版本/书/当前源格不一致')
         order=context.get('episode_order',[])
@@ -50,11 +97,21 @@ def load_context(manifest,root):
             base=source_base(source,context_path.parent);source={**source,'root':str(base)};other=source['episode_id']
             if not base.is_absolute() or other not in order or order.index(other)>order.index(episode):raise ValueError('来源根或话序无效')
             files={k:checked_file(base,source[k]) for k in SOURCE_FILES[:4]}
-            snap=read(files['source_snapshot']);basis=read(files['visual_basis']);shots=read(files['shot_manifest'])
+            snap=read_json_readonly(files['source_snapshot']);basis=read_json_readonly(files['visual_basis']);shots=read_json_readonly(files['shot_manifest'])
             if basis.get('book_id')!=manifest['book_id'] or basis.get('episode_id')!=other or snap.get('source_sha256')!=source['source_script']['sha256']:raise ValueError('来源书话/源版本失配')
             for key in ('book_id','episode_id'):
                 if shots.get(key) is not None and shots[key]!=basis[key]:raise ValueError('来源镜头归属失配')
             source_ids=[e['panel_id'] for e in context.get('entries',[]) if e.get('source')==source_index]
+            if source.get('approval_resolution'):
+                runtime=runtime_source_state(source,base,manifest['book_id'])
+                from scoped_inputs import approval_for
+                from panel_readiness import candidate_source
+                errors.extend(approval_for(runtime,base,'visual_basis',[source[k] for k in ('source_script','source_snapshot','visual_basis')],source_ids,runtime.get('gates',{}).get('visual_basis')))
+                if not candidate_source(source):
+                    errors.extend(approval_for(runtime,base,'shot_design',[source[k] for k in ('visual_basis','shot_manifest')],source_ids,runtime.get('gates',{}).get('shot_design')))
+                scoped_sources.add(source_index)
+                sources.append((source,snap,{p['panel_id']:p for p in shots.get('panels',[])}))
+                continue
             errors.extend(approval_errors(approval(source,'visual_approval',base),base,[source['source_script'],source['source_snapshot'],source['visual_basis']],manifest['book_id'],other,phase='visual_basis',panel_ids=source_ids))
             from panel_readiness import candidate_source,enabled,approval_errors_for
             if enabled(shots):
@@ -64,7 +121,7 @@ def load_context(manifest,root):
                     literal={k:source[k] for k in SOURCE_FILES[:4]};literal.update(book_id=manifest['book_id'],episode_id=other)
                     originals=source.get('shot_approvals',[])
                     if not isinstance(originals,list):raise ValueError('上下文批准集合须保留原证明清单')
-                    originals=[read(checked_file(base,p)) if isinstance(p,dict) and p.get('path') else p for p in originals]
+                    originals=[read_json_readonly(checked_file(base,p)) if isinstance(p,dict) and p.get('path') else p for p in originals]
                     errors.extend(approval_errors_for(literal,base,'shot_design',[source['visual_basis'],source['shot_manifest']],ids,approval(source,'shot_approval',base),proofs=originals))
             elif not candidate_source(source):errors.extend(approval_errors(approval(source,'shot_approval',base),base,[source['visual_basis'],source['shot_manifest']],manifest['book_id'],other,phase='shot_design',panel_ids=source_ids))
             sources.append((source,snap,{p['panel_id']:p for p in shots.get('panels',[])}))
@@ -116,7 +173,7 @@ def binding_errors(state,root,packet,package_root):
 def contextual_tags(manifest,root,panel):
     from panel_readiness import local_tags_manifest
     manifest=local_tags_manifest(manifest,panel)
-    previous,errors=load_context(manifest,root)
+    previous,errors=load_context(manifest,root,readonly=True)
     if errors:raise ValueError(';'.join(errors))
     index=next(i for i,p in enumerate(manifest.get('panels',[])) if p['panel_id']==panel['panel_id'])
     for earlier in manifest['panels'][:index]:previous[earlier['panel_id']]=earlier

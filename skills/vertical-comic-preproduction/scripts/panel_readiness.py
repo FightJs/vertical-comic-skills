@@ -1,9 +1,10 @@
 """Scoped preparation and literal approval reuse; never writes or grants approval."""
 from pathlib import Path
-import hashlib,json
+import hashlib,json,copy
 from contextvars import ContextVar
 from contextlib import contextmanager
-from codex_reference_contract import checked_file,read_json
+from codex_reference_contract import checked_file,read_json,read_json_readonly,digest
+from audit_cache import derived,content_key
 
 POLICY='panel_readiness_v1'
 _REVIEW=ContextVar('comic_design_review',default=None)
@@ -32,28 +33,48 @@ def design_signature(panel):
     value={k:v for k,v in panel.items() if k not in ignored}
     return hashlib.sha256(json.dumps(value,ensure_ascii=False,sort_keys=True).encode()).hexdigest()
 
+def collection_summary(root,ref):
+    path=checked_file(Path(root),ref)
+    def compute():
+        value=read_json_readonly(path)
+        panels=value.get('panels')
+        if not isinstance(panels,list):return None
+        by_id={p['panel_id']:design_signature(p) for p in panels}
+        if len(by_id)!=len(panels):return None
+        ignored={'panels','continuity_context','status','hold_reasons'}
+        return {'header':{k:v for k,v in value.items() if k not in ignored},
+                'book_id':value.get('book_id'),'episode_id':value.get('episode_id'),'signatures':by_id}
+    return derived('collection_summary',(str(path),digest(path)),compute)
+
 def compatible_collection(root,old_ref,new_ref,ids,book,episode):
     """Compare original frozen rows and all shared design headers; no re-signing."""
     if old_ref==new_ref:return True
     try:
-        old=read_json(checked_file(Path(root),old_ref));new=read_json(checked_file(Path(root),new_ref))
-        if not isinstance(old.get('panels'),list) or not isinstance(new.get('panels'),list):return False
-        if new.get('book_id') not in (None,book) or new.get('episode_id') not in (None,episode):return False
-        ignored={'panels','continuity_context','status','hold_reasons'}
-        if {k:v for k,v in old.items() if k not in ignored}!={k:v for k,v in new.items() if k not in ignored}:return False
-        a={p['panel_id']:p for p in old['panels']};b={p['panel_id']:p for p in new['panels']}
-        if len(a)!=len(old['panels']) or len(b)!=len(new['panels']):return False
-        return all(pid in a and pid in b and design_signature(a[pid])==design_signature(b[pid]) for pid in ids)
+        def compare():
+            old=collection_summary(root,old_ref);new=collection_summary(root,new_ref)
+            if old is None or new is None:return None
+            if new['book_id'] not in (None,book) or new['episode_id'] not in (None,episode):return None
+            if old['header']!=new['header']:return None
+            a=old['signatures'];b=new['signatures']
+            return {pid:a[pid]==b[pid] for pid in a if pid in b}
+        matches=derived('collection_pair',content_key([str(Path(root).resolve()),old_ref,new_ref,book,episode]),compare)
+        return matches is not None and all(matches.get(pid,False) for pid in ids)
     except (OSError,ValueError,TypeError,KeyError):return False
 
 def artifacts_covered(state,root,proof,artifacts,ids,phase=None):
+    key=content_key([str(Path(root).resolve()),state['book_id'],state['episode_id'],
+                     state.get('shot_manifest'),proof,artifacts,ids,phase])
+    return derived('approval_coverage',key,
+                   lambda:_artifacts_covered(state,root,proof,artifacts,ids,phase),accept=lambda value:value is True)
+
+def _artifacts_covered(state,root,proof,artifacts,ids,phase=None):
     """Narrow technical reuse of exact approved rows from preserved source files."""
     from staged_workflow import approval_errors
     bound=proof.get('artifacts',[])
     if approval_errors(proof,root,bound,state['book_id'],state['episode_id'],phase=phase,panel_ids=ids):return False
     def covered(ref):
         if ref in bound:return True
-        value=read_json(checked_file(Path(root),ref))
+        value=read_json_readonly(checked_file(Path(root),ref))
         if value.get('policy')=='semantic_audit_v1':
             return value.get('book_id')==state['book_id'] and value.get('episode_id')==state['episode_id'] and covered(value['visual_basis']) and covered(value['shot_manifest'])
         if ref==state.get('shot_manifest') or value.get('policy')=='content_balanced_ratios_v1':
@@ -64,21 +85,37 @@ def artifacts_covered(state,root,proof,artifacts,ids,phase=None):
     except (OSError,ValueError,TypeError,KeyError,RecursionError):return False
 
 def approval_errors_for(state,root,phase,artifacts,ids,direct=None,*,proofs=()):
-    from staged_workflow import approval_errors
-    candidates=[p for p in proofs if isinstance(p,dict)]
-    if isinstance(direct,dict):candidates.append(direct)
-    if state.get('approval_index'):
-        index=read_json(checked_file(Path(root),state['approval_index']))
-        if index.get('policy')!='approval_index_v1':return ['批准索引版本错误']
-        for entry in index.get('entries',[]):
-            if entry.get('phase')==phase and entry.get('book_id')==state['book_id'] and state['episode_id'] in entry.get('episode_ids',[]):
-                proof=read_json(checked_file(Path(root),entry['approval']))
-                # Both the original proof and lookup scope must cover the row.
-                candidates.append({**proof,'_lookup_panel_ids':entry.get('panel_ids',[])})
+    def indexed_candidates():
+        candidates=[p for p in proofs if isinstance(p,dict)]
+        if isinstance(direct,dict):candidates.append(direct)
+        if state.get('approval_index'):
+            index=read_json_readonly(checked_file(Path(root),state['approval_index']))
+            if index.get('policy')!='approval_index_v1':return None
+            for entry in index.get('entries',[]):
+                if entry.get('phase')==phase and entry.get('book_id')==state['book_id'] and state['episode_id'] in entry.get('episode_ids',[]):
+                    proof=read_json_readonly(checked_file(Path(root),entry['approval']))
+                    candidates.append({**proof,'_lookup_panel_ids':entry.get('panel_ids',[])})
+        scoped={};unscoped=[]
+        for i,proof in enumerate(candidates):
+            if (proof.get('review_event_id') or proof.get('source_kind')=='agent_decision') and proof.get('phase')!=phase:continue
+            scope=proof.get('panel_ids')
+            if phase=='visual_basis' and scope is None:
+                names=proof.get('_lookup_panel_ids')
+                if names is None:unscoped.append(i);continue
+            elif isinstance(scope,list):names=scope
+            else:continue
+            for name in names:scoped.setdefault(name,[]).append(i)
+        return {'proofs':candidates,'scoped':scoped,'unscoped':unscoped}
+    key=content_key([str(Path(root).resolve()),state['book_id'],state['episode_id'],phase,state.get('approval_index'),direct,proofs])
+    index=derived('approval_index',key,indexed_candidates)
+    if index is None:return ['批准索引版本错误']
     missing=[]
     for pid in ids:
         names={pid,state['episode_id']+'-'+pid};found=False
-        for proof in candidates:
+        selected=set(index['unscoped'])
+        for name in names:selected.update(index['scoped'].get(name,[]))
+        for i in sorted(selected):
+            proof=index['proofs'][i]
             if (proof.get('review_event_id') or proof.get('source_kind')=='agent_decision') and proof.get('phase')!=phase:continue
             scope=proof.get('panel_ids')
             if phase!='visual_basis' and (not isinstance(scope,list) or not names.intersection(scope)):continue
@@ -97,6 +134,13 @@ def local_tags_manifest(manifest,panel):
     return manifest
 
 def report(state,root):
+    active=_REVIEW.get()
+    scope=None if active is None else [active[0],str(active[1])]
+    key=hashlib.sha256(content_key([str(Path(root).resolve()),state,scope]).encode()).hexdigest()
+    return copy.deepcopy(derived('preparation_report',key,lambda:_report(state,root),
+                                 accept=lambda value:not value.get('global_errors')))
+
+def _report(state,root):
     """Return ready/reviewable/blocked rows; caller still runs full input gates."""
     source=read_json(checked_file(Path(root),state['source_snapshot']));order=source['panel_ids']
     path=checked_file(Path(root),state['shot_manifest']);shots=read_json(path)
@@ -121,7 +165,7 @@ def report(state,root):
             for pid in affected:direct_holds[pid].append(hold)
     reasons={pid:[{'kind':'scoped_hold','evidence':str(direct_holds[pid])}] for pid in blocked}
     design_blocked=set(blocked)
-    boundary=[*prior_binding(state,root,shots,path.parent),*load_context(shots,path.parent)[1]]
+    boundary=[*prior_binding(state,root,shots,path.parent),*load_context(shots,path.parent,readonly=True)[1]]
     for pid in order:
         p=by_id[pid];row=reviews[pid]
         issues=[]

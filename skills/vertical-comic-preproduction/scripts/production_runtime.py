@@ -54,13 +54,15 @@ def settings(value):
     return value
 
 
-def compile_jobs(state, root, panel_ids=None, *, candidate=False):
+def compile_jobs(state, root, panel_ids=None, *, candidate=False, input_audit=False):
     """Full bulk gates once; export actual paths/prompt, never execute planned jobs."""
     from staged_workflow import preflight_many
+    if input_audit and (candidate or state.get('parallel_context')):
+        raise ValueError('接包输入审计不得使用candidate或线上调度上下文')
     import time
     started=time.monotonic()
     with file_session() as memo:
-        report = preflight_many(state, root, panel_ids, candidate=candidate)
+        report = preflight_many(state, root, panel_ids, candidate=candidate, input_audit=input_audit)
         records = {r["panel_id"]: r for r in state.get("panels", [])}
         from scoped_inputs import STATE_DISPATCH,state_leads
         shots=_shots(state,root,report['batch_id']) if report.get('batch_id') else []
@@ -86,15 +88,58 @@ def compile_jobs(state, root, panel_ids=None, *, candidate=False):
                 "package_manifest": record["package_manifest"],
                 "arguments": arguments,
                 "candidate_only": candidate,
+                "input_audit_only": input_audit, "dispatch_authorized": False if input_audit else None,
                 "review_priority": bool(panel.get("calibration_anchor") or panel.get("requires_state_review")
                     or pid in priority_leads or pid in actual_dependencies),
-                "status": "NOT_RUN",
+                "status": "INPUT_AUDITED_NOT_DISPATCHABLE" if input_audit else "NOT_RUN",
             })
         return {"policy": state.get('runtime',{}).get('policy',POLICY), "book_id": state.get("book_id"), "episode_id": state.get("episode_id"),
-                "candidate_only": candidate, "jobs": jobs, "preflight": report,
+                "candidate_only": candidate, "input_audit_only": input_audit,
+                "dispatch_authorized": False if input_audit else None,
+                "audit_policy": 'receiver_input_audit_v1' if input_audit else None,
+                "jobs": jobs, "preflight": report,
                 "file_reuse_statistics": {k: memo[k] for k in ("hash_reads", "hash_hits","validation_runs","validation_hits")},
+                "audit_reuse_statistics": copy.deepcopy(memo['audit_statistics']),
                 "preflight_elapsed_seconds":round(time.monotonic()-started,4),
                 "user_approval": "NOT_GRANTED", "image_calls": 0}
+
+
+def preparation_report(state, root):
+    from panel_readiness import enabled, report
+    from execution_contract import state_errors
+    errors=state_errors(state,root)
+    if errors or not enabled(state):raise ValueError(';'.join(errors) or '本RV未声明逐格准备策略；不自动迁移')
+    value=report(state,root)
+    value['dispatch_authorized']=False
+    return value
+
+
+def receiver_audit(state, root, h001_ids, all_ids):
+    """Run three original scopes in one read transaction; never derive H001 by slicing."""
+    import time
+    from audit_progress import mark
+    if state.get('execution_mode')!='episode_async_v1' or state.get('parallel_context'):
+        raise ValueError('合并接包审计只适用于未领线上许可的整话运行')
+    started,cpu_started=time.monotonic(),time.process_time()
+    with file_session() as memo:
+        source=read_json(checked_file(Path(root),state['source_snapshot']))
+        order=source['panel_ids']
+        if all_ids!=order or not h001_ids or h001_ids!=order[:len(h001_ids)]:
+            raise ValueError('接包审计须保留全话源序及准确H001前缀范围')
+        mark('H001',completed=0,total=len(h001_ids),force=True)
+        first=compile_jobs(state,root,h001_ids,input_audit=True)
+        mark('preparation',completed=0,total=len(order),force=True)
+        prepared=preparation_report(state,root)
+        mark('all_inputs',completed=0,total=len(order),force=True)
+        full=compile_jobs(state,root,all_ids,input_audit=True)
+        value={'policy':'receiver_audit_bundle_v1','book_id':state.get('book_id'),
+               'episode_id':state.get('episode_id'),'h001_panel_ids':h001_ids,'panel_ids':all_ids,
+               'h001':first,'preparation':prepared,'all_inputs':full,
+               'audit_reuse_statistics':copy.deepcopy(memo['audit_statistics']),
+               'dispatch_authorized':False,'image_calls':0,'user_approval':'NOT_GRANTED'}
+        mark('snapshot_verification',completed=len(order),total=len(order),force=True)
+    value.update(elapsed_seconds=round(time.monotonic()-started,4),cpu_seconds=round(time.process_time()-cpu_started,4))
+    return value
 
 
 def _shots(state, root, batch_id):
@@ -616,8 +661,10 @@ def prepare_review(state, root, queue):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--state", required=True)
-    parser.add_argument("--action", choices=("readiness", "preflight", "compile", "review", "checkpoint", "bundle", "commit", "repair-authorize", "diagnosis-record", "watch-progress", "watch-check", "watch-ack", "repair-plan"), required=True)
+    parser.add_argument("--action", choices=("readiness", "preflight", "compile", "audit-inputs", "receiver-audit", "review", "checkpoint", "bundle", "commit", "repair-authorize", "diagnosis-record", "watch-progress", "watch-check", "watch-ack", "repair-plan"), required=True)
     parser.add_argument("--panels", nargs="*")
+    parser.add_argument("--h001-panels", nargs="+", help="合并接包审计的准确首半话范围")
+    parser.add_argument("--progress", action="store_true", help="stderr输出阶段/格号与定时进度；不改变判定")
     parser.add_argument("--batch")
     parser.add_argument("--candidate", action="store_true", help="待审B技术预检；不授予生产或包批准")
     parser.add_argument("--processed", help="仅去重观察通知的cursor JSON")
@@ -674,20 +721,22 @@ def main():
             if not args.diagnosis or not args.expected_state_sha256:raise ValueError('缺少共因诊断文件或CAS哈希')
             value=record_episode_diagnosis(path,args.expected_state_sha256,args.diagnosis)
             print(json.dumps(value,ensure_ascii=False));return 0
-        with file_session():
+        from audit_progress import session as progress_session
+        if args.candidate and args.action in {'audit-inputs','receiver-audit'}:
+            raise ValueError('接包输入审计不得使用candidate')
+        with progress_session(state.get('episode_id'),enabled=args.progress),file_session():
+            if read_json(path)!=state:raise ValueError('CHECK_SNAPSHOT_CHANGED: 生产状态在审计开始前变化')
             if args.action=='readiness':
-                from panel_readiness import enabled,report
-                from execution_contract import state_errors
-                errors=state_errors(state,root)
-                if errors or not enabled(state):raise ValueError(';'.join(errors) or '本RV未声明逐格准备策略；不自动迁移')
-                value=report(state,root);value['dispatch_authorized']=False
+                value=preparation_report(state,root)
+            elif args.action=='receiver-audit':
+                value=receiver_audit(state,root,args.h001_panels,args.panels)
             elif args.action == 'bundle' and state.get('preparation_policy')=='episode_preparation_v1':
                 dependency_plan = {"path":args.dependency_plan,"sha256":digest(root/args.dependency_plan)} if args.dependency_plan else None
                 value=episode_bundle(state,root,dependency_plan)
-            elif args.action in {"preflight", "compile", "bundle"}:
+            elif args.action in {"preflight", "compile", "audit-inputs", "bundle"}:
                 # Bundle is for review, so missing B/package approval does not
                 # become a fake dispatch permission.
-                compiled = compile_jobs(state, root, args.panels, candidate=args.candidate or args.action == "bundle")
+                compiled = compile_jobs(state, root, args.panels, candidate=args.candidate or args.action == "bundle",input_audit=args.action=='audit-inputs')
                 dependency_plan = {"path":args.dependency_plan,"sha256":digest(root/args.dependency_plan)} if args.dependency_plan else None
                 value = review_bundle(state, root, compiled, dependency_plan) if args.action == "bundle" else compiled
             elif args.action == "checkpoint":
@@ -714,6 +763,9 @@ def main():
             with dest.open("x", encoding="utf-8", newline='\n') as f:
                 json.dump(value, f, ensure_ascii=False, indent=2); f.write("\n")
         print(json.dumps(value, ensure_ascii=False))
+        if args.action=='receiver-audit':
+            return 1 if (value['preparation'].get('global_errors') or value['preparation'].get('errors') or
+                         any(value[k]['preflight'].get('status') not in {'READY','PARTIAL_READY'} for k in ('h001','all_inputs'))) else 0
         if value.get('global_errors'):return 1
         preflight = value.get("preflight", {})
         return 1 if preflight and preflight.get("status") not in {"READY", "PARTIAL_READY"} else 0

@@ -134,11 +134,12 @@ class RuntimeTests(unittest.TestCase):
 
     def test_read_transaction_reuses_hashes_and_rejects_mid_check_mutation(self):
         p=self.root/"small.json";p.write_text("{}", encoding='utf-8', newline='\n')
-        with file_session() as memo:
-            first=digest(p);self.assertEqual(digest(p),first)
-            self.assertEqual(memo["hash_reads"],1);self.assertEqual(memo["hash_hits"],1)
-            p.write_text('{"changed":true}', encoding='utf-8', newline='\n')
-            with self.assertRaisesRegex(ValueError,"CHECK_SNAPSHOT_CHANGED"):digest(p)
+        with self.assertRaisesRegex(ValueError,"CHECK_SNAPSHOT_CHANGED"):
+            with file_session() as memo:
+                first=digest(p);self.assertEqual(digest(p),first)
+                self.assertEqual(memo["hash_reads"],1);self.assertEqual(memo["hash_hits"],1)
+                p.write_text('{"changed":true}', encoding='utf-8', newline='\n')
+                with self.assertRaisesRegex(ValueError,"CHECK_SNAPSHOT_CHANGED"):digest(p)
         self.assertNotEqual(digest(p),first)
 
     def test_runtime_settings_keep_half_review_as_ready(self):

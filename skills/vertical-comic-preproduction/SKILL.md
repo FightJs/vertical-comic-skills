@@ -52,3 +52,5 @@ A由[视觉资产](../vertical-comic-visual-assets/SKILL.md)维护身份、衣�
 [两级监控](references/worker-watchdog.md)只依据真实保存事件诊断。等人工不催执行者；本话仅等跨话比较时交回总控结束本轮。按[停点进度](references/review-progress.md)报告真实完成/待补与下一步，状态不变不反复通知。
 
 每话独立完成真实QA、适用连续性及D决定后运行deliver门禁，保存逐格包、源序索引及证据。多话另做实际跨话边界比较；总包从已验收文件组装，校验计数/哈希/CRC，不重新生成合格图。统计按[增量运行](references/runtime-efficiency.md)及production_metrics.py记录，缺失时间不当作0，不把测试通过宣称为生图质量提升。
+
+校验耗时异常时按[批准与上下文复用](references/runtime-efficiency.md#批准与前格上下文复用)定位重复计算；性能修改须比较原判定及批准失效反例，只更新新运行版本，不热改已交付冻结包。

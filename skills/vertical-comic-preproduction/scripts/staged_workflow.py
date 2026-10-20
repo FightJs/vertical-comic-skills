@@ -42,6 +42,15 @@ def read(path):
 
 
 def approval_errors(approval, root, artifacts, book, episode, *, phase=None, panel_ids=None):
+    from audit_cache import derived, content_key
+    key=content_key([str(Path(root).resolve()),approval,artifacts,book,episode,phase,panel_ids])
+    value=derived('approval_validation',key,
+                  lambda:_approval_errors(approval,root,artifacts,book,episode,phase=phase,panel_ids=panel_ids),
+                  accept=lambda errors:not errors)
+    return list(value)
+
+
+def _approval_errors(approval, root, artifacts, book, episode, *, phase=None, panel_ids=None):
     errors = []
     if not isinstance(approval, dict):
         return ["缺少用户批准记录"]
@@ -334,6 +343,8 @@ def _evaluate_with_session(state, root, check="status", requested=None):
 
 def evaluate(state, root, check="status", requested=None):
     from codex_reference_contract import file_session
+    if check=='input_audit_batch' and (state.get('execution_mode')!='episode_async_v1' or state.get('parallel_context')):
+        raise ValueError('接包输入审计不能用于旧模式或线上调度上下文')
     from task_context import state_errors
     scoped=state_errors(state,root)
     if scoped:
@@ -353,13 +364,15 @@ def evaluate(state, root, check="status", requested=None):
         return result
 
 
-def preflight_many(state, root, panel_ids=None, candidate=False):
+def preflight_many(state, root, panel_ids=None, candidate=False, input_audit=False):
     """Walk current scope gates once, then run every selected panel's original gates."""
     if state.get('optimization_policy') not in {'scoped_half_review_v1','scoped_episode_review_v1'}:
         return {'status': 'HOLD', 'next_action': 'RUNTIME_POLICY_HOLD',
                 'errors': ['批量入口须使用对应整话或旧半话审查策略；旧流程不静默迁移'],
                 'ready_panel_ids': [], 'reports': []}
-    return evaluate(state, root, 'candidate_batch' if candidate else 'generate_batch', panel_ids)
+    if input_audit and (candidate or state.get('execution_mode')!='episode_async_v1' or state.get('parallel_context')):
+        raise ValueError('接包输入审计只适用于未领容量的整话新制，不授予生产许可')
+    return evaluate(state, root, 'input_audit_batch' if input_audit else 'candidate_batch' if candidate else 'generate_batch', panel_ids)
 
 
 def main():

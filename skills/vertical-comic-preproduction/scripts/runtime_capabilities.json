@@ -1,0 +1,6 @@
+{
+  "policy": "comic_runtime_capabilities_v1",
+  "receiver_audit": "receiver_audit_bundle_v1",
+  "input_audit": "receiver_input_audit_v1",
+  "progress": "audit_progress_v1"
+}

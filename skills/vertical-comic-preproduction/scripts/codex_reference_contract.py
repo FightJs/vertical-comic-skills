@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import json
 import math
+import os
 from pathlib import Path
 import re
 import shutil
@@ -29,19 +30,38 @@ def file_session():
     if active is not None:
         yield active
         return
-    memo = {"files": {}, "json": {}, "hash_reads": 0, "hash_hits": 0,"validations":{},"validation_runs":0,"validation_hits":0}
+    memo = {"files": {}, "json": {}, "hash_reads": 0, "hash_hits": 0,"validations":{},"validation_runs":0,"validation_hits":0,
+            "readonly_json": {}, "derived": {}, "dependency_stack": [], "audit_statistics": {}, "paths": {},
+            "validation_dependencies": {}}
     token = _FILE_SESSION.set(memo)
     try:
         yield memo
+        # A cached result may not reread every file before the caller returns.
+        # Recheck the complete read set at the outer transaction boundary.
+        for name, target in memo['paths'].items():
+            if str(Path(name).resolve()) != target:
+                raise ValueError(f'CHECK_SNAPSHOT_CHANGED: {name}; reference target changed')
+        for name, (stamp, _) in memo['files'].items():
+            try:
+                current = Path(name).stat()
+            except OSError as exc:
+                raise ValueError(f'CHECK_SNAPSHOT_CHANGED: {name}') from exc
+            if stamp != (current.st_dev, current.st_ino, current.st_size, current.st_mtime_ns, current.st_ctime_ns):
+                raise ValueError(f'CHECK_SNAPSHOT_CHANGED: {name}')
     finally:
         _FILE_SESSION.reset(token)
 
 
 def digest(path: Path) -> str:
+    logical = os.path.abspath(path)
     path = Path(path).resolve()
     memo = _FILE_SESSION.get()
     if memo is None:
         return hashlib.sha256(path.read_bytes()).hexdigest()
+    if memo['dependency_stack']:
+        memo['dependency_stack'][-1].add(logical)
+    if memo['paths'].setdefault(logical, str(path)) != str(path):
+        raise ValueError(f'CHECK_SNAPSHOT_CHANGED: {logical}; reference target changed')
     stat = path.stat()
     stamp = (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns)
     saved = memo["files"].get(str(path))
@@ -68,16 +88,39 @@ def read_json(path: Path):
         memo["json"][key] = json.loads(Path(path).read_text(encoding="utf-8-sig"))
     return copy.deepcopy(memo["json"][key])
 
+
+def read_json_readonly(path: Path):
+    """Opt-in shared immutable JSON; read_json retains its mutable-copy API."""
+    from audit_cache import freeze
+    memo = _FILE_SESSION.get()
+    if memo is None:
+        return freeze(read_json(path))
+    key = (str(Path(path).resolve()), digest(path))
+    if key not in memo['readonly_json']:
+        if key not in memo['json']:
+            memo['json'][key] = json.loads(Path(path).read_text(encoding='utf-8-sig'))
+        memo['readonly_json'][key] = freeze(memo['json'][key])
+    return memo['readonly_json'][key]
+
 def memoized_validation(namespace,key,compute):
     """Successful deterministic checks only, within an unchanged read transaction."""
     memo=_FILE_SESSION.get()
     if memo is None:return compute()
     token=(namespace,key)
     if token in memo['validations']:
+        for path in memo['validation_dependencies'][token]:digest(path)
         memo['validation_hits']+=1;return copy.deepcopy(memo['validations'][token])
-    memo['validation_runs']+=1;result=compute()
-    if result==[]:memo['validations'][token]=copy.deepcopy(result)
-    return result
+    memo['validation_runs']+=1
+    dependencies=set();memo['dependency_stack'].append(dependencies)
+    try:
+        result=compute()
+        if result==[]:
+            memo['validations'][token]=copy.deepcopy(result)
+            memo['validation_dependencies'][token]=tuple(sorted(dependencies))
+        return result
+    finally:
+        memo['dependency_stack'].pop()
+        if memo['dependency_stack']:memo['dependency_stack'][-1].update(dependencies)
 
 
 def text_hash(value: str) -> str:
@@ -104,7 +147,7 @@ def checked_file(root: Path, item: Any) -> Path:
     path = (root / rel).resolve()
     if rel.is_absolute() or not path.is_relative_to(root.resolve()) or not path.is_file():
         raise ValueError("文件缺失或不是包内相对路径")
-    if digest(path) != str(item.get("sha256", "")).lower():
+    if digest(root / rel) != str(item.get("sha256", "")).lower():
         raise ValueError("文件SHA256缺失或不匹配")
     return path
 

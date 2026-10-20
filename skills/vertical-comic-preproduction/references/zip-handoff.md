@@ -105,7 +105,9 @@ HOLD/WAIT_DEPENDENCY加`blockers`数组，每项含`reason`、`owner`、`resolut
 
 pack流式归档，PNG/JPEG/WebP等不再重复压缩，文本快速压缩；不为每话重复拷贝整套共用资产。extract先核对清单、路径安全及所需解压空间再建立新目录。解压空间预检不承诺后续生图空间；接手前按真实任务检查，不自动清理任何资产。原目录和候选ZIP不被覆盖。
 
-rehearse从包内实际快照调用`production_runtime.py --action compile --panels <H001准确源格号>`，明确非candidate、image_calls=0。保存原始stdout/stderr、实际作业格号、参考落点及错误；无就绪格时不伪造PASS。所有指定话的前期资料闭合、每话有实际启动入口且声明与实测相符，才可发布；未知历史等不可继续带入正式包。不会用候选编译、mock结果、空历史或自造检查器代替这次真实预检。
+rehearse从包内实际快照运行真实门禁，明确非candidate、image_calls=0。新整话快照通过已校验的`runtime_capabilities.json`声明`receiver_audit_bundle_v1`后，调用`production_runtime.py --action receiver-audit --progress --h001-panels <H001准确源格号> --panels <全话准确源序>`。分别运行H001、全话readiness及全话输入检查，共享一次读取事务；没有能力声明的旧快照仍使用compile/readiness/compile分开调用。声明未知能力则HOLD，不修改旧快照或偷偷换用安装版。
+
+新入口保存`<话号>_receiver_audit.json`原始结果和对应stderr，再从该结果生成`<话号>_stdout.json`、`<话号>_preparation.json`、`<话号>_all_inputs.json`三个证据视图。stderr每10秒报告阶段/格号/耗时，不能替代批准。超时写`<话号>_<阶段>_timeout.json`，关联保留下来的部分stdout/stderr及最后进度，结论为HOLD；日志写盘失败或子进程非零退出也阻塞交付。保存实际作业格号、参考落点及错误；无就绪格时不伪造PASS。所有指定话的前期资料闭合、每话有实际启动入口且声明与实测相符，才可发布；未知历史等不可继续带入正式包。不会用候选编译、mock结果、空历史或自造检查器代替这次真实预检。输入审计结果`dispatch_authorized=false`，不能直接作为生图调度作业。
 
 索引哈希通过只证明“所列证据存在且未变”，不能证明外部历史没有漏记，也不自动证明所有语义正确。执行者必须先完成历史对账与源语义审计；原门禁仍是生产判定依据。正式ZIP增加导出证据后重新建立容器清单；生产输入字节与演练候选相同。接包端收到ZIP时先用check_delivery_archive验证内置逐文件SHA256、CRC及正式发布证据，再extract到新目录；收到已解压目录时用check_delivery_directory核验清单、文件集合、大小/SHA256及同一发布证据，随后按说明bind自动绑定/完整预检，任何差异集中报告，不返回一句“请补齐全部材料”。
 

@@ -136,7 +136,7 @@ def evaluate_episode(state, root, check='status', requested=None):
                 for p in panels:
                     if p['panel_id'] not in blocked and set(p.get('generation_dependencies',[])).intersection(blocked):blocked.add(p['panel_id']);changed=True
             if (state.get('runtime',{}).get('dispatch_policy')=='episode_slot_lease_v1'
-                    and 'parallel_context' not in state and check!='candidate_batch'):
+                    and 'parallel_context' not in state and check not in {'candidate_batch','input_audit_batch'}):
                 return result('WAIT_CAPACITY_ASSIGNMENT',['租约模式尚未绑定真实调度上下文'],batch)
             if 'parallel_context' in state:
                 from parallel_dispatch import context_errors
@@ -204,11 +204,20 @@ def evaluate_episode(state, root, check='status', requested=None):
                     if not record.get('attempt_id') or type(local_round) is not int or local_round not in (1,2):
                         return result('ROUND_HOLD', ['新请求须有准确轮次与唯一attempt_id'], batch, eligible, round_id)
                     from panel_readiness import review_context
-                    with review_context(state,root,check=='candidate_batch'):
-                        errors = input_errors(state, root, record, shot_by_id[pid], basis, by_id, candidate=check=='candidate_batch')
-                    if check != 'candidate_batch':
-                        from production_runtime import package_review_errors
-                        errors.extend(package_review_errors(original, root, batch, record))
+                    def validate_inputs():
+                        with review_context(state,root,check=='candidate_batch'):
+                            issues=input_errors(state,root,record,shot_by_id[pid],basis,by_id,
+                                                candidate=check=='candidate_batch',dispatch_audit=check=='input_audit_batch')
+                        if check!='candidate_batch':
+                            from production_runtime import package_review_errors
+                            issues.extend(package_review_errors(original,root,batch,record))
+                        return issues
+                    if check=='input_audit_batch':
+                        from audit_cache import derived,content_key
+                        import hashlib
+                        key=hashlib.sha256(content_key([str(root),state,original,batch,record,shot_by_id[pid],basis,by_id]).encode()).hexdigest()
+                        errors=list(derived('receiver_panel_inputs',key,validate_inputs,accept=lambda issues:not issues))
+                    else:errors=validate_inputs()
                     packet = read(checked_file(root, record['package_manifest']))
                     if type(packet.get('round_context', {}).get('round_id')) is not int or packet.get('round_context') != {'batch_id': batch['batch_id'], 'round_id': local_round, 'attempt_id': record['attempt_id']}:
                         errors.append('执行包轮次/尝试/整话归属不一致')
@@ -223,13 +232,20 @@ def evaluate_episode(state, root, check='status', requested=None):
                     return result('INPUT_HOLD' if errors else 'READY_FOR_EPISODE_PANEL', errors, batch, eligible, local_round)
                 except (OSError, ValueError, TypeError, KeyError, AttributeError, IndexError) as exc:
                     return result('INPUT_EVIDENCE_HOLD', [str(exc)], batch, round_id=round_id)
-            if check in {'generate_batch', 'candidate_batch'}:
+            if check in {'generate_batch', 'candidate_batch', 'input_audit_batch'}:
                 selection = eligible if requested is None else requested
                 if not isinstance(selection, list) or any(not isinstance(p, str) for p in selection) or len(selection) != len(set(selection)):
                     return result('SOURCE_EPISODE_HOLD', ['批量格号须为不重复清单'], batch)
-                reports = [{'panel_id': pid, **check_one(pid)} for pid in selection]
+                from audit_progress import mark
+                reports=[]
+                for index,pid in enumerate(selection):
+                    mark(panel_id=pid,completed=index,total=len(selection))
+                    reports.append({'panel_id':pid,**check_one(pid)})
+                    mark(panel_id=pid,completed=index+1,total=len(selection))
                 ready = [r['panel_id'] for r in reports if r['status'] == 'PASS']
                 value = result('READY_FOR_EPISODE_PANEL' if ready else 'INPUT_HOLD', batch=batch, eligible=ready, blocked_ids=blocked)
+                if check=='input_audit_batch':
+                    value.update(dispatch_authorized=False,input_audit_only=True,audit_policy='receiver_input_audit_v1')
                 if check == 'candidate_batch':
                     value['dispatch_authorized'] = False
                     value['candidate_only'] = True

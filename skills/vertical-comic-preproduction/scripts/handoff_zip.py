@@ -356,6 +356,18 @@ def rehearse(zip_path,package_root,run_root,run_index,report,*,timeout=180):
     report=Path(report).resolve()
     if report.exists() or report.is_relative_to(package_root):raise ValueError('报告目录须为原包外新目录')
     report.mkdir(parents=True);results=[]
+    def run_gate(argv,eid,label,state_path):
+        from audit_process import run,last_progress
+        out_name=eid+'_stdout.json' if label=='h001' else eid+'_'+label+'.json'
+        err_name=eid+'_stderr.txt' if label=='h001' else eid+'_'+label+'_stderr.txt'
+        try:
+            return run(argv,cwd=state_path.parent.parent,timeout=timeout,
+                       stdout_path=report/out_name,stderr_path=report/err_name)
+        except subprocess.TimeoutExpired as exc:
+            write(report/(eid+'_'+label+'_timeout.json'),
+                  {'status':'HOLD','argv':argv,'timeout_seconds':timeout,
+                   'last_progress':last_progress(exc.stderr or ''),'stdout':out_name,'stderr':err_name})
+            raise ValueError('冻结预检超时；未记通过，原始输出和最后进度已保存') from exc
     for episode,run in zip(data['episodes'],runs):
         eid=episode['episode_id'];errors=[];job_ids=[];raw=None;argv=None;rc=None
         try:
@@ -371,14 +383,35 @@ def rehearse(zip_path,package_root,run_root,run_index,report,*,timeout=180):
             manifest_path=reference(package_root,episode['runtime_manifest']);snap_ref=state.get('runtime_snapshot',{})
             if Path(snap_ref.get('path','')).resolve()!=manifest_path.resolve() or snap_ref.get('sha256')!=sha(manifest_path):raise ValueError('本地运行未绑定解压包内实际冻结快照')
             frozen=verify(snap_ref);script=Path(frozen['scripts'])/'production_runtime.py'
-            argv=[sys.executable, '-X', 'utf8','-B',str(script),'--state',str(state_path),'--action','compile','--panels',*episode['halves']['H001']]
-            try:
-                proc=subprocess.run(argv,capture_output=True,text=True,timeout=timeout,cwd=state_path.parent.parent, encoding='utf-8');rc=proc.returncode
-                (report/(eid+'_stdout.json')).write_text(proc.stdout, encoding='utf-8', newline='\n');(report/(eid+'_stderr.txt')).write_text(proc.stderr, encoding='utf-8', newline='\n')
+            capability=Path(frozen['scripts'])/'runtime_capabilities.json'
+            combined=False
+            if capability.is_file() and data.get('delivery_policy')=='direct_delivery_v2' and state.get('execution_mode')=='episode_async_v1':
+                caps=read(capability)
+                if not isinstance(caps,dict) or caps.get('policy')!='comic_runtime_capabilities_v1' or caps.get('receiver_audit')!='receiver_audit_bundle_v1' or caps.get('input_audit')!='receiver_input_audit_v1':
+                    raise ValueError('未知冻结接包审计能力，不能静默降级')
+                combined=True
+            argv=[sys.executable,'-X','utf8','-B',str(script),'--state',str(state_path)]
+            if combined:
+                argv.extend(['--action','receiver-audit','--progress','--h001-panels',*episode['halves']['H001'],'--panels',*episode['panel_ids']])
+                proc=run_gate(argv,eid,'receiver_audit',state_path);rc=proc.returncode
+                bundle=json.loads(proc.stdout)
+                if (bundle.get('policy')!='receiver_audit_bundle_v1' or bundle.get('episode_id')!=eid or bundle.get('book_id')!=data['book_id'] or
+                        bundle.get('panel_ids')!=episode['panel_ids'] or bundle.get('h001_panel_ids')!=episode['halves']['H001'] or
+                        bundle.get('dispatch_authorized') is not False or bundle.get('image_calls')!=0):
+                    raise ValueError('合并接包审计结果缺失或范围失配')
+                raw=bundle['h001'];prepared=bundle['preparation'];all_inputs=bundle['all_inputs']
+                write(report/(eid+'_stdout.json'),raw)
+                write(report/(eid+'_preparation.json'),prepared)
+                write(report/(eid+'_all_inputs.json'),all_inputs)
+            else:
+                argv.extend(['--action','compile','--panels',*episode['halves']['H001']])
+                proc=run_gate(argv,eid,'h001',state_path);rc=proc.returncode
                 raw=json.loads(proc.stdout)
-            except subprocess.TimeoutExpired as exc:
-                (report/(eid+'_timeout.txt')).write_text(str(exc), encoding='utf-8', newline='\n');raise ValueError('冻结预检超时；未记通过')
             if not isinstance(raw,dict) or raw.get('candidate_only') is not False or raw.get('image_calls')!=0:raise ValueError('缺真实非candidate只读预检；不接受候选PASS代替生产预检')
+            if combined and any(v.get('audit_policy')!='receiver_input_audit_v1' or v.get('input_audit_only') is not True or
+                                v.get('dispatch_authorized') is not False or v.get('candidate_only') is not False or v.get('image_calls')!=0
+                                for v in (raw,all_inputs)):
+                raise ValueError('合并审计不能授予生产许可或以候选结果代替')
             if data.get('delivery_policy')=='direct_delivery_v2':
                 from handoff_delivery import input_review
                 input_review(package_root,data)
@@ -389,21 +422,23 @@ def rehearse(zip_path,package_root,run_root,run_index,report,*,timeout=180):
                     if sha(reference(state_path.parent.parent,state.get(key)))!=sha(reference(package_root,episode.get(target))):raise ValueError('实际执行依据不等于最终审查输入:'+key)
                 actual_packages={r['sha256'] for refs in state.get('generation_packages',{}).values() for r in refs}
                 if actual_packages!={r['sha256'] for r in episode['generation_review_packages']}:raise ValueError('实际生图包审查清单换版')
-                prep_argv=[sys.executable, '-X', 'utf8','-B',str(script),'--state',str(state_path),'--action','readiness']
-                prep=subprocess.run(prep_argv,capture_output=True,text=True,timeout=timeout,cwd=state_path.parent.parent, encoding='utf-8')
-                (report/(eid+'_preparation.json')).write_text(prep.stdout, encoding='utf-8', newline='\n');(report/(eid+'_preparation_stderr.txt')).write_text(prep.stderr, encoding='utf-8', newline='\n')
-                prepared=json.loads(prep.stdout)
+                if not combined:
+                    prep_argv=[sys.executable,'-X','utf8','-B',str(script),'--state',str(state_path),'--action','readiness']
+                    prep=run_gate(prep_argv,eid,'preparation',state_path)
+                    prepared=json.loads(prep.stdout)
                 required=[p['panel_id'] for p in episode['panels'] if p['classification']!='REUSE']
-                if prep.returncode or prepared.get('global_errors') or prepared.get('errors') or not set(required).issubset(prepared.get('prepared_panel_ids',[])):
+                if (rc if combined else prep.returncode) or prepared.get('global_errors') or prepared.get('errors') or not set(required).issubset(prepared.get('prepared_panel_ids',[])):
                     raise ValueError('全话准备预检未通过，不能以首半话可启动代替全话交付')
-                all_argv=[sys.executable, '-X', 'utf8','-B',str(script),'--state',str(state_path),'--action','compile','--panels',*episode['panel_ids']]
-                all_proc=subprocess.run(all_argv,capture_output=True,text=True,timeout=timeout,cwd=state_path.parent.parent, encoding='utf-8')
-                (report/(eid+'_all_inputs.json')).write_text(all_proc.stdout, encoding='utf-8', newline='\n');(report/(eid+'_all_inputs_stderr.txt')).write_text(all_proc.stderr, encoding='utf-8', newline='\n')
-                all_inputs=json.loads(all_proc.stdout)
+                if not combined:
+                    all_argv=[sys.executable,'-X','utf8','-B',str(script),'--state',str(state_path),'--action','compile','--panels',*episode['panel_ids']]
+                    all_proc=run_gate(all_argv,eid,'all_inputs',state_path)
+                    all_inputs=json.loads(all_proc.stdout)
                 full_expected=[p['panel_id'] for p in episode['panels'] if p['classification'] in {'READY_H001','PREPARED_H002'}]
-                if all_inputs.get('candidate_only') is not False or all_inputs.get('image_calls')!=0 or [j.get('panel_id') for j in all_inputs.get('jobs',[])]!=full_expected:
+                if (rc if combined else all_proc.returncode) or all_inputs.get('candidate_only') is not False or all_inputs.get('image_calls')!=0 or [j.get('panel_id') for j in all_inputs.get('jobs',[])]!=full_expected:
                     raise ValueError('全话实际输入/批准预检未闭合，H002或依赖范围不符')
                 for job in all_inputs.get('jobs',[]):
+                    if combined and (job.get('candidate_only') or job.get('input_audit_only') is not True or job.get('dispatch_authorized') is not False or job.get('status')!='INPUT_AUDITED_NOT_DISPATCHABLE'):
+                        raise ValueError('全话审计作业不能授予生产许可')
                     for value in job.get('arguments',{}).get('referenced_image_paths',[]):
                         path=Path(value).resolve()
                         if not path.is_file() or not (path.is_relative_to(package_root) or path.is_relative_to(run_root)):raise ValueError('全话参考仍缺失或依赖前期电脑')
@@ -411,8 +446,10 @@ def rehearse(zip_path,package_root,run_root,run_index,report,*,timeout=180):
             expected=[p['panel_id'] for p in episode['panels'] if p['classification']=='READY_H001']
             job_ids=[j.get('panel_id') for j in raw.get('jobs',[])]
             if job_ids!=expected:errors.append('实际就绪格与声称READY_H001不符')
-            if any(j.get('candidate_only') or j.get('status')!='NOT_RUN' for j in raw.get('jobs',[])):errors.append('预检作业状态不合法')
-            if raw.get('global_errors') or (pre.get('errors') and not pre.get('reports')) or (expected and (pre.get('dispatch_authorized') is False or rc!=0 or pre.get('status') not in {'READY','PARTIAL_READY'})):
+            if any(j.get('candidate_only') or j.get('status')!=('INPUT_AUDITED_NOT_DISPATCHABLE' if combined else 'NOT_RUN') or
+                   combined and (j.get('input_audit_only') is not True or j.get('dispatch_authorized') is not False) for j in raw.get('jobs',[])):errors.append('预检作业状态不合法')
+            permission_invalid=(pre.get('audit_policy')!='receiver_input_audit_v1' or pre.get('input_audit_only') is not True or pre.get('dispatch_authorized') is not False) if combined else pre.get('dispatch_authorized') is False
+            if raw.get('global_errors') or (pre.get('errors') and not pre.get('reports')) or (expected and (permission_invalid or rc!=0 or pre.get('status') not in {'READY','PARTIAL_READY'})):
                 errors.append('冻结原门禁尚未放行：保留stdout/stderr供前期处理')
             # Every actual image path must resolve under received originals or the new local run.
             for job in raw.get('jobs',[]):

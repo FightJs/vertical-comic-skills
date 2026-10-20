@@ -75,11 +75,12 @@ class Contracts(unittest.TestCase):
             self.assertEqual(new['validation_runs'],1);self.assertEqual(new['validation_hits'],0)
     def test_atlas_mutation_never_uses_old_pixel_success(self):
         ref,assets=self.atlas()
-        with file_session():
-            self.assertEqual(verify_owner(ref,assets['A'],'A','identity',self.root),[])
-            Image.new('RGB',(4,4),'green').save(self.root/'a.png')
-            errors=verify_owner(ref,assets['A'],'A','identity',self.root)
-            self.assertTrue(errors);self.assertIn('CHECK_SNAPSHOT_CHANGED',str(errors))
+        with self.assertRaisesRegex(ValueError,'CHECK_SNAPSHOT_CHANGED'):
+            with file_session():
+                self.assertEqual(verify_owner(ref,assets['A'],'A','identity',self.root),[])
+                Image.new('RGB',(4,4),'green').save(self.root/'a.png')
+                errors=verify_owner(ref,assets['A'],'A','identity',self.root)
+                self.assertTrue(errors);self.assertIn('CHECK_SNAPSHOT_CHANGED',str(errors))
     def test_real_identity_manifest_accepts_derived_identity_costume(self):
         f=staged.StagedTests('test_actual_style_input_is_exported');f.setUp();self.addCleanup(f.doCleanups);f.real_input()
         root=f.root;panel=f.panel;registry=f.manifest['identity_registry'];original=next(r for r in panel['reference_images'] if 'A' in r.get('subject_ids',[]));binding=panel['character_bindings'][0]

@@ -53,7 +53,7 @@ H002为准备范围，须经H001人工确认才允许提交；就绪不等于实
 
 ## 接手步骤（必须填本次实际命令）
 
-1. 校验并接收正式ZIP：填写实际Python和comic_start.py路径，执行receive --zip <本ZIP本机路径> --output <本机输出目录>。内部清单、CRC及发布证据先校验，再自动解压/bind/rehearse；无需外部sidecar。
+1. 校验并接收：填写实际Python和安装版comic_start.py路径。ZIP执行receive --zip <本ZIP本机路径> --output <本机输出目录>；已经解压则执行receive --package-root <包根目录> --output <包外输出目录>，无需找回或重压ZIP。先核验完整清单、文件大小/SHA256与正式发布证据；ZIP额外校验CRC并解压，目录只读使用且记录原容器CRC未核验。随后自动bind/rehearse，仍使用原冻结编译器；新版无需外部sidecar。
 2. 准备本机运行依赖：填写实际Python及运行库、演练版本和平台差异。
 3. 新建每话本地RV：填写实际目录；状态保留原runtime要求的00_输入审计层级。
 4. 自动绑定：填写包内冻结handoff_zip.py bind的实际完整命令和运行模板入口；原件只读，不由生产重编译/确认新哈希。列出原批准复用依据。

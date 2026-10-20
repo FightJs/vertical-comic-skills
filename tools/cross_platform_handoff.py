@@ -34,11 +34,17 @@ def main():
     else:
         import tempfile
         from comic_start import receive
+        from handoff_zip import extract
         with tempfile.TemporaryDirectory(prefix='comic-跨机接包-') as tmp:
             result = receive(args.path, output=Path(tmp) / '本地运行')
             if result['status'] != 'READY_FOR_PRODUCTION_ROUTING':
                 raise ValueError(json.dumps(result, ensure_ascii=False))
-            print(json.dumps({'status': result['status'], 'image_calls': result['image_calls']}))
+            originals=extract(args.path,Path(tmp)/'提前解压')['root']
+            directory=receive(package_root=originals,output=Path(tmp)/'目录接包')
+            if directory['status'] != 'READY_FOR_PRODUCTION_ROUTING':
+                raise ValueError(json.dumps(directory,ensure_ascii=False))
+            print(json.dumps({'status': result['status'], 'image_calls': result['image_calls'],
+                              'extracted_directory':directory['status'],'archive_crc':directory['reception']['archive_crc']}))
 
 
 if __name__ == '__main__':

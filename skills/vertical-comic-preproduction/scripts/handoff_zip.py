@@ -65,9 +65,27 @@ def files(root):
     return sorted(rows,key=lambda r:r['path'])
 
 
+def frozen_task_contract(root,episode):
+    """The marker contract applies only if the verified frozen toolchain has it."""
+    from runtime_snapshot import verify
+    path=reference(root,episode['runtime_manifest'])
+    frozen=verify({'path':str(path.resolve()),'sha256':episode['runtime_manifest']['sha256']})
+    return any(row['path']=='skills/vertical-comic-preproduction/scripts/task_context.py' for row in frozen['data']['files'])
+
+
+def handoff_history_errors(package_root,episode,context,state,run_root):
+    from task_context import history_errors,ORIGIN_FILE
+    # Modern or already marked templates remain strict. An old verified snapshot
+    # must not acquire a new origin-file requirement merely by being received.
+    require_origin=True
+    if context is not None and not (Path(run_root)/ORIGIN_FILE).exists():
+        require_origin=frozen_task_contract(package_root,episode)
+    return history_errors(context,episode,state,run_root,lambda ref:reference(package_root,ref),require_origin=require_origin)
+
+
 def audit_index(root):
     root=Path(root);data=read(root/INDEX)
-    from task_context import validate as validate_task, history_errors
+    from task_context import validate as validate_task
     context=data.get('task_context')
     if context is not None:
         validate_task(context)
@@ -129,7 +147,7 @@ def audit_index(root):
         if episode.get('run_template'):
             plan=read(reference(root,episode['run_template']))
             template=inside(root,plan['root']);state=read(inside(template,plan['state_file']))
-            errors=history_errors(context,episode,state,template,lambda ref:reference(root,ref))
+            errors=handoff_history_errors(root,episode,context,state,template)
             if errors:raise ValueError(';'.join(errors))
         elif context is not None:
             raise ValueError('TASK_SCOPE_HOLD:本任务零调用须由实际运行模板核对，不能只填空历史')
@@ -170,6 +188,95 @@ def zip_inventory(z):
 def read_zip_json(z,name):return json.loads(z.read(name).decode('utf-8-sig'))
 
 
+def directory_inventory(package_root):
+    """Verify extracted payload bytes without recreating or claiming a ZIP."""
+    root=Path(package_root)
+    if root.is_symlink() or root.is_junction() or not root.is_dir():raise ValueError('交接目录不存在或是链接')
+    root=root.resolve();seen=set()
+    for p in root.rglob('*'):
+        name=p.relative_to(root).as_posix();relative(name)
+        if p.is_symlink() or p.is_junction():raise ValueError('包内不得有符号链接或目录联接:'+name)
+        if name.casefold() in seen:raise ValueError('目录路径大小写冲突:'+name)
+        seen.add(name.casefold())
+        if not p.is_file() and not p.is_dir():raise ValueError('包内不是普通文件或目录:'+name)
+    inventory=root/INVENTORY
+    if not inventory.is_file():raise ValueError('缺少'+INVENTORY+'；请指定含清单和交接验收索引的包根目录')
+    manifest=read(inventory)
+    if manifest.get('policy')!=POLICY:raise ValueError('目录文件清单策略错误')
+    rows=manifest.get('files')
+    if not isinstance(rows,list):raise ValueError('目录文件清单缺失')
+    expected={};folded=set()
+    for row in rows:
+        if not isinstance(row,dict):raise ValueError('目录清单条目无效')
+        name=row.get('path');relative(name)
+        if name==INVENTORY or name.casefold() in folded:raise ValueError('目录清单重复/大小写冲突:'+name)
+        folded.add(name.casefold());expected[name]=row
+    actual={r['path']:r for r in files(root)}
+    missing=sorted(expected.keys()-actual.keys());extra=sorted(actual.keys()-expected.keys())
+    changed=sorted(n for n in expected.keys() & actual.keys() if expected[n]!=actual[n])
+    if missing or extra or changed:
+        raise ValueError('目录清单不一致:'+json.dumps({'missing':missing,'unlisted':extra,'changed':changed},ensure_ascii=False))
+    return root,manifest
+
+
+def delivery_evidence(manifest,read_bytes):
+    """Shared release evidence checks for ZIPs and their extracted contents."""
+    idx=json.loads(read_bytes(INDEX).decode('utf-8-sig'))
+    report_name='演练与导出确认/演练报告.json'
+    approval_name='演练与导出确认/用户导出确认.json'
+    required={report_name,approval_name,'交接说明.md','接包生产执行要求.md','接包入口.md'}
+    if not required.issubset({r['path'] for r in manifest['files']}):raise ValueError('交接包缺交接说明或正式发布证据')
+    report_bytes=read_bytes(report_name);report=json.loads(report_bytes.decode('utf-8-sig'))
+    approval=json.loads(read_bytes(approval_name).decode('utf-8-sig'))
+    if (idx.get('delivery_policy')!='direct_delivery_v2' or manifest.get('package_id')!=idx.get('package_id') or
+        report.get('package_id')!=idx.get('package_id') or report.get('policy')!=POLICY or
+        report.get('source_kind')!='observed_frozen_gate_rehearsal' or report.get('status')!='RELEASE_CANDIDATE' or
+        report.get('originals_unchanged') is not True or report.get('image_calls')!=0 or not report.get('ready_h001_count')):
+        raise ValueError('交接包正式发布或演练证据不完整')
+    results=report.get('results',[])
+    if ([r.get('episode_id') for r in results]!=[e['episode_id'] for e in idx['episodes']] or
+        any(r.get('status')!='REHEARSED' or r.get('errors') for r in results)):
+        raise ValueError('交接包演练未覆盖全部话')
+    for episode,result in zip(idx['episodes'],results):
+        if result.get('ready_h001')!=[p['panel_id'] for p in episode['panels'] if p['classification']=='READY_H001']:
+            raise ValueError('交接包演练就绪范围失配')
+    if report['ready_h001_count']!=sum(len(r['ready_h001']) for r in results):raise ValueError('交接包演练就绪统计失配')
+    for ref in report.get('evidence_files',[]):
+        relative(ref['path']);body=read_bytes('演练与导出确认/原始预检/'+ref['path'])
+        if len(body)!=ref.get('bytes') or hashlib.sha256(body).hexdigest()!=ref.get('sha256'):
+            raise ValueError('交接包原始演练证据失配:'+ref['path'])
+    literal=approval.get('status')=='APPROVED' and approval.get('source_kind')=='user_message' and approval.get('source_locator') and approval.get('quote')
+    exact=(bool(report.get('candidate_zip_sha256')) and approval.get('candidate_zip_sha256')==report.get('candidate_zip_sha256') and
+           approval.get('rehearsal_report_sha256')==hashlib.sha256(report_bytes).hexdigest())
+    conditional=(approval.get('authorization_mode')=='approved_inputs_auto_export_v1' and
+                 approval.get('package_id')==idx['package_id'] and approval.get('after_successful_rehearsal') is True and
+                 bool(approval.get('approved_input_digest')))
+    if not literal or not (exact or conditional):raise ValueError('交接包缺适用导出授权')
+    return {'format':'self_contained_handoff_v1','package_id':idx['package_id']}
+
+
+def check_delivery_directory(package_root):
+    root,manifest=directory_inventory(package_root)
+    if manifest.get('container_policy')!='self_contained_handoff_v1':
+        raise ValueError('目录缺自包含正式发布证据；候选目录不能接包。旧版仅有外部ZIP校验值时才需原ZIP及校验文件')
+    checked=delivery_evidence(manifest,lambda name:inside(root,name).read_bytes())
+    data=audit_index(root)
+    from handoff_delivery import input_review
+    reviewed=input_review(root,data)
+    approval=read(root/'演练与导出确认/用户导出确认.json')
+    if (approval.get('authorization_mode')=='approved_inputs_auto_export_v1' and
+        approval.get('approved_input_digest')!=reviewed['approved_input_digest']):
+        # Earlier frozen input_review did not bind task_context as a top-level
+        # digest field. Permit that exact old digest only for verified old tools.
+        legacy=(data.get('task_context') is not None and
+                all(not frozen_task_contract(root,e) for e in data['episodes']))
+        old_review=input_review(root,{k:v for k,v in data.items() if k!='task_context'}) if legacy else None
+        if old_review is None or approval.get('approved_input_digest')!=old_review['approved_input_digest']:
+            raise ValueError('交接包条件导出授权与最终输入摘要失配')
+    return {**checked,'root':str(root),'source_type':'extracted_directory','inventory_sha256':sha(root/INVENTORY),
+            'file_count':len(manifest['files']),'payload_integrity':'PASS','archive_crc':'NOT_AVAILABLE_EXTRACTED_DIRECTORY'}
+
+
 def pack(root,output):
     root=Path(root).resolve();output=Path(output).resolve()
     if output.suffix.lower()!='.zip' or output.exists() or output.is_relative_to(root):raise ValueError('输出须为包外不存在的ZIP，不覆盖原包')
@@ -202,29 +309,7 @@ def check_delivery_archive(zip_path,checksum_file=None):
             line=Path(checksum_file).read_text(encoding='utf-8-sig').strip().split(maxsplit=1)
             if len(line)!=2 or line[1]!=Path(zip_path).name or line[0]!=sha(zip_path):raise ValueError('正式ZIP外部SHA256或文件名不符')
             return {'format':'legacy_with_checksum'}
-        idx=read_zip_json(z,top+'/'+INDEX)
-        report_name='演练与导出确认/演练报告.json'
-        approval_name='演练与导出确认/用户导出确认.json'
-        required={report_name,approval_name,'交接说明.md','接包生产执行要求.md','接包入口.md'}
-        if not required.issubset({r['path'] for r in manifest['files']}):raise ValueError('单ZIP缺交接说明或正式发布证据')
-        report=read_zip_json(z,top+'/'+report_name);approval=read_zip_json(z,top+'/'+approval_name)
-        if (idx.get('delivery_policy')!='direct_delivery_v2' or manifest.get('package_id')!=idx.get('package_id') or
-            report.get('package_id')!=idx.get('package_id') or report.get('policy')!=POLICY or
-            report.get('source_kind')!='observed_frozen_gate_rehearsal' or report.get('status')!='RELEASE_CANDIDATE' or
-            report.get('originals_unchanged') is not True or report.get('image_calls')!=0 or not report.get('ready_h001_count')):
-            raise ValueError('单ZIP正式发布或演练证据不完整')
-        results=report.get('results',[])
-        if ([r.get('episode_id') for r in results]!=[e['episode_id'] for e in idx['episodes']] or
-            any(r.get('status')!='REHEARSED' or r.get('errors') for r in results)):
-            raise ValueError('单ZIP演练未覆盖全部话')
-        literal=approval.get('status')=='APPROVED' and approval.get('source_kind')=='user_message' and approval.get('source_locator') and approval.get('quote')
-        exact=(approval.get('candidate_zip_sha256')==report.get('candidate_zip_sha256') and
-               approval.get('rehearsal_report_sha256')==hashlib.sha256(z.read(top+'/'+report_name)).hexdigest())
-        conditional=(approval.get('authorization_mode')=='approved_inputs_auto_export_v1' and
-                     approval.get('package_id')==idx['package_id'] and approval.get('after_successful_rehearsal') is True and
-                     bool(approval.get('approved_input_digest')))
-        if not literal or not (exact or conditional):raise ValueError('单ZIP缺适用导出授权')
-        return {'format':'self_contained_handoff_v1','package_id':idx['package_id']}
+        return delivery_evidence(manifest,lambda name:z.read(top+'/'+name))
 
 
 def extract(zip_path,destination,*,reserve_bytes=256*1024*1024,checksum_file=None):
@@ -253,12 +338,17 @@ def extract(zip_path,destination,*,reserve_bytes=256*1024*1024,checksum_file=Non
 def rehearse(zip_path,package_root,run_root,run_index,report,*,timeout=180):
     from runtime_snapshot import verify
     if timeout<=0:raise ValueError('预检超时须大于零')
-    package_root=Path(package_root).resolve();run_root=Path(run_root).resolve();zip_path=Path(zip_path).resolve()
+    package_root=Path(package_root).resolve();run_root=Path(run_root).resolve()
     if package_root==run_root or run_root.is_relative_to(package_root) or package_root.is_relative_to(run_root):raise ValueError('收到原件与本地运行须为分离目录')
-    with zipfile.ZipFile(zip_path) as z:
-        _,manifest=zip_inventory(z)
+    if zip_path is None:
+        receipt=check_delivery_directory(package_root)
+        manifest=read(package_root/INVENTORY)
+    else:
+        zip_path=Path(zip_path).resolve()
+        with zipfile.ZipFile(zip_path) as z:_,manifest=zip_inventory(z)
+        receipt={'source_type':'zip','archive_crc':'PASS'}
     before=files(package_root)
-    if before!=sorted(manifest['files'],key=lambda r:r['path']):raise ValueError('收到原件不等于候选ZIP内容')
+    if before!=sorted(manifest['files'],key=lambda r:r['path']):raise ValueError('收到原件不等于交接清单内容')
     data=audit_index(package_root);local=read(run_index)
     if local.get('package_id')!=data['package_id']:raise ValueError('本地绑定索引属于其他包')
     runs=local.get('episodes',[])
@@ -283,8 +373,7 @@ def rehearse(zip_path,package_root,run_root,run_index,report,*,timeout=180):
         try:
             state_path=inside(run_root,run['state']);state=read(state_path)
             if state.get('book_id')!=data['book_id'] or state.get('episode_id')!=eid:raise ValueError('本地状态书话失配')
-            from task_context import history_errors
-            scoped=history_errors(data.get('task_context'),episode,state,state_path.parent.parent,lambda ref:reference(package_root,ref))
+            scoped=handoff_history_errors(package_root,episode,data.get('task_context'),state,state_path.parent.parent)
             if scoped:raise ValueError(';'.join(scoped))
             mapping=reference(run_root,run['binding_evidence'])
             actual_source=read(reference(state_path.parent.parent,state.get('source_snapshot')))
@@ -371,8 +460,9 @@ def rehearse(zip_path,package_root,run_root,run_index,report,*,timeout=180):
         except (OSError,ValueError,KeyError,TypeError) as exc:errors.append(str(exc))
         results.append({'episode_id':eid,'status':'HOLD' if errors else 'REHEARSED','ready_h001':job_ids if not errors else [],'errors':errors,'argv':argv,'returncode':rc})
     if files(package_root)!=before:raise ValueError('演练改动收到原件，禁止发布')
+    if zip_path is None and sha(package_root/INVENTORY)!=receipt['inventory_sha256']:raise ValueError('演练期间交接清单变化')
     ready=sum(len(r['ready_h001']) for r in results)
-    result={'policy':POLICY,'source_kind':'observed_frozen_gate_rehearsal','package_id':data['package_id'],'candidate_zip_sha256':sha(zip_path),'originals_unchanged':True,'image_calls':0,'environment':{'python':sys.version,'executable':sys.executable,'platform':platform.platform()},'results':results,'ready_h001_count':ready,'status':'RELEASE_CANDIDATE' if ready and all(r['status']=='REHEARSED' for r in results) else 'HOLD','not_production_authorization':True}
+    result={'policy':POLICY,'source_kind':'observed_frozen_gate_rehearsal','package_id':data['package_id'],'candidate_zip_sha256':sha(zip_path) if zip_path else None,'reception':receipt,'originals_unchanged':True,'image_calls':0,'environment':{'python':sys.version,'executable':sys.executable,'platform':platform.platform()},'results':results,'ready_h001_count':ready,'status':'RELEASE_CANDIDATE' if ready and all(r['status']=='REHEARSED' for r in results) else 'HOLD','not_production_authorization':True}
     result['evidence_files']=files(report)
     write(report/'演练报告.json',result)
     return result
@@ -427,7 +517,7 @@ def release(candidate_zip,rehearsal_report,approval_file,output):
         if report['ready_h001_count']!=sum(len(r['ready_h001']) for r in report['results']):raise ValueError('演练就绪统计失配')
         additions={'演练与导出确认/演练报告.json':rehearsal_report.read_bytes(),'演练与导出确认/用户导出确认.json':Path(approval_file).read_bytes()}
         for ref in report.get('evidence_files',[]):additions['演练与导出确认/原始预检/'+ref['path']]=reference(rehearsal_report.parent,ref).read_bytes()
-        additions['接包入口.md']=('# 正式交接包\n\n仅交付本ZIP，无需外置校验文件或再次解压套包。\n在Codex中使用 $vertical-comic-preproduction，填写：接包生产：【本ZIP的本机绝对路径】；输出位置：【本机目录】；审核人是我。\n接收端先校验包内清单及正式发布证据，再解压、绑定和演练；通过后依包内审核节点生产。\n详细范围、历史预算与步骤见交接说明.md、接包生产执行要求.md及交接验收索引.json。\n内部哈希用于完整性核对，不证明发布者身份；本ZIP最终SHA256只记录于导出日志，不写入自身。\n').encode('utf-8')
+        additions['接包入口.md']=('# 正式交接包\n\n仅交付本ZIP，无需外置校验文件或再次解压套包；接收方已经解压时可直接提供完整包根目录。\n在Codex中使用 $vertical-comic-preproduction，填写：接包生产：【本ZIP或已解压包根的本机绝对路径】；输出位置：【本机目录】；审核人是我。\n接收端使用安装版comic_start.py receive：ZIP用--zip，已解压目录用--package-root；先校验包内清单及正式发布证据，ZIP解压后、目录直接进入绑定和演练；通过后依包内审核节点生产。\n详细范围、历史预算与步骤见交接说明.md、接包生产执行要求.md及交接验收索引.json。\n内部哈希用于完整性核对，不证明发布者身份；本ZIP最终SHA256只记录于导出日志，不写入自身。\n').encode('utf-8')
         reserved={r['path'] for r in manifest['files']}
         if reserved & set(additions):raise ValueError('正式证据路径与原包冲突')
         rows=sorted(manifest['files']+[{'path':k,'sha256':hashlib.sha256(v).hexdigest(),'bytes':len(v)} for k,v in additions.items()],key=lambda r:r['path'])
@@ -451,7 +541,7 @@ def main():
     q=sub.add_parser('review');q.add_argument('--root',required=True)
     q=sub.add_parser('pack');q.add_argument('--root',required=True);q.add_argument('--output',required=True)
     q=sub.add_parser('extract');q.add_argument('--zip',required=True);q.add_argument('--destination',required=True);q.add_argument('--reserve-bytes',type=int,default=256*1024*1024);q.add_argument('--sha256-file')
-    q=sub.add_parser('rehearse');q.add_argument('--zip',required=True);q.add_argument('--package-root',required=True);q.add_argument('--run-root',required=True);q.add_argument('--run-index',required=True);q.add_argument('--report-dir',required=True);q.add_argument('--timeout',type=int,default=180)
+    q=sub.add_parser('rehearse');q.add_argument('--zip',help='省略时核验已解压正式目录及内置发布证据');q.add_argument('--package-root',required=True);q.add_argument('--run-root',required=True);q.add_argument('--run-index',required=True);q.add_argument('--report-dir',required=True);q.add_argument('--timeout',type=int,default=180)
     q=sub.add_parser('release');q.add_argument('--zip',required=True);q.add_argument('--rehearsal-report',required=True);q.add_argument('--approval',required=True);q.add_argument('--output',required=True)
     a=p.parse_args()
     try:

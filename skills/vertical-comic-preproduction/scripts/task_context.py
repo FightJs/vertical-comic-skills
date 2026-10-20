@@ -68,13 +68,23 @@ def state_errors(state, root):
         return ['TASK_SCOPE_HOLD:' + str(exc)]
 
 
-def history_errors(context, episode, state, root, reference):
+def history_errors(context, episode, state, root, reference, *, require_origin=True):
     """Cross-check the declared body history against the supplied task's real state.
 
 An empty handoff array is insufficient: inspect retained attempts and request
 receipts in the actual run template. Asset history is a separate ledger.
 """
-    errors = state_errors(state, root)
+    errors = state_errors(state, root) if require_origin else []
+    if not require_origin and context is not None:
+        # Only the handoff adapter for a verified pre-task-contract snapshot uses
+        # this path. Old snapshots did not create ORIGIN_FILE. Still validate the
+        # retained identity, declared scope and actual attempt ledger below.
+        try:
+            validate(context)
+            if context['book_id'] != state.get('book_id') or state.get('episode_id') not in context['episode_ids']:
+                raise ValueError('任务与本书/本话失配')
+        except (ValueError,TypeError,KeyError) as exc:
+            errors.append('TASK_SCOPE_HOLD:'+str(exc))
     if errors:
         return errors
     if state.get('task_context') != context:

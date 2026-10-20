@@ -219,7 +219,7 @@ class Gate:
         self.errors.extend(errors)
         self.warnings.extend(warnings)
         from continuity_context import load_context
-        prior,context_errors=load_context(shot_data,getattr(self,'shot_root',self.root))
+        prior,context_errors=load_context(shot_data,getattr(self,'shot_root',self.root),readonly=True)
         self.errors.extend(context_errors)
         context_previous=next(reversed(prior.values()),None) if prior else None
         framing_required = shot_data.get("framing_policy") == FRAMING_POLICY

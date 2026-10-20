@@ -213,7 +213,7 @@ def completed_errors(state, root, record, shot, basis, records):
     return errors
 
 
-def input_errors(state, root, record, shot, basis, records, *, candidate=False):
+def input_errors(state, root, record, shot, basis, records, *, candidate=False, dispatch_audit=False):
     """Full existing single-panel preflight; batching does not weaken inputs."""
     book, episode, pid = state["book_id"], state["episode_id"], record["panel_id"]
     authorization = state.get("production_authorization")
@@ -280,7 +280,9 @@ def input_errors(state, root, record, shot, basis, records, *, candidate=False):
         errors.append("执行格号/画面/依赖与批准镜头不一致")
     effective_basis = dependency_basis(root, manifest_path, packet, shot, basis, records,state)
     errors.extend(basis_errors(panel, effective_basis))
-    if not candidate:
+    if dispatch_audit and (candidate or state.get('parallel_context') or packet.get('dispatch_receipt')):
+        errors.append('接包输入审计不能带candidate或线上调度上下文/回执')
+    if not candidate and not dispatch_audit:
         errors.extend(dispatch_errors(state, root, packet, pid))
     from validate_preproduction import Gate
     errors.extend(Gate(root, expected_panel_ids=[pid]).run(subset_path, manifest_path)["errors"])

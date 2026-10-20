@@ -69,7 +69,7 @@ def bind(package_root,run_root):
             for script in Path(frozen['scripts']).glob('*.py'):
                 module=ast.parse(script.read_bytes())
                 if any(isinstance(node,ast.Import) and any(alias.name=='fcntl' for alias in node.names) for node in module.body):
-                    raise ValueError('FROZEN_RUNTIME_UNSUPPORTED: 旧包含Unix专用fcntl；由前期端显式迁移并重新导出，不能替换包内脚本或重签原批准')
+                    raise ValueError('FROZEN_RUNTIME_UNSUPPORTED: 旧包含Unix专用fcntl；当前生图人员须保留冻结包，在包外建立明确迁移的新本地运行候选并向用户确认受影响范围，不能替换包内脚本或重签原批准')
         new_toolchain=toolchain(frozen['scripts']);old=state.get('toolchain',{})
         # Only roots change; checker and Skill bytes must be the already-frozen ones.
         if (old.get('policy')!=new_toolchain['policy'] or old.get('release')!=new_toolchain['release'] or

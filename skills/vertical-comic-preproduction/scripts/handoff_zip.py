@@ -441,7 +441,7 @@ def rehearse(zip_path,package_root,run_root,run_index,report,*,timeout=180):
                         raise ValueError('全话审计作业不能授予生产许可')
                     for value in job.get('arguments',{}).get('referenced_image_paths',[]):
                         path=Path(value).resolve()
-                        if not path.is_file() or not (path.is_relative_to(package_root) or path.is_relative_to(run_root)):raise ValueError('全话参考仍缺失或依赖前期电脑')
+                        if not path.is_file() or not (path.is_relative_to(package_root) or path.is_relative_to(run_root)):raise ValueError('全话参考仍缺失或依赖来源机器；当前生图人员须报告准确受影响格并直接询问用户')
             pre=raw.get('preflight') or {}
             expected=[p['panel_id'] for p in episode['panels'] if p['classification']=='READY_H001']
             job_ids=[j.get('panel_id') for j in raw.get('jobs',[])]

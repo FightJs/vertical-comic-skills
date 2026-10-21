@@ -1,5 +1,6 @@
 """Approved style inputs and recorded review consistency; never visual approval."""
 from __future__ import annotations
+from codex_reference_contract import read_json
 
 import json
 from pathlib import Path
@@ -64,7 +65,7 @@ def validate_style(panel, root):
             errors.append(f"{alias}:风格依据必须是批准样张或人物板，不能是失败候选/构图图")
         try:
             checked_file(root, ref)
-            approval = json.loads(checked_file(root, ref.get("approval_evidence")).read_text(encoding="utf-8-sig"))
+            approval = read_json(checked_file(root, ref.get('approval_evidence')))
             if approval.get("status") != "APPROVED" or approval.get("source_kind") != "user_message" or not approval.get("source_locator") or not approval.get("quote"):
                 errors.append(f"{alias}:缺少真实用户批准来源")
             if ref.get("sha256") not in approval.get("approved_sha256", []) or approval.get("book_id") != contract.get("book_id"):

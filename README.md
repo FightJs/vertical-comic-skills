@@ -1,6 +1,6 @@
 # 条漫逐格成品 Skill 五件套
 
-从已批准脚本和资产制作逐格成品图片。支持视觉基准、镜头设计、逐格生图、图片审查、分工ZIP交接与内容一致性检查；不包含拼接、气泡、文字排版或PSD收尾。
+从已批准脚本和资产制作供人工继续加工的第一批独立逐格图片。支持视觉基准、镜头设计、逐格生图、图片审查、分工ZIP交接与内容一致性检查；不包含拼接、气泡、文字排版或PSD收尾。
 
 仓库是使用者同步来源：`main`提供最新提交，Release/tag提供固定版本。整套更新，避免五个Skill及规则库版本混用。生产RV按其已冻结版本继续，更新不会迁移旧RV或授予新的生图/返修权限。
 
@@ -16,6 +16,8 @@
 新版入口默认从正式Release下载整套安装ZIP，无需Git或GitHub账号。也可说“检查是否有更新”“列出可恢复备份”“恢复上一版条漫Skill”。详见[安装更新](skills/vertical-comic-preproduction/references/installation-update.md)。安装后只在用户要求时查更新，不后台自动升级。
 
 老版本尚无此入口时，从[正式发布页](https://github.com/FightJs/vertical-comic-skills/releases/latest)下载一次新版安装ZIP，按下方安装步骤操作；后续即可用一句话更新。main合并不等于稳定版已发布。
+
+新运行同时保留最终输入审查v2、身体配饰锚点及可见数量检查，并启用问题分级、修复取舍、准确采用版本及六列问题表。完整交付须覆盖全部指定源格；人工后修/人工优先材料明确标注，缺图、未知、未审或未决格不能通过完整交付门禁。旧冻结运行保持原合同。详见[生产决定与交接](skills/vertical-comic-preproduction/references/production-decisions.md)。
 
 ## 首次安装（公开下载无需GitHub账号）
 

@@ -1,7 +1,7 @@
 interface:
-  display_name: "条漫逐格生图"
-  short_description: "按批准样例和批次计划生成独立单格图，统一调度并发并保留调用证据"
-  default_prompt: "使用 $vertical-comic-panel-generation 按批准依据同时提交当前半话独立格，自审后并发修正失败格，保留实际调用证据与人工审查点。"
+  display_name: "条漫第一批逐格生图"
+  short_description: "按批准参考并发生成逐格图，合并必要修复并保留真实调用与返修预算"
+  default_prompt: "使用 $vertical-comic-panel-generation 按批准参考持续生成独立格，重大错误优先处理，局部问题按收益合并修一次或留人工，不重置历史或追加预算。"
 
 policy:
   allow_implicit_invocation: true

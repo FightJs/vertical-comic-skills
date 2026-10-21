@@ -13,6 +13,8 @@ def shot_errors(shot):
         if not isinstance(item, dict) or set(item) != {'kind', 'constraint'}:
             errors.append('production_risks每项只含kind与constraint'); continue
         kind, constraint = item['kind'], item['constraint']
+        if not isinstance(kind, str):
+            errors.append('production_risks类别须为字符串'); continue
         if kind not in KINDS or kind in seen:
             errors.append('production_risks类别未知或重复')
         seen.add(kind)

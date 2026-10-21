@@ -26,3 +26,5 @@ description: Design approved-script-driven per-panel shots, crop and physical co
 generation_dependencies只记录真实前图依赖，普通剧情先后不自动串行；requires_state_review、calibration_anchor及用户明确实图停点照范围保留。semantic_audit按真实规则命中及人体适用性核对，缺口仅阻塞受影响格。B与候选生图包按[合并审查](../vertical-comic-preproduction/references/grouped-review.md)一次展示、分别记录决定；技术PASS不授予生产批准。新增身份或真实改基准回A，批准变化只重审受影响部分。
 
 新运行按[最终输入语义审查](../vertical-comic-preproduction/references/final-input-semantics.md)执行：先审设计，再核对完整实际prompt、参考和判据；前期闭合后交接，接包只复查实际变化与新实图。审查沿用semantic_audit，不新增用户停点、不热改旧冻结包。
+
+前期完成[逐格输入收敛](../vertical-comic-preproduction/references/final-input-semantics.md#前期收敛按包执行v2)：确定设计连续性、验收比较与真实实图依赖；规则落实为本格约束。配饰区分身体自身侧与画面投影，明确锚点、遮挡及可见数量，不为展示配饰改变动作或裁切。

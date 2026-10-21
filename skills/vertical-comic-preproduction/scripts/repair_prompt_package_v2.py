@@ -83,15 +83,15 @@ def pid(value: Any) -> str:
     return f"P{match.group(1)}" if match else text
 
 
-def compact(value: Any, limit: int = 900) -> str:
+def compact(value: Any, limit: int | None = None) -> str:
     if value in (None, "", [], {}):
         return ""
     if isinstance(value, dict):
-        value = "；".join(f"{k}={compact(v, 260)}" for k, v in value.items())
+        value = "；".join(f"{k}={compact(v, limit)}" for k, v in value.items())
     elif isinstance(value, list):
-        value = "；".join(compact(v, 260) for v in value)
+        value = "；".join(compact(v, limit) for v in value)
     text = re.sub(r"\s+", " ", str(value)).strip()
-    return text if len(text) <= limit else text[: limit - 1] + "…"
+    return text if limit is None or len(text) <= limit else text[: limit - 1] + "…"
 
 
 def executable_text(value: Any, fallback: str) -> str:
@@ -412,11 +412,16 @@ def build_prompt(panel: dict[str, Any], angle: str, scale: str, ratio: str,
         # remain structured metadata, never extra drawing instructions.
         body = [
             f"【本格镜头｜{panel_id}】",
-            f"画幅比例：{ratio}。摄影机位置：{camera_position}；朝向：{facing}；高度与俯仰：{height}。",
+            f"机位角度：{angle}；景别：{scale}；画幅比例：{ratio}。摄影机位置：{camera_position}；朝向：{facing}；高度与俯仰：{height}。",
             "【画面内容锁定】", concrete_block, characters,
             "对白、旁白、心声和后期SFX不绘入底图；画内文字按本格准确要求。",
             "参考图：" + "、".join(refs) + "。按各自身份/衣装、场景、画风或编辑用途使用，不迁移相反的装饰、姿态与空间。",
         ]
+    from rule_memory import execution_constraints
+    constraints = execution_constraints(panel)
+    existing = '\n'.join(x for x in body if x)
+    missing = [line for line in constraints if line not in existing]
+    if missing: body.extend(['【本格适用规则】', *missing])
     prompt = "\n".join(x for x in body if x)
     negative = (
         f"禁止擅自扩大已批准身体裁切；禁止补入画外人物或未要求的背景物件；禁止默认3:2；禁止移动门窗家具和固定道具；"
@@ -661,7 +666,7 @@ def main() -> int:
             "status": "PROMPT_REPAIRED_V2",
             "repair_note": "综合修复v2：保留已有镜头与信息优先构图，不机械轮换景别；比例来自正向设计；实际提示词、参考图和索引已重建。",
         })
-        for field in ("framing", "characters_visible", "background_anchors_visible", "fixed_props_visible", "adjacent_change_reason", "camera_exception_approval", "continuity_contract", "reference_bindings", "composition_reference", "composition_required", "ratio_tolerance", "transparent_background", "visual_resolution", "visual_evidence_policy", "visual_evidence", "visual_evidence_context", "semantic_facts", "subject_visibility", "adjacent_face_comparison"):
+        for field in ("framing", "characters_visible", "background_anchors_visible", "fixed_props_visible", "adjacent_change_reason", "camera_exception_approval", "continuity_contract", "reference_bindings", "composition_reference", "composition_required", "ratio_tolerance", "transparent_background", "visual_resolution", "visual_evidence_policy", "visual_evidence", "visual_evidence_context", "semantic_facts", "subject_visibility", "adjacent_face_comparison", "generation_dependencies", "memory_applications", "memory_tags", "appearance_policy", "frame_policy", "frame_plan", "appearance_repair", "input_quality_policy", "background_policy"):
             if field in panel:
                 repaired[field] = panel[field]
         if usage:

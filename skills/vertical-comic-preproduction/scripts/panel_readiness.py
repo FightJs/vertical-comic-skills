@@ -1,17 +1,19 @@
 """Scoped preparation and literal approval reuse; never writes or grants approval."""
+from codex_reference_contract import resolve_path
 from pathlib import Path
 import hashlib,json,copy
 from contextvars import ContextVar
 from contextlib import contextmanager
 from codex_reference_contract import checked_file,read_json,read_json_readonly,digest
 from audit_cache import derived,content_key
+from authority_updates import authority_scoped, revocation_errors, revocation_token
 
 POLICY='panel_readiness_v1'
 _REVIEW=ContextVar('comic_design_review',default=None)
 
 @contextmanager
 def review_context(state,root,candidate=False):
-    token=_REVIEW.set((state,Path(root).resolve()) if candidate and enabled(state) else None)
+    token=_REVIEW.set((state, resolve_path(Path(root))) if candidate and enabled(state) else None)
     try:yield
     finally:_REVIEW.reset(token)
 
@@ -19,7 +21,7 @@ def candidate_source(source):
     active=_REVIEW.get()
     if active is None:return False
     state,root=active
-    return Path(source.get('root','')).resolve()==root and source.get('episode_id')==state['episode_id'] and all(source.get(k)==state.get(k) for k in ('source_script','source_snapshot','visual_basis','shot_manifest'))
+    return resolve_path(Path(source.get('root', '')))==root and source.get('episode_id')==state['episode_id'] and all(source.get(k)==state.get(k) for k in ('source_script','source_snapshot','visual_basis','shot_manifest'))
 
 def enabled(state):return state.get('readiness_policy')==POLICY
 
@@ -57,13 +59,13 @@ def compatible_collection(root,old_ref,new_ref,ids,book,episode):
             if old['header']!=new['header']:return None
             a=old['signatures'];b=new['signatures']
             return {pid:a[pid]==b[pid] for pid in a if pid in b}
-        matches=derived('collection_pair',content_key([str(Path(root).resolve()),old_ref,new_ref,book,episode]),compare)
+        matches=derived('collection_pair', content_key([str(resolve_path(Path(root))), old_ref, new_ref, book, episode]), compare)
         return matches is not None and all(matches.get(pid,False) for pid in ids)
     except (OSError,ValueError,TypeError,KeyError):return False
 
 def artifacts_covered(state,root,proof,artifacts,ids,phase=None):
-    key=content_key([str(Path(root).resolve()),state['book_id'],state['episode_id'],
-                     state.get('shot_manifest'),proof,artifacts,ids,phase])
+    if revocation_errors(proof, state['book_id'], state['episode_id']): return False
+    key=content_key([str(resolve_path(Path(root))), state['book_id'], state['episode_id'], state.get('shot_manifest'), proof, artifacts, ids, phase, revocation_token()])
     return derived('approval_coverage',key,
                    lambda:_artifacts_covered(state,root,proof,artifacts,ids,phase),accept=lambda value:value is True)
 
@@ -106,7 +108,7 @@ def approval_errors_for(state,root,phase,artifacts,ids,direct=None,*,proofs=()):
             else:continue
             for name in names:scoped.setdefault(name,[]).append(i)
         return {'proofs':candidates,'scoped':scoped,'unscoped':unscoped}
-    key=content_key([str(Path(root).resolve()),state['book_id'],state['episode_id'],phase,state.get('approval_index'),direct,proofs])
+    key=content_key([str(resolve_path(Path(root))), state['book_id'], state['episode_id'], phase, state.get('approval_index'), direct, proofs])
     index=derived('approval_index',key,indexed_candidates)
     if index is None:return ['批准索引版本错误']
     missing=[]
@@ -133,10 +135,11 @@ def local_tags_manifest(manifest,panel):
         return {k:v for k,v in manifest.items() if k!='continuity_context'}
     return manifest
 
+@authority_scoped
 def report(state,root):
     active=_REVIEW.get()
     scope=None if active is None else [active[0],str(active[1])]
-    key=hashlib.sha256(content_key([str(Path(root).resolve()),state,scope]).encode()).hexdigest()
+    key=hashlib.sha256(content_key([str(resolve_path(Path(root))), state, scope]).encode()).hexdigest()
     return copy.deepcopy(derived('preparation_report',key,lambda:_report(state,root),
                                  accept=lambda value:not value.get('global_errors')))
 
@@ -169,6 +172,12 @@ def _report(state,root):
     for pid in order:
         p=by_id[pid];row=reviews[pid]
         issues=[]
+        # Per-shot execution risks are local design evidence. Classify every
+        # row before dependency propagation; a later malformed row must not
+        # become an episode-wide HOLD or disappear behind a dispatch limit.
+        if state.get('execution_mode')=='episode_async_v1':
+            from image_risk_guards import shot_errors
+            issues.extend(shot_errors(p))
         if p.get('locked_script')!=source['locked_scripts'][pid]:issues.append('锁定原文不一致')
         for field in ('generation_dependencies','design_dependencies'):
             deps=p.get(field,[] if field=='design_dependencies' else None)

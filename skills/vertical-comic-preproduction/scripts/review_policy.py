@@ -4,6 +4,7 @@
 Never interprets prose, authenticates a message, or infers package approval from B.
 Ordinary proof objects remain subject to the existing independent workflow gates.
 """
+from codex_reference_contract import read_json
 import argparse
 import hashlib
 import json
@@ -23,7 +24,10 @@ def decision_errors(proof, root, book, episode):
     delegation. No wildcard phases/panels or automatic extra repair budget.
     """
     try:
-        grant = json.loads(checked_file(Path(root), proof['authority']).read_text(encoding='utf-8-sig'))
+        grant = read_json(checked_file(Path(root), proof['authority']))
+        from authority_updates import revocation_errors
+        revoked = revocation_errors(grant, book, episode)
+        if revoked: return revoked
         text = lambda v: isinstance(v, str) and bool(v.strip())
         ids = proof.get('panel_ids')
         if (proof.get('status') != DECIDED or proof.get('source_kind') != 'agent_decision'
@@ -77,7 +81,7 @@ def delegated_decisions(review, selected_ids, authority_ref, reviewer, evidence,
     expected = proposal(review['book_id'], review['episode_id'], review['items'], root)
     if review != expected or not isinstance(selected_ids, list) or not selected_ids or len(set(selected_ids)) != len(selected_ids) or not set(selected_ids) <= {i['item_id'] for i in review['items']}:
         raise ValueError('决定事项或版本不符')
-    grant = json.loads(checked_file(Path(root), authority_ref).read_text(encoding='utf-8-sig'))
+    grant = read_json(checked_file(Path(root), authority_ref))
     proofs = []
     for item in review['items']:
         if item['item_id'] not in selected_ids: continue
@@ -152,7 +156,7 @@ def question_action(review, pending):
 def bundle_proposal(state, root, bundle_ref):
     """Bind the already-written package; no circular self-hash in the package."""
     from execution_contract import extra_basis_refs
-    packet=json.loads(checked_file(Path(root),bundle_ref).read_text(encoding='utf-8-sig'))
+    packet=read_json(checked_file(Path(root), bundle_ref))
     if packet.get('policy')!='generation_review_package_v1' or packet.get('scope')!='episode':
         raise ValueError('须为整话候选生图包')
     if any(packet.get(k)!=state.get(k) for k in ('book_id','episode_id','visual_basis','shot_manifest')):
@@ -180,6 +184,32 @@ def technical_errors(proof, root, book, episode, panel_id, operation, source_ref
     return errors
 
 
+def production_questions(state, root, pending=()):
+    """Filter actual decisions into existing grouped interaction; no new approval phase."""
+    from production_decisions import enabled, load_decision, fingerprint
+    if not enabled(state): raise ValueError('原运行未声明新生产合同')
+    items = []
+    for row in state['panels']:
+        if row.get('attempt_id') not in row.get('production_decisions', {}): continue
+        attempt, decision, _, ref = load_decision(root, row, row['attempt_id'])
+        if decision['action'] != 'needs_user': continue
+        kind = decision.get('question_kind')
+        if kind not in {'tradeoff','design_change','additional_budget','user_reserved'}:
+            raise ValueError('只对真实取舍、越权设计、追加预算或保留亲审提问')
+        item = {'panel_id':row['panel_id'], 'image':attempt['output'], 'decision':ref,
+                'problem':decision['reason'], 'recommendation':decision.get('recommendation'),
+                'kind':kind}
+        if not isinstance(item['recommendation'],str) or not item['recommendation'].strip():
+            raise ValueError('待决项缺一句话推荐动作')
+        item['event_id'] = fingerprint(item)
+        item['question_action'] = question_action(item, pending)['action']
+        items.append(item)
+    ready = any(i['question_action'] == 'ASK_READY_ITEMS' for i in items)
+    return {'policy':POLICY,'items':items,'user_approval':'NOT_GRANTED',
+            'action':'ASK_READY_ITEMS' if ready else 'KEEP_PENDING' if items else 'NO_PRODUCTION_QUESTION',
+            'note':'使用原event_id待答去重；原A/B/高风险/D亲审事项仍走原入口'}
+
+
 def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--root',required=True);p.add_argument('--proposal')
@@ -190,14 +220,14 @@ def main():
     p.add_argument('--reviewer');p.add_argument('--evidence')
     a=p.parse_args()
     if a.bundle:
-        state=json.loads(Path(a.state).read_text(encoding='utf-8-sig'));bundle_path=Path(a.root)/a.bundle
+        state=read_json(Path(a.state));bundle_path=Path(a.root)/a.bundle
         from codex_reference_contract import digest
         review=bundle_proposal(state,a.root,{'path':a.bundle,'sha256':digest(bundle_path)})
-    else:review=json.loads(Path(a.proposal).read_text(encoding='utf-8-sig'))
+    else:review=read_json(Path(a.proposal))
     checked=proposal(review['book_id'],review['episode_id'],review['items'],a.root)
     if a.selection:
         if review!=checked:raise ValueError('须使用已展示的准确event_id')
-        selection=json.loads(Path(a.selection).read_text(encoding='utf-8-sig'))
+        selection=read_json(Path(a.selection))
         if a.authority:
             from codex_reference_contract import digest
             ref={'path':a.authority,'sha256':digest(Path(a.root)/a.authority)}
@@ -205,7 +235,7 @@ def main():
         else:
             result={'proofs':approvals(review,selection['accepted_item_ids'],selection['message'],a.root)}
     else:
-        pending=json.loads(Path(a.pending).read_text(encoding='utf-8-sig')) if a.pending else []
+        pending=read_json(Path(a.pending)) if a.pending else []
         result={'proposal':checked,**question_action(checked,pending)}
     print(json.dumps(result,ensure_ascii=False,indent=2))
 

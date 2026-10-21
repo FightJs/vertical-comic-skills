@@ -101,6 +101,11 @@ class ReceiverAuditTests(unittest.TestCase):
         manifest['files']=[{'path':p.relative_to(snapshot).as_posix(),'sha256':h.sha(p)}
                            for p in sorted(snapshot.rglob('*')) if p.is_file() and p!=snapshot/'manifest.json']
         (snapshot/'manifest.json').write_text(json.dumps(manifest),encoding='utf-8')
+        # Capability bytes are now part of the executing toolchain. Rebuild
+        # this synthetic template binding as well; production bind stays strict.
+        from execution_contract import toolchain
+        self.fixture.state['toolchain']['files']=toolchain(cap.parent)['files']
+        self.fixture.refresh_template()
         self.fixture.index['episodes'][0]['runtime_manifest']=self.fixture.ref('runtime/manifest.json')
         self.fixture.save()
 

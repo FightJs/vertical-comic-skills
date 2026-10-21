@@ -24,7 +24,7 @@ class DirectHandoffTests(unittest.TestCase):
         for p in self.shots['panels']:p['state_review_policy']='merge_into_D'
         if getattr(self, 'FINAL_SEMANTICS', False):
             from input_semantics import POLICY
-            s['input_semantics_policy'] = POLICY
+            s['input_semantics_policy'] = getattr(self, 'SEMANTICS_VERSION', POLICY)
             for p in self.shots['panels']:
                 p['semantic_facts'] = []
                 p['subject_visibility'] = {c['character_id']: {'subject_name':c['canonical_name'],

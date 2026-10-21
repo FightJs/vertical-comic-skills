@@ -691,6 +691,12 @@ def repair_source_errors(panel):
         errors.append('返修须明确保留特征及此前有效修正')
     elif any(v not in panel.get('prompt', '') for v in features):
         errors.append('实际返修提示词未携带全部保留特征/有效修正')
+    if panel.get('repair_method') == 'regenerate':
+        if panel.get('production_policy') != 'first_batch_production_v1':
+            errors.append('重生须来自新生产合同，不向旧运行添加后门')
+        if any(r.get('sha256') == source.get('image_sha256') for r in panel.get('reference_images', [])):
+            errors.append('重生不携带错误图，使用批准参考；底图仅留比较证据')
+        return errors
     matching = [r for r in panel.get('reference_images', []) if r.get('sha256') == source.get('image_sha256')]
     if not matching:
         errors.append('所选返修底图未实际携带；审阅截图不能冒充原始返回底图')

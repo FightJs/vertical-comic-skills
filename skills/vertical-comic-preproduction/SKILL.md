@@ -1,9 +1,12 @@
 ---
 name: vertical-comic-preproduction
-description: Coordinate a staged vertical-comic workflow from approved scripts and assets to an accepted per-panel image package. Use for single or multiple episodes, whole-episode asynchronous generation, split preparation/production handoff, stage routing, resuming production, or explaining the comic skills. Excludes script rewriting, strip assembly, bubbles, lettering and PSD finishing.
+description: Coordinate first-batch per-panel comic production for further human editing, preserving real QA, scoped repair decisions and annotated delivery. Use for single or multiple episodes, whole-episode asynchronous generation, split preparation/production handoff, stage routing, resuming production, or explaining the comic skills. Excludes script rewriting, strip assembly, bubbles, lettering and PSD finishing.
 ---
 
-# 条漫逐格成品生产总控
+# 条漫第一批逐格图片生产总控
+
+本技能负责供人工继续加工的第一批独立逐格图片。新运行先读[生产决定与阶段交接](references/production-decisions.md)：沿用真实审核，逐问题分三类，按影响/成本决定一次合并修复、重生或留人工；采用版本与原QA绑定，交付附简明问题表。旧RV按冻结合同，不热替换工具或规则。
+
 
 新整话同时执行[服装配饰定位与单画面](references/appearance-and-single-frame.md)：appearance_lock_v1固定当前衣装、配饰归属和身体锚点，single_frame_v1禁止一图双格。源稿多画面只选一幅绘制，原文/格序保留，未选内容不进实际prompt；A/B、实际参考、原QA及返修共用同一依据。新RV默认启用，旧RV按冻结版本，不热升级。
 
@@ -47,14 +50,20 @@ A由[视觉资产](../vertical-comic-visual-assets/SKILL.md)维护身份、衣�
 
 ## 授权、修复与完成
 
+用户要求直接完成整批时，先读[完整交付请求](references/grouped-review.md#完整交付请求)：以指定全部源格的一份最终ZIP为结束条件，合格图本地归集，默认不交少量图片阶段包代替完整成果。启动时集中处理必要授权与兼容缺口，生产中在适用委托内自行决定并登记，局部阻塞不停止其他就绪格。
+
 按[合并审查](references/grouped-review.md)处理准确范围。用户亲自批准与执行者在明确委托内的决定分开记录，后者绑定真实用户授权及约束，不伪造APPROVED；配置或泛指继续不授予新权限。仅范围外事项、明确保留亲审项或外部阻塞需要用户处理。
 
-每图真实审六项与适用规则，失败保留原件和记录。局部问题滚动修，超过5张真实失败先登记共因诊断；最多一轮自动修正。二轮仍失败停止自动尝试；明确追加授权单独保留次数和attempt，不重置预算。先分流裁切、局部编辑、修输入或停止诊断，不能靠强化措辞整图重抽。
+每图真实审六项与适用规则，失败保留原件和记录。先按三类影响决定处理；第三类留人工，第二类有明确收益才合并修复。超过5张真实失败先登记共因诊断，已有重复低效方法可更早停止；最多一轮自动修正且不必用满。二轮仍失败按采用图保留实际问题；仅值得继续的重大问题且有实质不同方案才集中处理追加授权，次数和attempt不重置。先分流裁切、局部编辑、修输入或停止诊断，不能靠强化措辞整图重抽。
 
 [两级监控](references/worker-watchdog.md)只依据真实保存事件诊断。等人工不催执行者；本话仅等跨话比较时交回总控结束本轮。按[停点进度](references/review-progress.md)报告真实完成/待补与下一步，状态不变不反复通知。
 
-每话独立完成真实QA、适用连续性及D决定后运行deliver门禁，保存逐格包、源序索引及证据。多话另做实际跨话边界比较；总包从已验收文件组装，校验计数/哈希/CRC，不重新生成合格图。统计按[增量运行](references/runtime-efficiency.md)及production_metrics.py记录，缺失时间不当作0，不把测试通过宣称为生图质量提升。
+每话独立完成适用真实QA、连续性及原D/委托决定后运行第一批deliver门禁，保存采用图、完整源序索引、简明问题表及证据；未完成格明确去向，重大遗留仅作人工优先加工材料。多话另做实际跨话边界比较；总包从已登记采用版本及准确交接结论组装，校验计数/哈希/CRC，不重新生成合格图。统计按[增量运行](references/runtime-efficiency.md)及production_metrics.py记录，缺失时间不当作0，不把测试通过宣称为生图质量提升。
 
 校验耗时异常时按[批准与上下文复用](references/runtime-efficiency.md#批准与前格上下文复用)定位重复计算；性能修改须比较原判定及批准失效反例，只更新新运行版本，不热改已交付冻结包。
 
 新运行按[最终输入语义审查](references/final-input-semantics.md)执行：先审设计，再核对完整实际prompt、参考和判据；前期闭合后交接，接包只复查实际变化与新实图。审查沿用semantic_audit，不新增用户停点、不热改旧冻结包。
+
+派单短锁是可选运行能力，默认关闭。仅在需要显式准入、保存器接线或恢复该协议运行时读[一致性协议](references/dispatch-consistency.md)；普通RV继续原入口，不自动迁移或热更新。
+
+新整话按[前期输入收敛](references/final-input-semantics.md#前期收敛按包执行v2)组织：前期逐格完成原稿/资产、连续性、规则与完整prompt审查；生产按已审包执行，返图按包内目标做真实QA。人物配饰固定在角色自身身体锚点，机位投影和可见数量另行确定。

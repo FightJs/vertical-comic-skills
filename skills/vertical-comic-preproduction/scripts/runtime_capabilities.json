@@ -3,5 +3,15 @@
   "receiver_audit": "receiver_audit_bundle_v1",
   "input_audit": "receiver_input_audit_v1",
   "progress": "audit_progress_v1",
-  "final_input_semantics": "final_input_semantics_v1"
+  "final_input_semantics": "final_input_semantics_v1",
+  "managed_dispatch": {
+    "policy": "managed_immutable_dispatch_v1",
+    "default_enabled": false,
+    "admission": "explicit_quiescent_lease_owner",
+    "evidence_writer": "exclusive_evidence_v1",
+    "input_mutation": "new_versions_only",
+    "legacy_writers": "reject_managed_state"
+  },
+  "prepared_panel_inputs": "final_input_semantics_v2",
+  "production_decisions": "first_batch_production_v1"
 }

@@ -11,6 +11,8 @@ POLICY = "comic_usage_v1"
 
 def read_config(path, *, frozen_memory_source=None):
     config = json.loads(Path(path).read_text(encoding="utf-8-sig"))
+    from dispatch_publication import require_legacy
+    require_legacy(config)
     if config.get("policy") != POLICY:
         raise ValueError("配置policy必须是comic_usage_v1")
     inputs = config.get("inputs", {})

@@ -3,6 +3,7 @@
 No directory discovery, image calls, approval synthesis or budget reset.
 Legacy states without this contract remain on their frozen contract.
 """
+from codex_reference_contract import path_exists
 import json
 import uuid
 from pathlib import Path
@@ -54,11 +55,12 @@ def state_errors(state, root):
     """Bind a new state to its original initialization, including after relocation."""
     marker = Path(root) / ORIGIN_FILE
     context = state.get('task_context')
-    if context is None and not marker.exists():
+    if context is None and not path_exists(marker):
         return []  # Old RV: do not silently upgrade its contract.
     try:
         validate(context)
-        origin = json.loads(marker.read_text(encoding='utf-8-sig'))
+        from codex_reference_contract import read_json
+        origin = read_json(marker)
         if origin.get('task_context') != context or origin.get('episode_id') != state.get('episode_id') or origin.get('initial_body_calls') != 0:
             raise ValueError('初始化任务身份失配；换RV不得重写来源')
         if context['book_id'] != state.get('book_id') or state.get('episode_id') not in context['episode_ids']:

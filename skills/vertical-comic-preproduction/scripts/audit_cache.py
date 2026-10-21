@@ -8,6 +8,13 @@ def _readonly(*args, **kwargs):
 
 
 class ReadOnlyDict(dict):
+    def __init__(self, *args, **kwargs):
+        if getattr(self, '_sealed', False):
+            _readonly()
+        super().__init__(*args, **kwargs)
+        object.__setattr__(self, '_sealed', True)
+
+    __setattr__ = __delattr__ = _readonly
     __setitem__ = __delitem__ = clear = pop = popitem = setdefault = update = __ior__ = _readonly
 
     def __deepcopy__(self, memo):
@@ -18,6 +25,13 @@ class ReadOnlyDict(dict):
 
 
 class ReadOnlyList(list):
+    def __init__(self, *args, **kwargs):
+        if getattr(self, '_sealed', False):
+            _readonly()
+        super().__init__(*args, **kwargs)
+        object.__setattr__(self, '_sealed', True)
+
+    __setattr__ = __delattr__ = _readonly
     __setitem__ = __delitem__ = append = clear = extend = insert = pop = remove = reverse = sort = __iadd__ = __imul__ = _readonly
 
     def __deepcopy__(self, memo):
@@ -37,7 +51,9 @@ def freeze(value):
         return ReadOnlyList(freeze(v) for v in value)
     if isinstance(value, tuple):
         return tuple(freeze(v) for v in value)
-    return value
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    raise TypeError('Audit cache values must contain only JSON data and tuples')
 
 
 def content_key(value):
@@ -45,18 +61,18 @@ def content_key(value):
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
 
 
-def derived(namespace, key, compute, *, accept=lambda value: True):
+def derived(namespace, key, compute, *, accept=lambda value: True, options=None):
     """Reuse an immutable result only after rechecking every captured dependency."""
-    from codex_reference_contract import _FILE_SESSION, digest
+    from codex_reference_contract import _FILE_SESSION, recheck_dependencies, _valid, READ_POLICY
     memo = _FILE_SESSION.get()
     if memo is None:
         return freeze(compute())
-    token = (namespace, key)
+    _valid()
+    token = content_key([READ_POLICY, namespace, key, options])
     counters = memo['audit_statistics'].setdefault(namespace, {'runs': 0, 'hits': 0})
     saved = memo['derived'].get(token)
     if saved is not None:
-        for path in saved[1]:
-            digest(path)
+        recheck_dependencies(saved[1])
         counters['hits'] += 1
         return saved[0]
     counters['runs'] += 1
@@ -65,7 +81,7 @@ def derived(namespace, key, compute, *, accept=lambda value: True):
     try:
         result = freeze(compute())
         if accept(result):
-            memo['derived'][token] = (result, tuple(sorted(dependencies)))
+            memo['derived'][token] = (result, tuple(sorted(dependencies, key=repr)))
         return result
     finally:
         memo['dependency_stack'].pop()

@@ -13,6 +13,8 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from codex_reference_contract import digest, read_json, checked_file
+from dispatch_publication import require_legacy
+from authority_updates import state_write_lock, state_errors as authority_errors
 
 POLICY = 'episode_slot_lease_v1'
 ACTIVE = {'RESERVED','IN_FLIGHT','RESULT_UNKNOWN'}
@@ -23,6 +25,8 @@ def enabled(control):return control.get('dispatch_policy')==POLICY
 
 def effective_control(control, state, context):
     """Present the local ledger to the unchanged receipt and scope validators."""
+    require_legacy(control)
+    require_legacy(state)
     if not enabled(control):return control
     if control.get('permits'):
         raise ValueError('LEASE_HOLD: 租约不能混入旧共享permit')
@@ -103,6 +107,10 @@ def allocate(control_path, expected_sha256, allocations, *, old_writers_stopped=
     if not isinstance(allocations,dict) or not allocations or any(type(x) is not int or x<0 for x in allocations.values()):
         raise ValueError('须明确每话非负整数额度')
     initial=read_json(path)
+    require_legacy(initial)
+    from control_updates import errors as control_errors
+    issues = control_errors(initial)
+    if issues: raise ValueError(';'.join(issues))
     jobs=initial.get('jobs',[])
     if set(allocations)!={j['job_id'] for j in jobs}:raise ValueError('须覆盖全部job，未派发填0')
     if sum(allocations.values())>initial.get('max_inflight',0):raise ValueError('全局租约额度超限')
@@ -125,6 +133,9 @@ def allocate(control_path, expected_sha256, allocations, *, old_writers_stopped=
         if digest(path)!=expected_sha256:raise ValueError('CONTROL_CHANGED')
         for job,state_path in states:
             state=read_json(state_path)
+            require_legacy(state)
+            errors = authority_errors(state)
+            if errors: raise ValueError(';'.join(errors))
             if state.get('execution_mode')!='episode_async_v1' or state.get('runtime',{}).get('dispatch_policy')!=POLICY:
                 raise ValueError('须新整话RV明确租约策略')
             context=state.get('parallel_context',{})
@@ -157,9 +168,10 @@ def release_unsubmitted(state_path, expected_sha256, panel_ids):
     """Release only RESERVED requests; restore their unchanged original packets."""
     from episode_dispatch_queue import _atomic_json
     path=Path(state_path).resolve();root=path.parent.parent
-    with file_lock(path.with_suffix('.runtime.lock')) as lock:
+    with state_write_lock(path):
         if digest(path)!=expected_sha256:raise ValueError('STATE_CHANGED')
         state=read_json(path)
+        require_legacy(state)
         if state.get('runtime',{}).get('dispatch_policy')!=POLICY:raise ValueError('仅租约入口')
         if not panel_ids or len(set(panel_ids))!=len(panel_ids):raise ValueError('格号须明确且不重复')
         for pid in panel_ids:

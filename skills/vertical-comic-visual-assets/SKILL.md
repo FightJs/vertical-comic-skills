@@ -22,3 +22,5 @@ description: Lock episode-specific character identities, costume states, scenes 
 6. A材料列准确就绪/待补格、引用和状态；同版适用批准直接复用，新增内容按[合并审查](../vertical-comic-preproduction/references/grouped-review.md)处理。真实用户委托可支持执行者作范围内决定，但不能伪造逐项用户批准。
 
 输出为权威visual_basis、准确参考及缺口、真实批准/委托决定证据。场景多视图、背景及细节操作见[视觉证据](../vertical-comic-preproduction/references/visual-evidence.md)和[背景模式](../vertical-comic-preproduction/references/background-treatment.md)，无需每格新增资产图或独立审查表。
+
+前期资产观察须锁定本人物当前衣装及重要配饰的款式、总数量、角色自身佩戴侧、身体锚点/手指和真实附着方式；未知细节不凭对称推测。复用原appearance_details，跨格/跨话同状态沿同一依据，详见[服饰定位](../vertical-comic-preproduction/references/appearance-and-single-frame.md)。

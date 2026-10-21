@@ -40,8 +40,8 @@ def closure(root,index,*,verify_runtime=True):
                 reference(root,e.get('visual_basis'));reference(root,e.get('shot_manifest'))
         if e.get('input_semantics_policy'):
             plan=json.loads(reference(root,e['run_template']).read_text(encoding='utf-8-sig'))
-            from input_semantics import POLICY, coverage
-            if e['input_semantics_policy']!=POLICY:errors.append(eid+':未知最终输入审查策略')
+            from input_semantics import POLICIES, coverage, review_checks
+            if e['input_semantics_policy'] not in POLICIES:errors.append(eid+':未知最终输入审查策略')
             audit=reference(root,e.get('semantic_audit'))
             audit_data=json.loads(audit.read_text(encoding='utf-8-sig'))
             if (audit_data.get('episode_id')!=eid or audit_data.get('book_id')!=index['book_id']
@@ -49,12 +49,11 @@ def closure(root,index,*,verify_runtime=True):
                     or [r.get('panel_id') for r in audit_data.get('panels',[])]!=e['panel_ids']):
                 errors.append(eid+':最终输入审查范围不完整')
             for row in audit_data.get('panels',[]):
-                from input_semantics import CHECKS
                 review=row.get('execution_review',{})
-                if (review.get('policy')!=POLICY or review.get('status')!='REVIEWED'
+                if (review.get('policy')!=e['input_semantics_policy'] or review.get('status')!='REVIEWED'
                         or not review.get('input_digest') or not review.get('reviewer') or not review.get('evidence')
                         or review.get('unresolved_issues') or any(review.get('checks',{}).get(k,{}).get('status')!='PASS'
-                        or not review.get('checks',{}).get(k,{}).get('evidence') for k in CHECKS)):
+                        or not review.get('checks',{}).get(k,{}).get('evidence') for k in review_checks(e['input_semantics_policy']))):
                     errors.append(eid+'/'+row['panel_id']+':最终输入语义审查未闭合')
             if verify_runtime:
                 from handoff_zip import inside
@@ -91,6 +90,11 @@ def bind(package_root,run_root):
         state_path=inside(source,plan['state_file'])
         if state_path.parent.parent!=source:raise ValueError('模板状态须位于本话根/审计目录/状态文件')
         state=json.loads(state_path.read_text(encoding='utf-8-sig'))
+        from dispatch_publication import require_legacy
+        require_legacy(state)
+        from authority_updates import state_errors as authority_errors
+        authority_issues = authority_errors(state)
+        if authority_issues: raise ValueError(';'.join(authority_issues))
         if state.get('book_id')!=index['book_id'] or state.get('episode_id')!=e['episode_id']:raise ValueError('运行模板书话不符')
         snap=reference(package_root,e['runtime_manifest']);snap_ref={'path':str(snap),'sha256':sha(snap)}
         frozen=verify(snap_ref)
@@ -145,10 +149,10 @@ def input_review(root,index):
         for ref in packages:reference(root,ref)
         selected['generation_review_packages']=packages
         if e.get('input_semantics_policy'):
-            from input_semantics import POLICY
-            if e['input_semantics_policy']!=POLICY:raise ValueError('未知最终输入审查策略')
+            from input_semantics import POLICIES
+            if e['input_semantics_policy'] not in POLICIES:raise ValueError('未知最终输入审查策略')
             reference(root,e.get('semantic_audit'))
-            selected.update(input_semantics_policy=POLICY,semantic_audit=e['semantic_audit'])
+            selected.update(input_semantics_policy=e['input_semantics_policy'],semantic_audit=e['semantic_audit'])
         episodes.append(selected)
     value={'policy':'approved_inputs_auto_export_v1','package_id':index['package_id'],'book_id':index['book_id'],'episodes':episodes}
     if 'task_context' in index:value['task_context']=index['task_context']

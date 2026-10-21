@@ -3,6 +3,41 @@ from codex_reference_contract import checked_file, read_json
 from batch_round import attempt_errors, snapshot
 
 
+def returned_authorized_copy(original, returned, root, package_root, record, authorized_ref):
+    """Only a new run may append a proven return to the exact authorized input.
+
+    Keep legacy packet equality unchanged. No creative field may change, and
+    this exception is unavailable before a real result has been saved.
+    """
+    import copy
+    if record.get('status') not in {'GENERATED', 'VISUAL_PASS', 'VISUAL_FAIL', 'USER_ACCEPTED'}:
+        return False
+    before = copy.deepcopy(original); after = copy.deepcopy(returned)
+    receipt = after.pop('dispatch_receipt', None)
+    source = after.pop('dispatch_source_package', None)
+    if receipt is not None or source is not None:
+        if (source != authorized_ref or not isinstance(receipt, dict) or
+                receipt.get('attempt_id') != record.get('attempt_id') or receipt.get('round_id') != 2 or
+                receipt.get('batch_id') != 'EPISODE'):
+            return False
+    try:
+        old_execution = before['panels'][0].pop('generation_execution')
+        execution = after['panels'][0].pop('generation_execution')
+        if before != after or old_execution.get('status') != 'NOT_RUN' or execution.get('status') != 'COMPLETED':
+            return False
+        from codex_reference_contract import validate_panel, execution_errors, digest
+        errors, submission = validate_panel(returned['panels'][0], package_root, enforce_input_budget=False)
+        if errors or submission is None or execution_errors(execution, submission, package_root, record['panel_id']):
+            return False
+        if execution.get('attempt_id') != record['attempt_id']:
+            return False
+        response = read_json(checked_file(package_root, execution['response_evidence']))
+        output = checked_file(root, record['output'])
+        return digest(output) in {r.get('sha256') for r in response.get('outputs', [])}
+    except (OSError, ValueError, TypeError, KeyError, IndexError):
+        return False
+
+
 def failure_ids(records):
     return [r['panel_id'] for r in records if r.get('status') == 'VISUAL_FAIL' or
             any(h.get('status') == 'VISUAL_FAIL' for h in r.get('attempt_history', []))]
@@ -40,7 +75,7 @@ def repair_errors(state, root, record):
         errors.append('返修授权未绑定真实失败尝试')
     if not auth.get('reviewer') or not auth.get('evidence') or not isinstance(auth.get('repair_constraints'), list) or not auth['repair_constraints'] or any(not isinstance(c, str) or not c.strip() for c in auth['repair_constraints']):
         errors.append('返修缺实际诊断或非空修正约束')
-    if state.get('input_quality_policy') == 'execution_quality_v1':
+    if state.get('input_quality_policy') == 'execution_quality_v1' or state.get('production_policy') == 'first_batch_production_v1':
         from input_quality import repair_decision_errors
         errors.extend(repair_decision_errors(auth.get('repair_decision'), history[0], require_image_call=True, state=state, root=root, new_package=auth.get('new_package_manifest')))
     if auth.get('route') != 'targeted_image_repair':
@@ -55,7 +90,10 @@ def repair_errors(state, root, record):
             original=read_json(checked_file(root,authorized_packet))
             receipt=dispatched.get('dispatch_receipt')
             source=dispatched.get('dispatch_source_package')
-            if (source!=authorized_packet or not isinstance(receipt,dict) or
+            actual_return = (state.get('production_policy') == 'first_batch_production_v1' and
+                returned_authorized_copy(original, dispatched, root, checked_file(root,current_packet).parent,
+                                         record, authorized_packet))
+            if not actual_return and (source!=authorized_packet or not isinstance(receipt,dict) or
                     {k:v for k,v in dispatched.items() if k not in {'dispatch_receipt','dispatch_source_package'}}!=original or
                     receipt.get('attempt_id')!=record.get('attempt_id') or receipt.get('round_id')!=2 or receipt.get('batch_id')!='EPISODE'):
                 errors.append('返修派发包不是授权包的仅加回执副本')

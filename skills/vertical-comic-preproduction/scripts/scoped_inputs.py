@@ -1,4 +1,5 @@
 """Immutable half inputs, portable approval lookup and fail-closed scoped holds."""
+from codex_reference_contract import resolve_path
 from pathlib import Path
 import json
 from codex_reference_contract import read_json, checked_file
@@ -62,7 +63,7 @@ def resolve_context(state, root, batch_id):
     Resolve only a declared source-contiguous scope. Historical attempts keep their
     own package/QA references; a current shot must never rewrite an old request.
     """
-    root = Path(root).resolve()
+    root = resolve_path(Path(root))
     source = read(checked_file(root, state['source_snapshot']))
     plan = read(checked_file(root, state['batch_plan']))
     if plan != build_plan(state, source):

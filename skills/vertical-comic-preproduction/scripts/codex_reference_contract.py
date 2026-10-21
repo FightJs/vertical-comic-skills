@@ -21,6 +21,171 @@ RASTER = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 # Observed local-tool rejection on 2026-10-12, not an Image API limit.
 MAX_REFERENCE_PATHS = 5
 _FILE_SESSION = ContextVar("comic_read_transaction", default=None)
+_READ_VIEW = ContextVar("comic_immutable_read_view", default=None)
+READ_POLICY = 'read_dependencies_v2'
+
+
+def physical_file(path):
+    """I/O location only; logical paths remain the identity used by validators."""
+    view = _READ_VIEW.get()
+    return Path(path) if view is None else view.physical(path)
+
+
+def _changed(reason):
+    memo = _FILE_SESSION.get()
+    message = 'CHECK_SNAPSHOT_CHANGED: ' + str(reason)
+    if memo is not None:
+        if memo['invalidated'] is None:
+            memo['invalidated'] = message
+            memo['dependency_invalidations'] += 1
+        message = memo['invalidated']
+    raise ValueError(message)
+
+
+def _valid():
+    view = _READ_VIEW.get()
+    if view is not None: view.check()
+    memo = _FILE_SESSION.get()
+    if memo is not None and memo['invalidated'] is not None:
+        raise ValueError(memo['invalidated'])
+    return memo
+
+
+def _depend(token):
+    memo = _valid()
+    if memo is not None and memo['dependency_stack']:
+        memo['dependency_stack'][-1].add(token)
+
+
+def _observe(kind, path, value, options=()):
+    memo = _valid()
+    if memo is not None:
+        token = (kind, os.path.abspath(path), options)
+        _depend(token)
+        if token in memo['observations'] and memo['observations'][token] != value:
+            _changed(f'{kind}: {path}')
+        if token not in memo['observations'] and value is False:
+            memo['negative_observations'] += 1
+        memo['observations'][token] = value
+    return value
+
+
+def resolve_path(path, *, strict=False):
+    """Retain the logical reference before a caller canonicalizes its target."""
+    _valid()
+    view = _READ_VIEW.get()
+    target = Path(path).resolve(strict=strict) if view is None else Path(view.query('resolve', path, (strict,)))
+    _observe('resolve', path, str(target), (strict,))
+    return target
+
+
+def path_exists(path):
+    resolve_path(path)
+    view = _READ_VIEW.get()
+    return _observe('exists', path, Path(path).exists() if view is None else view.query('exists', path))
+
+
+def is_file(path):
+    resolve_path(path)
+    view = _READ_VIEW.get()
+    return _observe('is_file', path, Path(path).is_file() if view is None else view.query('is_file', path))
+
+
+def is_dir(path):
+    resolve_path(path)
+    view = _READ_VIEW.get()
+    return _observe('is_dir', path, Path(path).is_dir() if view is None else view.query('is_dir', path))
+
+
+def is_symlink(path):
+    resolve_path(path)
+    view = _READ_VIEW.get()
+    return _observe('is_symlink', path, Path(path).is_symlink() if view is None else view.query('is_symlink', path))
+
+
+def scan_directory(path, *, recursive=False, suffixes=(), excluded_parts=(), excluded_names=(), excluded_suffixes=(), excluded_paths=()):
+    """Observe the complete matching name/type/target set, including empty sets.
+
+    Filters are part of the dependency key. Bytecode and OS metadata exclusions
+    are chosen explicitly by each caller, never inferred from a previous scan.
+    """
+    base = Path(path)
+    resolve_path(base)
+    present = is_dir(base)
+    options = (recursive, tuple(suffixes), tuple(excluded_parts), tuple(excluded_names), tuple(excluded_suffixes), tuple(excluded_paths))
+    view = _READ_VIEW.get()
+    if view is not None:
+        signature = view.query('directory', base, options)
+        memo = _valid()
+        if memo is not None: memo['directory_scans'] += 1
+        _observe('directory', base, signature, options)
+        return [base/row[0] for row in signature]
+    result = []
+    signature = []
+    try:
+        entries = base.rglob('*') if recursive else base.iterdir()
+        for item in entries:
+            relative = item.relative_to(base)
+            if (set(relative.parts) & set(excluded_parts) or item.name in excluded_names or relative.as_posix() in excluded_paths
+                    or item.suffix in excluded_suffixes or suffixes and item.suffix not in suffixes):
+                continue
+            result.append(item)
+            signature.append((relative.as_posix(), item.is_file(), item.is_dir(), item.is_symlink(), str(item.resolve())))
+    except OSError:
+        if present and _valid() is not None:
+            _changed(f'{path}; directory enumeration failed')
+        raise
+    memo = _valid()
+    if memo is not None:
+        memo['directory_scans'] += 1
+    _observe('directory', base, tuple(sorted(signature)), options)
+    return result
+
+
+def recheck_dependencies(dependencies):
+    """Replay positive, negative, path-target and directory observations."""
+    memo = _valid()
+    for token in dependencies:
+        if memo is not None:
+            memo['dependency_checks'] += 1
+        if isinstance(token, str):
+            digest(Path(token))
+            continue
+        kind, name, options = token
+        if kind == 'directory':
+            recursive, suffixes, parts, names, excluded_suffixes, excluded_paths = options
+            scan_directory(name, recursive=recursive, suffixes=suffixes, excluded_parts=parts,
+                           excluded_names=names, excluded_suffixes=excluded_suffixes, excluded_paths=excluded_paths)
+        elif kind == 'resolve':
+            resolve_path(name, strict=options[0])
+        else:
+            {'exists': path_exists, 'is_file': is_file, 'is_dir': is_dir, 'is_symlink': is_symlink}[kind](name)
+
+
+def read_bytes(path):
+    if _valid() is None:
+        return physical_file(path).read_bytes()
+    digest(Path(path))
+    try:
+        data = physical_file(path).read_bytes()
+        digest(Path(path))  # Recheck the same file stamp after this physical read.
+    except OSError:
+        _changed(f'{path}; file read failed after validation')
+    _FILE_SESSION.get()['content_read_bytes'] += len(data)
+    return data
+
+
+def read_text(path, encoding=None, errors=None):
+    if _valid() is None:
+        return physical_file(path).read_text(encoding=encoding, errors=errors)
+    digest(Path(path))
+    try:
+        value = physical_file(path).read_text(encoding=encoding, errors=errors)
+        digest(Path(path))
+        _FILE_SESSION.get()['content_read_bytes'] += physical_file(path).stat().st_size
+    except OSError:
+        _changed(f'{path}; text read failed after validation')
+    return value
 
 
 @contextmanager
@@ -28,64 +193,83 @@ def file_session():
     """Read-only transaction cache; changes during a check fail closed."""
     active = _FILE_SESSION.get()
     if active is not None:
+        _valid()
         yield active
         return
     memo = {"files": {}, "json": {}, "hash_reads": 0, "hash_hits": 0,"validations":{},"validation_runs":0,"validation_hits":0,
             "readonly_json": {}, "derived": {}, "dependency_stack": [], "audit_statistics": {}, "paths": {},
-            "validation_dependencies": {}}
+            "validation_dependencies": {}, "hash_bytes": 0, "json_parses": 0, "json_hits": 0,
+            "policy": READ_POLICY, "observations": {}, "invalidated": None,
+            "dependency_checks": 0, "dependency_invalidations": 0, "negative_observations": 0,
+            "directory_scans": 0, "content_read_bytes": 0}
     token = _FILE_SESSION.set(memo)
     try:
         yield memo
+        _valid()
+        recheck_dependencies(tuple(memo['observations']))
         # A cached result may not reread every file before the caller returns.
         # Recheck the complete read set at the outer transaction boundary.
         for name, target in memo['paths'].items():
-            if str(Path(name).resolve()) != target:
-                raise ValueError(f'CHECK_SNAPSHOT_CHANGED: {name}; reference target changed')
+            if str(resolve_path(name)) != target:
+                _changed(f'{name}; reference target changed')
         for name, (stamp, _) in memo['files'].items():
             try:
-                current = Path(name).stat()
+                current = physical_file(name).stat()
             except OSError as exc:
-                raise ValueError(f'CHECK_SNAPSHOT_CHANGED: {name}') from exc
+                _changed(name)
             if stamp != (current.st_dev, current.st_ino, current.st_size, current.st_mtime_ns, current.st_ctime_ns):
-                raise ValueError(f'CHECK_SNAPSHOT_CHANGED: {name}')
+                _changed(name)
     finally:
         _FILE_SESSION.reset(token)
 
 
 def digest(path: Path) -> str:
     logical = os.path.abspath(path)
-    path = Path(path).resolve()
-    memo = _FILE_SESSION.get()
+    path = resolve_path(path)
+    memo = _valid()
     if memo is None:
-        return hashlib.sha256(path.read_bytes()).hexdigest()
-    if memo['dependency_stack']:
-        memo['dependency_stack'][-1].add(logical)
+        return hashlib.sha256(physical_file(path).read_bytes()).hexdigest()
     if memo['paths'].setdefault(logical, str(path)) != str(path):
-        raise ValueError(f'CHECK_SNAPSHOT_CHANGED: {logical}; reference target changed')
-    stat = path.stat()
+        _changed(f'{logical}; reference target changed')
+    try:
+        stat = physical_file(path).stat()
+    except OSError:
+        is_file(logical)
+        if str(path) in memo['files']:
+            _changed(logical)
+        raise
+    _depend(logical)
     stamp = (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns)
     saved = memo["files"].get(str(path))
     if saved:
         if saved[0] != stamp:
-            raise ValueError(f"CHECK_SNAPSHOT_CHANGED: {path.name}; restart the read-only preflight")
+            _changed(path.name)
         memo["hash_hits"] += 1
         return saved[1]
-    value = hashlib.sha256(path.read_bytes()).hexdigest()
-    after = path.stat()
+    try:
+        data = physical_file(path).read_bytes()
+        value = hashlib.sha256(data).hexdigest()
+        after = physical_file(path).stat()
+    except OSError:
+        _changed(f'{logical}; file changed during hashing')
     if stamp != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns):
-        raise ValueError(f"CHECK_SNAPSHOT_CHANGED: {path.name}")
+        _changed(path.name)
     memo["files"][str(path)] = (stamp, value)
     memo["hash_reads"] += 1
+    memo["hash_bytes"] += len(data)
     return value
 
 
 def read_json(path: Path):
     memo = _FILE_SESSION.get()
     if memo is None:
-        return json.loads(Path(path).read_text(encoding="utf-8-sig"))
-    key = (str(Path(path).resolve()), digest(path))
+        return json.loads(read_text(path, encoding="utf-8-sig"))
+    key = (str(resolve_path(path)), digest(path))
     if key not in memo["json"]:
-        memo["json"][key] = json.loads(Path(path).read_text(encoding="utf-8-sig"))
+        memo["json"][key] = json.loads(read_text(path, encoding="utf-8-sig"))
+        memo['json_parses'] += 1
+    else:
+        memo['json_hits'] += 1
     return copy.deepcopy(memo["json"][key])
 
 
@@ -95,20 +279,26 @@ def read_json_readonly(path: Path):
     memo = _FILE_SESSION.get()
     if memo is None:
         return freeze(read_json(path))
-    key = (str(Path(path).resolve()), digest(path))
+    key = (str(resolve_path(path)), digest(path))
     if key not in memo['readonly_json']:
         if key not in memo['json']:
-            memo['json'][key] = json.loads(Path(path).read_text(encoding='utf-8-sig'))
+            memo['json'][key] = json.loads(read_text(path, encoding='utf-8-sig'))
+            memo['json_parses'] += 1
+        else:
+            memo['json_hits'] += 1
         memo['readonly_json'][key] = freeze(memo['json'][key])
+    else:
+        memo['json_hits'] += 1
     return memo['readonly_json'][key]
 
-def memoized_validation(namespace,key,compute):
+def memoized_validation(namespace,key,compute,*,options=None):
     """Successful deterministic checks only, within an unchanged read transaction."""
-    memo=_FILE_SESSION.get()
+    memo=_valid()
     if memo is None:return compute()
-    token=(namespace,key)
+    from audit_cache import content_key
+    token=content_key([READ_POLICY,namespace,key,options])
     if token in memo['validations']:
-        for path in memo['validation_dependencies'][token]:digest(path)
+        recheck_dependencies(memo['validation_dependencies'][token])
         memo['validation_hits']+=1;return copy.deepcopy(memo['validations'][token])
     memo['validation_runs']+=1
     dependencies=set();memo['dependency_stack'].append(dependencies)
@@ -116,7 +306,7 @@ def memoized_validation(namespace,key,compute):
         result=compute()
         if result==[]:
             memo['validations'][token]=copy.deepcopy(result)
-            memo['validation_dependencies'][token]=tuple(sorted(dependencies))
+            memo['validation_dependencies'][token]=tuple(sorted(dependencies, key=repr))
         return result
     finally:
         memo['dependency_stack'].pop()
@@ -144,8 +334,8 @@ def checked_file(root: Path, item: Any) -> Path:
     if not isinstance(item, dict) or not isinstance(item.get("path"), str):
         raise ValueError("缺少文件路径/哈希")
     rel = Path(item["path"])
-    path = (root / rel).resolve()
-    if rel.is_absolute() or not path.is_relative_to(root.resolve()) or not path.is_file():
+    path = resolve_path(root / rel)
+    if rel.is_absolute() or not path.is_relative_to(resolve_path(root)) or not is_file(path):
         raise ValueError("文件缺失或不是包内相对路径")
     if digest(root / rel) != str(item.get("sha256", "")).lower():
         raise ValueError("文件SHA256缺失或不匹配")
@@ -177,7 +367,7 @@ def composition_errors(panel: dict[str, Any]) -> list[str]:
 
 def validate_panel(panel: dict[str, Any], root: Path, *, enforce_input_budget: bool = True) -> tuple[list[str], dict[str, Any] | None]:
     """Verify package files and review-record consistency, not visual truth."""
-    root = root.resolve()
+    root = resolve_path(root)
     errors = composition_errors(panel)
     from visual_evidence import panel_errors as visual_panel_errors
     errors.extend(visual_panel_errors(panel, prompt=True))
@@ -218,7 +408,7 @@ def validate_panel(panel: dict[str, Any], root: Path, *, enforce_input_budget: b
             if path.suffix.lower() not in RASTER:
                 raise ValueError("不是当前本地参考路线的栅格图片")
             from PIL import Image
-            with Image.open(path) as opened:
+            with Image.open(physical_file(path)) as opened:
                 opened.verify()
             if enforce_input_budget and str(path) in paths:
                 errors.append(f"REFERENCE_DUPLICATE_HOLD:{alias}:同一文件重复占输入槽；只登记一个别名，保留所有用途绑定并重编译prompt")
@@ -233,7 +423,7 @@ def validate_panel(panel: dict[str, Any], root: Path, *, enforce_input_budget: b
             base=next(r for r in refs if r.get('sha256')==panel['repair_source'].get('image_sha256'))
             from reference_atlas import rect
             from PIL import Image
-            with Image.open(checked_file(root,base)) as original:
+            with Image.open(physical_file(checked_file(root,base))) as original:
                 for box in preserved.values():rect(box,original.size)
         except (StopIteration,OSError,ValueError,TypeError,AttributeError) as exc:
             errors.append('REPAIR_INPUT_HOLD:保留区域无法绑定真实底图有效像素:'+str(exc))
@@ -248,8 +438,8 @@ def validate_panel(panel: dict[str, Any], root: Path, *, enforce_input_budget: b
         from input_semantics import conflict_errors
         errors.extend(conflict_errors(panel, prompt))
     try:
-        file = (root / str(prompt_file)).resolve()
-        if Path(str(prompt_file)).is_absolute() or not file.is_relative_to(root) or file.read_text(encoding="utf-8-sig").strip() != prompt.strip():
+        file = resolve_path(root / str(prompt_file))
+        if Path(str(prompt_file)).is_absolute() or not file.is_relative_to(root) or read_text(file, encoding='utf-8-sig').strip() != prompt.strip():
             raise ValueError("实际prompt.txt与索引不一致或路径越界")
     except (OSError, ValueError) as exc:
         errors.append(str(exc))
@@ -262,7 +452,7 @@ def validate_panel(panel: dict[str, Any], root: Path, *, enforce_input_budget: b
         if not any(isinstance(b, dict) and b.get("alias") == alias and b.get("purpose") == "framing" and b.get("subject_ids") == [panel.get("panel_id")] for b in bindings):
             errors.append("构图图片须绑定本格framing用途")
         try:
-            review = json.loads(checked_file(root, value.get("review_evidence")).read_text(encoding="utf-8-sig"))
+            review = read_json(checked_file(root, value.get('review_evidence')))
             expected = {k: panel.get(k) for k in ("panel_id", "camera_view_id", "camera_view_signature", "framing", "frame_ratio")}
             numeric_ratio = ratio(panel.get("frame_ratio"))
             reviewed_ratio = ratio(review.get("frame_ratio"))
@@ -275,7 +465,7 @@ def validate_panel(panel: dict[str, Any], root: Path, *, enforce_input_budget: b
                 errors.append("构图图片未记录为干净的摄影机视角")
             if ref is not None:
                 from PIL import Image
-                with Image.open(checked_file(root, ref)) as opened:
+                with Image.open(physical_file(checked_file(root, ref))) as opened:
                     actual = opened.width / opened.height
                 target = ratio(panel.get("frame_ratio"))
                 if target is None or abs(actual - target) / target > 0.001:
@@ -297,8 +487,8 @@ def validate_panel(panel: dict[str, Any], root: Path, *, enforce_input_budget: b
 def execution_errors(execution: dict[str, Any], submission: dict[str, Any], root: Path, panel_id: str) -> list[str]:
     errors = []
     try:
-        req = json.loads(checked_file(root, execution.get("request_evidence")).read_text(encoding="utf-8-sig"))
-        res = json.loads(checked_file(root, execution.get("response_evidence")).read_text(encoding="utf-8-sig"))
+        req = read_json(checked_file(root, execution.get('request_evidence')))
+        res = read_json(checked_file(root, execution.get('response_evidence')))
         attempt = execution.get("attempt_id")
         if not isinstance(attempt, str) or not attempt.strip() or req.get("attempt_id") != attempt or res.get("attempt_id") != attempt:
             errors.append("本地attempt_id缺失或调用/返回无法对应")
@@ -312,7 +502,7 @@ def execution_errors(execution: dict[str, Any], submission: dict[str, Any], root
             errors.append("缺少实际返回图片证据")
         for item in res.get("outputs", []):
             from PIL import Image
-            with Image.open(checked_file(root, item)) as opened:
+            with Image.open(physical_file(checked_file(root, item))) as opened:
                 opened.verify()
     except (OSError, ValueError, TypeError, AttributeError) as exc:
         errors.append(f"执行证据无效: {exc}")
@@ -342,7 +532,7 @@ def copy_contract_evidence(source: Path, output: Path, manifest: dict[str, Any])
         if item is None:
             continue
         try:
-            path = checked_file(source.resolve(), item)
+            path = checked_file(resolve_path(source), item)
             target = output / item["path"]
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(path, target)
@@ -356,10 +546,10 @@ def main() -> int:
     parser.add_argument("--package-root", required=True)
     parser.add_argument("--output", required=True, help="新的调用计划JSON文件")
     args = parser.parse_args()
-    root, output = Path(args.package_root).resolve(), Path(args.output).resolve()
-    if output.exists():
+    root, output = resolve_path(Path(args.package_root)), resolve_path(Path(args.output))
+    if path_exists(output):
         raise SystemExit("拒绝覆盖已有输出")
-    data = json.loads((root / "全话提示词索引.json").read_text(encoding="utf-8-sig"))
+    data = read_json(root / '全话提示词索引.json')
     from check_control_inputs import validate_manifest
     report = validate_manifest(data, root)
     plans = []

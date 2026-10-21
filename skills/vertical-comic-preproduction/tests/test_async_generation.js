@@ -91,5 +91,64 @@ const sleep = ms=>new Promise(r=>setTimeout(r,ms));
  assert.equal(timed,4);assert.equal(metadataPeak,1);
  const metadataFailure=await run(jobs(3),1,async()=>({}),async()=>{}, {onPersisted:()=>{throw Error('metadata persistence failure')}});
  assert(metadataFailure[0].persistence_error);assert.equal(metadataFailure[1].status,'NOT_DISPATCHED');
+ // Candidate input refresh uses the real persistence lane, with no image retry.
+ const boundJobs=n=>jobs(n).map(j=>({...j,book_id:'BOOK',episode_id:'E001'}));
+ const ack={status:'BOUND_NOT_DISPATCHABLE',dispatch_authorized:false,
+   scope:{book_id:'BOOK',episode_id:'E001'},head_sha256:'a'.repeat(64),
+   state_sha256:'b'.repeat(64),control_sha256:'c'.repeat(64)};
+ const phases=new Map();let writers=0,writerPeak=0;
+ const lane=async(fn)=>{writers++;writerPeak=Math.max(writerPeak,writers);try{await Promise.resolve();fn()}finally{writers--}};
+ const refreshed=await run(boundJobs(3),3,async()=>({}),
+   async j=>lane(()=>phases.set(j.panel_id,'saved')),
+   {onPersisted:async j=>lane(()=>{assert.equal(phases.get(j.panel_id),'saved');phases.set(j.panel_id,'timed')}),
+    onInputHeadRefresh:async(j,item)=>{let value;await lane(()=>{
+      assert.equal(phases.get(j.panel_id),'timed');assert(item.saved_at);value=ack;
+    });return value}});
+ assert.equal(writerPeak,1);assert(refreshed.every(r=>r.input_read_head===ack));
+ let refreshCalls=0,saveCalls=0,reviewCalls=0,headInvocations=0;
+ let secondRelease,secondStarted;
+ const secondRunning=new Promise(resolve=>{secondStarted=resolve});
+ const secondResult=new Promise(resolve=>{secondRelease=resolve});
+ const refreshFailure=await run(boundJobs(4),2,async j=>{
+   headInvocations++;if(j.panel_id==='P2'){secondStarted();return secondResult}return {};
+ },async()=>{saveCalls++},{onInputHeadRefresh:async()=>{
+   refreshCalls++;await secondRunning;secondRelease({});throw Error('synthetic head CAS conflict');
+ },onReviewReady:()=>{reviewCalls++}});
+ assert.equal(headInvocations,2);assert.equal(saveCalls,2);assert.equal(refreshCalls,2);assert.equal(reviewCalls,2);
+ assert(refreshFailure.slice(0,2).every(r=>r.saved_at && r.input_head_refresh_error && r.status==='FULFILLED'));
+ assert(refreshFailure.slice(2).every(r=>r.status==='NOT_DISPATCHED'));
+ assert.deepEqual(refreshFailure.slice(0,2).map(r=>r.attempt_id),['A1','A2']);
+ for(const badAck of [undefined,{...ack,dispatch_authorized:true},{...ack,scope:{book_id:'OTHER',episode_id:'E001'}},
+                      {...ack,state_sha256:'invalid'}]){
+   let calls=0;
+   const rejected=await run(boundJobs(2),1,async()=>{calls++;return {}},async()=>{}, {onInputHeadRefresh:()=>badAck});
+   assert.equal(calls,1);assert(rejected[0].saved_at && rejected[0].input_head_refresh_error);
+   assert.equal(rejected[1].status,'NOT_DISPATCHED');
+ }
+ let preflightInvocations=0;
+ await assert.rejects(()=>run(jobs(1),1,async()=>{preflightInvocations++},async()=>{},
+   {onInputHeadRefresh:()=>ack}),/INPUT_HEAD_SCOPE_HOLD/);
+ assert.equal(preflightInvocations,0);
+ let assetRefreshes=0;
+ await run([{kind:'asset',job_id:'ASSET',asset_id:'VIEW',attempt_id:'A1'}],1,async()=>({}),async()=>{},
+   {onInputHeadRefresh:()=>{assetRefreshes++;return ack}});
+ assert.equal(assetRefreshes,0);
+ const managedJobs=boundJobs(2).map((j,i)=>({...j,managed_submission_required:true,dispatch_receipt:{permit_id:'R'+i}}));
+ const submitAck=j=>({status:'SUBMISSION_REGISTERED',invoke_allowed:true,scope:{book_id:j.book_id,episode_id:j.episode_id},
+   panel_id:j.panel_id,attempt_id:j.attempt_id,round_id:j.round_id,permit_id:j.dispatch_receipt.permit_id});
+ let managedInvoked=0;
+ await assert.rejects(()=>run(managedJobs,1,async()=>{managedInvoked++},async()=>{}),/durable onBeforeInvoke/);
+ assert.equal(managedInvoked,0);
+ const submitOrder=[];
+ await run(managedJobs,1,async j=>{submitOrder.push('invoke-'+j.panel_id);managedInvoked++;return {}},async()=>{},
+   {onBeforeInvoke:async j=>{submitOrder.push('registered-'+j.panel_id);return submitAck(j)}});
+ assert.deepEqual(submitOrder,['registered-P1','invoke-P1','registered-P2','invoke-P2']);
+ for(const wrong of [j=>({...submitAck(j),invoke_allowed:false,status:'ALREADY_REGISTERED'}),
+                      j=>({...submitAck(j),permit_id:'old'}),j=>({...submitAck(j),attempt_id:'old'})]){
+   let calls=0,saves=0;
+   const blocked=await run(managedJobs,1,async()=>{calls++},async()=>{saves++},{onBeforeInvoke:wrong});
+   assert.equal(calls,0);assert.equal(saves,0);assert.equal(blocked[0].outcome_hint,'CHECK_SUBMISSION_REGISTRATION');
+   assert(blocked.every(r=>r.status==='NOT_DISPATCHED'));
+ }
  console.log('Async generation concurrency, durable timing, asset/repair routing, full error preservation, unknown outcome, service circuit and review notification tests PASS; fake backend only.');
 })().catch(e=>{console.error(e);process.exitCode=1});

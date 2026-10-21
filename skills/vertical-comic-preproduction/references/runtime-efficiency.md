@@ -1,5 +1,7 @@
 # 整话增量运行
 
+新运行统一按[第一批生产决定](production-decisions.md)衔接审核、返修与交付：真实FAIL不改写，处理动作与交付结论分别记录；旧冻结合同不迁移。下文审核方法、源稿/批准/证据要求仍适用。
+
 当前新任务使用incremental_runtime_v2和[整话异步](episode-async.md)，没有固定半话C。旧incremental_runtime_v1恢复才读[旧半话运行](runtime-half-legacy.md)。
 
 开批与恢复使用[批次运行](batch-runtime.md)；提问与批准使用[合并审查](grouped-review.md)。不另建同功能框架，不在生产中更新规则库或为每个单格开发专用检查器。
@@ -16,36 +18,50 @@ production_runtime.py编译现有逐格包，负责完整预检、审查队列�
 
 `read_json()`仍返回可修改副本；纯校验热点显式使用`read_json_readonly()`。`load_context(..., readonly=True)`返回独立前格映射及不可修改的行，追加当前格只改变调用方映射。镜头集合每份文件只建立一次索引和逐格签名，批准索引保留原格号与索引查找范围的双重限制。连续性所需前格不删减，禁止用“只看上一格”代替原完整核验。
 
+阶段1C的`read_dependencies_v2`在现有`codex_reference_contract.py`中统一记录文件内容、路径目标、exists/is_file/is_dir/is_symlink查询，以及带准确过滤选项的目录扫描结果。不存在和空扫描也属于依赖；`execution_contract.py`登记实际工具清单，`runtime_snapshot.py`登记快照完整成员集合，字节码和系统元数据按原规则排除。根manifest只按准确相对路径排除，同名的嵌套文件仍须检测。任务来源、批准索引、前格来源、提示词、身份/画风/QA、规则索引与正文的读取均进入事务；不另设与原门禁平行的校验器。
+
+批准“没有匹配记录”绑定实际索引内容及阶段、书话和查询范围；规则未匹配绑定索引、阶段和有效标签。新记录或规则的出现会使旧读取失效。`audit_cache.py`和`memoized_validation()`按内容、读取协议版本及显式options形成键，候选/正式上下文、规则读取模式、文件版本和实际工具字节继续参与各自原有键及依赖。缓存值只接受JSON数据和元组，递归只读；需要编辑时取得独立副本，不按可变对象身份复用。
+
+缓存命中复核完整传递依赖，事务退出再次复核全部读取。发现变化后事务持续失效：即使某个门禁捕获异常、文件又恢复原状或后续查询换了缓存键，也不能提交旧预检。统一文本读取在解析前后确认文件版本，并保留原编码和换行行为。独立校验器的文件哈希统一接入同一读取集合。这里仍是原锁范围下的读取变化检测；核验与提交之间的完整写入协议由第二批不可变发布和受锁引用实现。
+
 编译结果的`audit_reuse_statistics`记录各类派生计算与命中次数，供定位重复工作，不作为批准或质量证据。低效时先测量、修复重复计算，不用延长超时或增加生图并发掩盖校验问题。
 
 性能维护使用`tests/benchmark_preflight.py`，支持35/165格合成上下文，以及`--state <生产流程.json> --panels P025`只读检查实际输入。用`--scripts`在独立进程比较旧版和新版，核对`result_sha256`、错误、CPU及墙钟耗时；分析器开销与正常耗时分开。此基准只测上下文，不是完整接包演练，不可将其结果写成正式发布PASS。已发布快照不热修改，优化仅进入新运行快照。
 
-### 接包审计共用一次读取事务
+### 派单按容量预检
 
-新冻结快照声明`runtime_capabilities.json`的`receiver_audit_bundle_v1`后，接包演练调用`production_runtime.py --action receiver-audit --h001-panels <准确首半话格号> --panels <全话源序> --progress`。同一进程分别执行H001输入门禁、全话准备检查、全话输入门禁；不从全话结果截取H001，也不省略H002检查。共享已核验的准备报告、批准与逐格输入；缓存只在本事务有效，实际依赖变化使检查失败。结束前复核完整读取集合。
+`episode_dispatch_queue.py`在原本话状态锁和共享调度锁内，用独立的只读`file_session()`完成本次校验，并通过标准`staged_workflow.evaluate()`进入`reservation_batch`，继承任务来源检查、QA复用上下文、策略检查及失败分类。整话执行合同由`evaluate_episode()`入口核验一次，标准包装层不再重复核验同一合同；直接调用整话入口仍保留合同门禁。任务来源JSON和QA指纹中的JSON使用同一读取事务。
 
-`audit-inputs`只核验输入，保留A/B/实际包批准、实图依赖、状态审查、轮次和预算检查；不申请线上容量许可、不提交图片。其结果和作业明确标记`input_audit_only=true`、`dispatch_authorized=false`，作业状态为`INPUT_AUDITED_NOT_DISPATCHABLE`。禁止使用candidate或线上调度上下文。正常`compile`仍要求原生产容量与许可，审计不能升级为调度授权。
+`reservation_batch`一次完成公共门禁、批准筛选和逐格输入预检，不再重复执行status和candidate两套公共前置检查。已领取同格同轮回执先排除；按源序逐格检查，找到本次空闲槽位所需的合格格数即停止，前格输入不合格时继续寻找后面的独立可派格。未检查的格不标PASS，下次需要时重新检查。全话源序、批准、状态屏障和实际依赖闭包仍核验，`--max-count 1`不代表整条链路只读取一个格。
 
-`audit_progress.py`向stderr实时报告阶段、当前格、完成数、墙钟和CPU耗时；长检查中默认每10秒输出一次。stdout保持单一JSON。`FINISHED_NOT_AUTHORIZATION`仅表示检查结束，HOLD/PASS以结果及退出码为准；进度不是批准或质量证据。`audit_process.py`边读边保存stderr，stdout直接写新日志文件；超时保留部分输出和最后进度，日志写盘失败也阻塞交付。异常退出清理本次启动的检查进程。
+派单检查的作用范围如下，只有候选深检可以按已取得的合格格数提前停止：
 
-`tests/benchmark_receiver_audit.py`使用隔离的4格已批准合成夹具，对比三个独立进程与合并进程，交替运行并核对除时间/缓存计数外的完整结果。报告进程数、逐格输入检查次数与墙钟时间；不能将小夹具速度外推为真实165格的完整演练耗时。正确性回归包括批准撤销、事务中变化、生产许可隔离、旧快照兼容和超时证据。
+| 类型 | 范围与实现 |
+|---|---|
+| 全局条件 | `staged_workflow.py`核验任务身份，`execution_contract.py`核验合同、工具版本和全话画幅计划，`scoped_episode_workflow.py`检查取消、全局HOLD、完整源序、共享准备报告、未知状态及全话轮次/历史。`parallel_dispatch.py`和`slot_leases.py`核验调度与容量。这些检查覆盖被排除或尚未深检的后格。 |
+| 候选格条件 | 准备报告逐格归类设计缺口、批准筛选和源序/返修资格完成后，`batch_workflow.input_errors()`检查准确包、prompt、单格授权及轮次绑定；满足空闲槽数即停止后续候选深检。后格独立包问题不阻止前面的合格格。 |
+| 真实依赖条件 | `panel_readiness.py`完整传播设计/实图依赖和局部缺口；`scoped_episode_workflow.py`保留状态停点、已验收前格检查；`batch_workflow.py`绑定实际依赖图片；`continuity_context.py`核验所声明的完整前格上下文及必要相邻格。排除领取不等于前格已验收，不按领取数量截断上下文或依赖。 |
 
-## 返回和实际自审
+整话的`production_risks`格式错误属于本格设计缺口，在`panel_readiness.py`归类并传播至实际设计/实图依赖；独立的前格继续核验原批准后领取。缺少逐格准备合同的旧路径保留原风险门禁。共享报告错书话、缺格乱序、全局合同失效及第三轮/伪装历史仍阻止全部新增领取。返修沿用全话源序，回执绑定本格当前round/attempt；首轮失败证据与返修授权来源仍全量核验，共因诊断沿用原返修作用范围。局部范围修正不重新授予批准、不放宽输入门禁。
 
-review_group_size默认4、review_max_wait_seconds默认30，仅合并通知。依赖/高风险/普通首现状态优先通知；原图和返回证据立即落盘。通知去重不授予QA。其他独立请求继续，不占生图槽等待模型审查。
+`tests/test_dispatch_check_scopes.py`覆盖后格局部包/风险问题、后格全局记录问题、真实依赖和远端前格上下文，以及混合首轮/二轮顺序。返修夹具使用隔离PNG、QA和合成调用证据通过真实授权门禁，不调用图像服务；领取结果与原status→candidate算法对照，回执唯一性及原轮次/尝试绑定另验。
 
-一次原图观察填写原六项和适用记忆；新图、尝试、输入、规则或判据变化时重新核对受影响结论。未变的有效图复用内容绑定QA；不得用当前prompt冒充旧图的真实生成输入。
+只读事务结束并复核完整读取集合后，才能创建派发包及写状态；不能把领取操作放入调用方已有的只读事务。选择报告标记`reservation_preflight_only`、`candidate_only`及`dispatch_authorized=false`；它只供领取回执，正式compile和IN_FLIGHT提交检查仍保留。当前优化保留原双锁范围，不宣称跨话校验已经并行，也不允许删除运行中的锁文件。
 
-提交、返回、保存、QA完成时间分别记真实值；服务开始时间未公开就留未知。并发时长不能相加推算墙钟速度。效率复盘列就绪至提交、返回至保存、保存至QA、人工等待及异常恢复区间；重叠区间按并集报告。
+成功派单的`dispatch_metrics`记录锁等待、持锁、预检、公共检查、逐格检查、写入时间以及缓存/选集数量。`locks`按本话状态锁和共享调度锁分别记录等待与持有时间，使用单调时钟；较早取得的锁在等待后续锁时仍占用，因此各锁时间可能不同。保留的总计字段表示取得全部锁前的总耗时及全部锁共同持有的区间，不代表各锁时间之和。`file_reuse_statistics`另外记录读取事务中的实际JSON解析/命中次数、文件哈希次数及哈希读取字节数，`qa_reuse_statistics`记录QA复用。HOLD或容量已满时未执行的阶段可缺省。事务统计不包含事务外的初始上下文读取和领取后的写入核验。这些区间有包含关系，不能直接相加，计时不授予批准。
 
-现有watchdog仍只诊断真实无进展与长请求，不因超时改批准、释放未知请求或增加自动预算。本话仅等跨话比较时交回总控结束本轮，避免空转。
+读取统计还包括`dependency_checks`、`dependency_invalidations`、`negative_observations`、`directory_scans`及`content_read_bytes`。`read_dependencies_verified`只表示本次读取集合复核成功，不授予生产许可；变化导致的HOLD保留分锁和读取测量，`discarded_preflights`记录本次作废数量。预期状态哈希一开始就不匹配时，不算作已经执行后作废的预检。事务外等待、就绪时间未观察到时保持未知。
 
-## 可测量的收敛
+`tests/benchmark_dispatch.py --repeats 3 --limit 1`使用四格隔离合成夹具和独立进程，对比原全量选择、加事务缓存的全量选择和按容量选择。此模式只测选择阶段，其original是原算法对照，并非冻结旧版脚本。
 
-编译、恢复与QA使用准确范围的权威上下文；已有有效未变图片只复用原真实QA，不把整话共享JSON的无关变化当作全部重绘理由。先确认失效的具体输入、判据或相邻比较，再执行原门禁。evaluate输出failure_domain只帮助区分运行/输入上下文问题，不能替代实际QA或自动决定返修。
+完整派单基准使用`tests/benchmark_dispatch.py --cli --repeats 5 --limit 1 --baseline-scripts <冻结旧版scripts目录>`。`dispatch_cli_probe.py`通过真实派单CLI的argparse/main、读取上下文、准备/批准检查、逐格深检和领取写入；包装器仅计数，不替换门禁结论。两版本交替运行同一隔离夹具，创作输入和批准字节保持一致，只重绑实际检查器版本。比较规范化领取结果，另验回执唯一性、包内容、原attempt及账本绑定和共享control不变；每个样本完成后恢复隔离夹具。进程内耗时含观测包装开销，外层生产运行锁未纳入测量；服务调用为零，不能把小夹具倍数外推为实际整批提速。
 
-async_generation.js保存submitted_at、returned_at、save_started_at和saved_at；可注入onPersisted在同一单写通道记录最终保存时间，再通知QA。该回调仅存元数据，不重发请求、不填视觉结论。ready_at只在实际观察到该格就绪时登记，qa_completed_at只在真实QA保存后登记。未记录值留未知。production_metrics分别输出阶段区间并集和累计时间，两者不可互相替代，各阶段也不相加冒充互斥总历时。编辑退化率仅统计图片hash绑定且清晰度与保留区域都有明确结论的实际编辑QA。
+基准的`sha256_over_file_buffers_including_legacy_streaming_v2`计数从实际文件字节进入SHA256的位置观察，覆盖旧校验器的独立哈希及流式哈希；内容键等非文件哈希不计入。此前只统计统一digest入口的旧计数口径不与此口径直接比较，旧版须用新探针重测。
 
-### 最终输入审查复用
+阶段1D增加`dispatch_metrics.ready_wait`，口径为`observed_ready_to_reserve_v1`：逐格深检通过时读取`perf_counter`，只在所有领取写入成功后计算同进程时间差，逐格绑定episode/panel/round/attempt/permit。候选扫描、读取事务复核和写入期间的等待包含在内；本次观察前的锁等待、历史就绪或人工等待不包含。`historical_ready_to_reserve_seconds`固定为null；未取得观测的成功领取也返回null，不拿墙钟`ready_at`与单调时钟相减。容量已满、未选中或依赖失效时没有成功等待样本。单调时间原点不写入状态、包或回执，测量不改变授权与预算；遗留两文件写入仍保留原恢复限制，不据此宣称原子提交。
 
-`receiver_audit`在现有读取事务中核验[最终输入语义证据](final-input-semantics.md)。复用的是绑定内容的执行者观察，不是永久缓存技术PASS；文件、规则/工具、判据或参考用途变化使受影响审查失效，许可/预算/批准撤销仍实时核验。
+第二批的[一致性协议与写入入口](dispatch-consistency.md)说明显式准入的短锁领取、不可变证据保存及恢复。普通RV继续原锁；新协议默认关闭，不能按脚本或候选头存在切换。受管理入口将实际预检及发布放到锁外，锁内复核完整state/control；返回、QA和IN_FLIGHT仍保守加锁。它减少共享临界区，但额外版本验证可能增加单命令耗时，须同时比较总耗时、各锁等待/持有及实际读取次数。
+
+`dispatch_cli_probe.py --managed`通过真实managed CLI运行隔离夹具；稳定request_id幂等、回执唯一性、原批准输入和账本绑定继续单独检查。对照探针的普通模式，不能把合成小夹具锁缩短比例外推为实际整批速度。显式准入开销不计入每次领取；核验及观测包装的开销计入。
+
+第一批1A–1D按本节的完整CLI探针与观测口径验证；第二批按dispatch-consistency.md及managed探针验证。两批收益分开报告，未随本版本提供的历史基准报告不作为已发布证据，本地结果不替代三平台CI或正式Release。活动RV仍使用原冻结代码，不热更新。

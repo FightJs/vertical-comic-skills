@@ -114,6 +114,25 @@ def repair_decision_errors(decision,record,*,require_image_call=False,state=None
     from repair_routes import plan
     try:
         selected=plan(decision,record)
+        if state is not None and state.get('production_policy') == 'first_batch_production_v1':
+            from production_decisions import load_decision, repeated_method
+            _, bound, _, _ = load_decision(root, record, record['attempt_id'])
+            if decision != bound: return ['REPAIR_ROUTE_HOLD:须使用已登记且绑定原QA的生产决定']
+            if repeated_method(state, root, decision):
+                return ['REPAIR_ROUTE_HOLD:同一共因已停止此无效方法；须有实质不同方案']
+            if new_package:
+                from pathlib import Path
+                from codex_reference_contract import checked_file,read_json
+                new = read_json(checked_file(Path(root), new_package))['panels'][0]
+                expected = 'regenerate' if decision['action'] == 'regenerate' else 'local_edit'
+                if new.get('repair_method', 'local_edit') != expected:
+                    return ['REPAIR_ROUTE_HOLD:实际局部编辑/重生方式与决定不同']
+                constraints = [*decision.get('preserve_constraints', [])]
+                targets = set(decision.get('fix_now', []) + decision.get('opportunistic', []))
+                constraints += [i['target'] for i in decision['issues'] if i['id'] in targets]
+                if any(c not in new.get('prompt', '') for c in constraints):
+                    return ['REPAIR_ROUTE_HOLD:实际prompt缺合并目标或保留约束']
+        if selected['route']=='rebuild_inputs': selected['image_call_allowed']=False
         if selected['route']=='rebuild_inputs' and state is not None and root is not None:
             from pathlib import Path
             from codex_reference_contract import checked_file,read_json
@@ -146,7 +165,8 @@ def _scene_reference_errors(panel,root):
     if ref:
         try:
             from PIL import Image
-            with Image.open(checked_file(Path(root),ref)) as im:
+            from codex_reference_contract import physical_file
+            with Image.open(physical_file(checked_file(Path(root),ref))) as im:
                 if (not isinstance(box,list) or len(box)!=4 or any(type(v) is not int for v in box) or
                     not (0<=box[0]<box[2]<=im.width and 0<=box[1]<box[3]<=im.height)):
                     return ['INPUT_QUALITY_HOLD:场景选区超出实际上传原板']

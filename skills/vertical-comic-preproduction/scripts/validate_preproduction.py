@@ -2,6 +2,7 @@
 """Deterministic structural and continuity gate for the preproduction skill."""
 
 from __future__ import annotations
+from codex_reference_contract import is_file, read_json, read_text, resolve_path
 
 import argparse
 import hashlib
@@ -40,23 +41,20 @@ SPATIAL_HOLD_MARKERS = (
 
 
 def load(path: Path) -> Any:
-    return json.loads(path.read_text(encoding="utf-8-sig"))
+    return read_json(path)
 
 
 def digest(path: Path) -> str:
-    h = hashlib.sha256()
-    with path.open("rb") as f:
-        for chunk in iter(lambda: f.read(1024 * 1024), b""):
-            h.update(chunk)
-    return h.hexdigest()
+    from codex_reference_contract import digest as file_digest
+    return file_digest(path)
 
 
 def safe(root: Path, rel: str) -> Path | None:
     if not isinstance(rel, str) or not rel.strip():
         return None
-    p = (root / rel).resolve()
+    p = resolve_path(root / rel)
     try:
-        p.relative_to(root.resolve())
+        p.relative_to(resolve_path(root))
     except ValueError:
         return None
     return p
@@ -64,7 +62,7 @@ def safe(root: Path, rel: str) -> Path | None:
 
 class Gate:
     def __init__(self, root: Path, expected_panel_ids: list[str] | None = None) -> None:
-        self.root = root.resolve()
+        self.root = resolve_path(root)
         self.expected_panel_ids = expected_panel_ids
         self.prompt_root = self.root / "04_B提示词包_CANDIDATE"
         self.errors: list[str] = []
@@ -171,7 +169,7 @@ class Gate:
             return False
         event = safe(self.root, approval.get("event_path"))
         expected = approval.get("sha256")
-        return bool(event and event.is_file() and isinstance(expected, str) and re.fullmatch(r"[0-9a-fA-F]{64}", expected) and digest(event).lower() == expected.lower())
+        return bool(event and is_file(event) and isinstance(expected, str) and re.fullmatch('[0-9a-fA-F]{64}', expected) and (digest(event).lower() == expected.lower()))
 
     def check_adjacent(self, previous: dict[str, Any], current: dict[str, Any]) -> None:
         pair = f"{previous.get('panel_id')}→{current.get('panel_id')}"
@@ -279,7 +277,7 @@ class Gate:
             else:
                 aliases.add(alias)
             path = safe(reference_root or self.root, ref.get("path"))
-            if path is None or not path.is_file():
+            if path is None or not is_file(path):
                 self.error(f"{label}:{alias or i}参考图不存在或越出本话目录")
             else:
                 expected = ref.get("sha256")
@@ -385,12 +383,12 @@ class Gate:
                     or prompt_data.get("identity_policy") == IDENTITY_POLICY
                     or 'background_treatment' in (panel.get('framing') or {})):
                 actual = safe(self.prompt_root, panel.get("prompt_file", f"{panel.get('panel_id')}/prompt.txt"))
-                if not actual or not actual.is_file():
+                if not actual or not is_file(actual):
                     self.error(f"{label}:实际prompt.txt缺失或路径越界")
-                elif actual.read_text(encoding="utf-8-sig").strip() != str(panel.get("prompt", "")).strip():
+                elif read_text(actual, encoding='utf-8-sig').strip() != str(panel.get("prompt", "")).strip():
                     self.error(f"{label}:实际prompt.txt与manifest不一致，参考用途不可只存在于索引")
                 details = safe(self.prompt_root, panel.get("panel_json_file", f"{panel.get('panel_id')}/提示词.json"))
-                if not details or not details.is_file():
+                if not details or not is_file(details):
                     self.error(f"{label}:逐格提示词.json缺失或路径越界")
                 else:
                     try:
@@ -446,9 +444,9 @@ class Gate:
             self.error("镜头改编表与提示词格数不一致")
 
     def run(self, shot_path: Path, prompt_path: Path) -> dict[str, Any]:
-        self.prompt_root = prompt_path.parent.resolve()
-        self.shot_root = shot_path.parent.resolve()
-        if not shot_path.is_file():
+        self.prompt_root = resolve_path(prompt_path.parent)
+        self.shot_root = resolve_path(shot_path.parent)
+        if not is_file(shot_path):
             self.error(f"镜头改编表不存在: {shot_path}")
             shot_panels: list[dict[str, Any]] = []
         else:
@@ -459,11 +457,11 @@ class Gate:
                 self.errors.extend(validate_identity(shot_data, self.root))
             except (OSError, ValueError, TypeError, KeyError) as exc:
                 self.error(f"IDENTITY_HOLD: 镜头表身份依据或绑定无法核验: {exc}")
-        if not prompt_path.is_file():
+        if not is_file(prompt_path):
             self.error(f"提示词索引不存在: {prompt_path}")
         else:
             prompt_data = load(prompt_path)
-            if shot_path.is_file() and isinstance(shot_data, dict) and isinstance(prompt_data, dict):
+            if is_file(shot_path) and isinstance(shot_data, dict) and isinstance(prompt_data, dict):
                 if shot_data.get("input_priority_policy") != prompt_data.get("input_priority_policy"):
                     self.error("镜头表与提示词包input_priority_policy不一致")
                 if shot_data.get("continuity_policy") != prompt_data.get("continuity_policy"):
@@ -487,9 +485,9 @@ def main() -> int:
     parser.add_argument("--manifest", default=None)
     parser.add_argument("--report", default=None)
     args = parser.parse_args()
-    root = Path(args.root).resolve()
-    shot = Path(args.shot_manifest).resolve() if args.shot_manifest else root / "01_镜头改编_CANDIDATE" / "镜头改编表.json"
-    prompt = Path(args.manifest).resolve() if args.manifest else root / "04_B提示词包_CANDIDATE" / "全话提示词索引.json"
+    root = resolve_path(Path(args.root))
+    shot = resolve_path(Path(args.shot_manifest)) if args.shot_manifest else root / "01_镜头改编_CANDIDATE" / "镜头改编表.json"
+    prompt = resolve_path(Path(args.manifest)) if args.manifest else root / "04_B提示词包_CANDIDATE" / "全话提示词索引.json"
     result = Gate(root).run(shot, prompt)
     output = json.dumps(result, ensure_ascii=False, indent=2) + "\n"
     print(output, end="")

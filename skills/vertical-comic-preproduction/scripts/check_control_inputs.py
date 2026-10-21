@@ -5,6 +5,7 @@ This verifies a local contract, not provider internals, spatial truth or image
 quality. It never invokes a generator or upgrades an image to accepted status.
 """
 from __future__ import annotations
+from codex_reference_contract import is_file, read_json, resolve_path, digest
 
 import argparse
 import hashlib
@@ -23,7 +24,7 @@ SOURCES = {"camera_view_render", "pose_extraction", "edge_extraction", "depth_es
 
 
 def sha(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    return digest(path)
 
 
 def positive(value: Any) -> bool:
@@ -47,7 +48,7 @@ def ratio(value: Any) -> float | None:
 
 
 def validate_manifest(data: Any, root: Path, phase: str = "preflight") -> dict[str, Any]:
-    root = root.resolve()
+    root = resolve_path(root)
     errors: list[str] = []
     warnings: list[str] = []
     panels_out: list[dict[str, Any]] = []
@@ -63,8 +64,8 @@ def validate_manifest(data: Any, root: Path, phase: str = "preflight") -> dict[s
         if not isinstance(rel, str) or not rel.strip() or Path(rel).is_absolute():
             error(label, "证据必须使用包内相对路径")
             return None
-        path = (root / rel).resolve()
-        if not path.is_relative_to(root) or not path.is_file():
+        path = resolve_path(root / rel)
+        if not path.is_relative_to(root) or not is_file(path):
             error(label, "文件缺失或越出包目录")
             return None
         if not isinstance(expected, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", expected) or sha(path).lower() != expected.lower():
@@ -161,7 +162,7 @@ def validate_manifest(data: Any, root: Path, phase: str = "preflight") -> dict[s
                 error(label, "generation_size缺失或与批准frame_ratio不一致")
         control_ids: set[str] = set()
         request_controls: list[dict[str, Any]] = []
-        audit_paths = {(root / x["path"]).resolve() for x in panel.get("supporting_documents", []) if isinstance(x, dict) and isinstance(x.get("path"), str)} if isinstance(panel.get("supporting_documents", []), list) else set()
+        audit_paths = {resolve_path(root / x['path']) for x in panel.get("supporting_documents", []) if isinstance(x, dict) and isinstance(x.get("path"), str)} if isinstance(panel.get("supporting_documents", []), list) else set()
         for ci, control in enumerate(controls):
             c_label = f"{label}.control_inputs[{ci}]"
             if not isinstance(control, dict):
@@ -191,7 +192,8 @@ def validate_manifest(data: Any, root: Path, phase: str = "preflight") -> dict[s
             if path:
                 try:
                     from PIL import Image
-                    with Image.open(path) as image:
+                    from codex_reference_contract import physical_file
+                    with Image.open(physical_file(path)) as image:
                         actual_size = list(image.size)
                         image.verify()
                     if path.suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp"} or actual_size != control.get("target_size") or not size_valid or actual_size != size:
@@ -218,8 +220,8 @@ def validate_manifest(data: Any, root: Path, phase: str = "preflight") -> dict[s
             response = evidence(execution.get("response_evidence"), label + ".response_evidence") if not codex else None
             if request and response:
                 try:
-                    req = json.loads(request.read_text(encoding="utf-8-sig"))
-                    res = json.loads(response.read_text(encoding="utf-8-sig"))
+                    req = read_json(request)
+                    res = read_json(response)
                     request_id = execution.get("request_id")
                     if not isinstance(req, dict) or not isinstance(res, dict) or not isinstance(request_id, str) or not request_id.strip() or req.get("request_id") != request_id or res.get("request_id") != request_id or req.get("backend_id") != backend_id or req.get("panel_id") != pid or req.get("controls") != request_controls or res.get("status") != "COMPLETED":
                         error(label, "执行请求/响应与本格实际控制参数不一致")
@@ -254,12 +256,12 @@ def main() -> int:
     parser.add_argument("--phase", choices=("preflight", "execution"), default="preflight")
     parser.add_argument("--report", help="新报告路径；已有文件不覆盖")
     args = parser.parse_args()
-    root = Path(args.package_root).resolve()
-    manifest = (root / args.manifest).resolve()
+    root = resolve_path(Path(args.package_root))
+    manifest = resolve_path(root / args.manifest)
     try:
         if Path(args.manifest).is_absolute() or not manifest.is_relative_to(root):
             raise ValueError("manifest须为包内相对路径")
-        result = validate_manifest(json.loads(manifest.read_text(encoding="utf-8-sig")), root, args.phase)
+        result = validate_manifest(read_json(manifest), root, args.phase)
     except (OSError, ValueError, TypeError) as exc:
         result = {"status": "HOLD", "errors": [str(exc)], "warnings": [], "structural_control_executed": False, "image_acceptance": "NOT_ASSESSED"}
     output = json.dumps(result, ensure_ascii=False, indent=2) + "\n"

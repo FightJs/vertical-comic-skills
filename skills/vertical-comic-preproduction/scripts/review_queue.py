@@ -26,6 +26,15 @@ def build_queue(state,root,batch,*,incremental=False,processed=None):
         image=checked_file(root,r.get('output'))
         action='REVIEW_SIX_DIMENSIONS' if status=='GENERATED' else 'DIAGNOSE_FAILED_IMAGE' if status=='VISUAL_FAIL' else 'VERIFY_RECORDED_QA'
         item={'panel_id':pid,'attempt_id':r.get('attempt_id'),'round_id':r.get('round_id'),'image':str(image),'image_sha256':digest(image),'action':action}
+        if state.get('production_policy') == 'first_batch_production_v1' and status == 'VISUAL_FAIL':
+            from production_decisions import load_decision
+            try:
+                _, decision, _, ref = load_decision(root, r, r['attempt_id'])
+                if decision['action'] in {'defer_manual','stop_diagnose'}:
+                    item.update(action='REUSE_RECORDED_PRODUCTION_DECISION', production_decision=ref)
+                    if incremental: continue
+            except (OSError, ValueError, TypeError, KeyError):
+                pass
         item['priority']='DEPENDENCY_OR_STATE' if pid in anchors else 'NORMAL'
         if status in {'VISUAL_PASS','USER_ACCEPTED'}:
             try:

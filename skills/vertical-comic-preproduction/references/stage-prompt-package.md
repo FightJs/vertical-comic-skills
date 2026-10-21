@@ -18,7 +18,7 @@ For each panel:
 1. create `Pxxx/参考图/`;
 2. copy the actual references needed for this panel: directional scene view, character/current costume, necessary detail/style and the target-camera composition only when selected in Phase D; keep any annotated station maps in supporting review documents for the Codex route;
 3. register each copied file with a unique `@asset_alias`, role, version, relative path and SHA256;
-4. write a concise positive prompt and negative prompt based on the approved camera, framing and per-person spatial records;
+4. write a complete executable positive prompt and necessary negative constraints based on the approved camera, framing and per-person spatial records;
    the first block of every positive prompt must be an executable camera block containing, in literal text, all of: `机位角度`, `景别`, `画幅比例`, `摄影机位置/朝向`, and `可见面与遮挡逻辑`. Do not replace this block with “按 locked shot 执行” or a reference to another JSON file;
 5. state screen positions globally: `画面左/中/右`, `上部/中部/下部`, `面对观众/背对观众`;
 6. state actual visible face angle and occlusion rather than generic “侧脸”;
@@ -69,4 +69,6 @@ v2编译保留source_panel_id、原锁定文字、获批镜头与真实前格con
 
 从冻结检查项编译真实执行文本见[实际执行质量与返修分流](execution-quality.md)。复用现有记录和人工停点，不静默升级旧RV。
 
-当前execution_quality_v1正文编译以prompt-package.md的紧凑分支为准。实际附件仍由codex_reference_contract导出并核对场景视图、关键细节和原批准用途；候选默认镜头不自动获得放行。编译/文件问题不记成视觉失败，修输入后走原门禁，不重发未知请求。
+当前execution_quality_v1正文编译以prompt-package.md的完整具体内容分支为准。实际附件仍由codex_reference_contract导出并核对场景视图、关键细节和原批准用途；候选默认镜头不自动获得放行。编译/文件问题不记成视觉失败，修输入后走原门禁，不重发未知请求。
+
+新整话采用[最终输入收敛v2](final-input-semantics.md#前期收敛按包执行v2)：完整保留必要绘图信息，不为“简短”截断内容。原generation规则约束由build_prompt去重编入，具体事实、规则和审核判据在前期核对完毕。前期正式交付覆盖全部指定格的静态输入，未来实图只按准确补齐方案处理。

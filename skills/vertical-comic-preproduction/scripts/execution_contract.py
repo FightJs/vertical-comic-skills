@@ -1,4 +1,5 @@
 """Bind real checker versions and scoped semantic review; bulk preflight reuses QA once."""
+from codex_reference_contract import resolve_path, scan_directory, is_file
 import argparse,json
 from pathlib import Path
 from codex_reference_contract import checked_file,digest,read_json
@@ -11,13 +12,23 @@ def semantic_checks(state):
 SKILLS=('vertical-comic-preproduction','vertical-comic-visual-assets','vertical-comic-shot-design','vertical-comic-panel-generation','vertical-comic-image-review')
 
 def toolchain(base=None):
-    base=Path(base).resolve() if base is not None else Path(__file__).resolve().parent
-    files=[{'path':p.relative_to(base).as_posix(),'sha256':digest(p)} for p in sorted(base.iterdir()) if p.suffix in {'.py','.js'}]
+    base=resolve_path(Path(base)) if base is not None else resolve_path(Path(__file__)).parent
+    members=scan_directory(base,suffixes=('.py','.js'))
+    if is_file(base/'runtime_capabilities.json'):members.append(base/'runtime_capabilities.json')
+    files=[{'path':p.relative_to(base).as_posix(),'sha256':digest(p)} for p in sorted(members)]
     entries=[{'path':str(base.parent.parent/name/'SKILL.md'),'sha256':digest(base.parent.parent/name/'SKILL.md')} for name in SKILLS]
     return {'policy':'comic_toolchain_v1','release':POLICY,'root':str(base),'files':files,'skill_entries':entries}
 
 def state_errors(state,root):
     try:
+        from dispatch_publication import require_legacy
+        require_legacy(state)
+        from authority_updates import state_errors as authority_errors
+        errors = authority_errors(state)
+        if errors: return errors
+        from production_decisions import enabled as production_enabled
+        if production_enabled(state) and state.get('execution_mode') != 'episode_async_v1':
+            raise ValueError('新生产决策仅用于新整话运行，不热迁移旧模式')
         from input_semantics import enabled as semantics_enabled
         semantics_enabled(state)
         from visual_evidence import binding_errors as visual_binding_errors
@@ -137,11 +148,11 @@ def semantic_template(state,root,bid):
 def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--state',required=True);p.add_argument('--panels',nargs='*');p.add_argument('--batch-preflight',action='store_true');p.add_argument('--write-semantic');p.add_argument('--batch');a=p.parse_args()
     try:
-        path=Path(a.state).resolve();root=path.parent.parent;state=read_json(path);errors=state_errors(state,root)
+        path=resolve_path(Path(a.state));root=path.parent.parent;state=read_json(path);errors=state_errors(state,root)
         if errors:raise ValueError(';'.join(errors))
         if a.write_semantic:
             if not a.batch and state.get('preparation_policy')!='episode_preparation_v1':raise ValueError('旧模式语义核对模板须指定真实半话batch')
-            value=semantic_template(state,root,a.batch);dest=Path(a.write_semantic).resolve();dest.relative_to(root)
+            value=semantic_template(state,root,a.batch);dest=resolve_path(Path(a.write_semantic));dest.relative_to(root)
             with dest.open('x',encoding='utf-8', newline='\n') as f:json.dump(value,f,ensure_ascii=False,indent=2)
             print(json.dumps({'status':'UNREVIEWED_SEMANTIC_TEMPLATE','path':str(dest)},ensure_ascii=False));return 0
         from staged_workflow import evaluate, preflight_many

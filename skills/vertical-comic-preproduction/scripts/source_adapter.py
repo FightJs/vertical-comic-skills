@@ -1,4 +1,5 @@
 """One immutable source-ID mapping; never renumber or rewrite original script content."""
+from codex_reference_contract import read_json, resolve_path
 import argparse,json,re
 from pathlib import Path
 from codex_reference_contract import checked_file,digest
@@ -23,7 +24,7 @@ def verify(source,root,episode):
     if mapping is None:return ['SOURCE_ID_HOLD:新合同须先冻结源编号映射']
     try:
         if mapping.get('policy')!=POLICY or mapping.get('episode_id')!=episode:raise ValueError('编号映射版本/话号不一致')
-        original=json.loads(checked_file(Path(root),mapping['source_snapshot']).read_text(encoding='utf-8-sig'))
+        original=read_json(checked_file(Path(root), mapping['source_snapshot']))
         if source!=adapted(original,episode,mapping['source_snapshot']):raise ValueError('派生快照与源格序/原文字段不一致')
         return []
     except (OSError,ValueError,TypeError,KeyError) as exc:return [f'SOURCE_ID_HOLD:{exc}']
@@ -31,9 +32,9 @@ def verify(source,root,episode):
 def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--root',required=True);p.add_argument('--source-snapshot',required=True);p.add_argument('--episode',required=True);p.add_argument('--write',required=True);a=p.parse_args()
     try:
-        root=Path(a.root).resolve();source=Path(a.source_snapshot).resolve();source.relative_to(root)
+        root=resolve_path(Path(a.root));source=resolve_path(Path(a.source_snapshot));source.relative_to(root)
         ref={'path':source.relative_to(root).as_posix(),'sha256':digest(source)}
-        value=adapted(json.loads(source.read_text(encoding='utf-8-sig')),a.episode,ref);dest=Path(a.write).resolve();dest.relative_to(root)
+        value=adapted(read_json(source), a.episode, ref);dest=resolve_path(Path(a.write));dest.relative_to(root)
         with dest.open('x',encoding='utf-8', newline='\n') as f:json.dump(value,f,ensure_ascii=False,indent=2)
         print(json.dumps({'status':'DERIVED_SOURCE_ONLY','path':str(dest),'panels':len(value['panel_ids'])},ensure_ascii=False));return 0
     except (OSError,ValueError,TypeError,KeyError) as exc:print(json.dumps({'status':'HOLD','errors':[str(exc)]},ensure_ascii=False));return 1

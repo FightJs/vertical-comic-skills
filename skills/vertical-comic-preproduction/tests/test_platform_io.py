@@ -84,6 +84,40 @@ except ValueError as exc:
         self.assertEqual(len(json.loads(state.read_bytes())['dispatch_ledger']), 1)
         self.assertEqual(digest(control), sha_control)
 
+    def test_new_lock_file_needs_no_initialization_write(self):
+        lock = self.root / 'empty.lock'
+        with io.file_lock(lock):
+            self.assertEqual(lock.stat().st_size, 0)
+        with io.file_lock(lock):
+            self.assertEqual(lock.stat().st_size, 0)
+
+    @unittest.skipUnless(os.name == 'nt', 'native Windows byte-range lock regression')
+    def test_windows_empty_locked_file_waits_instead_of_failing_initialization(self):
+        # The child locks an empty file before signaling readiness. This
+        # deterministically reaches the old sentinel-flush race, without
+        # relying on two processes happening to see an empty file together.
+        lock, ready = self.root / 'empty-held.lock', self.root / 'empty-ready'
+        child = self.spawn("""from pathlib import Path
+import msvcrt,time
+with Path(sys.argv[2]).open('a+b') as stream:
+    stream.seek(0)
+    msvcrt.locking(stream.fileno(),msvcrt.LK_NBLCK,1)
+    Path(sys.argv[3]).write_bytes(b'locked')
+    time.sleep(30)
+""", lock, ready)
+        deadline = time.monotonic() + 10
+        while not ready.exists() and child.poll() is None and time.monotonic() < deadline:
+            time.sleep(0.02)
+        self.assertTrue(ready.exists())
+        self.assertEqual(lock.stat().st_size, 0)
+        with self.assertRaises(TimeoutError):
+            with io.file_lock(lock, timeout=0.1):
+                self.fail('second owner acquired locked byte zero')
+        self.assertEqual(lock.stat().st_size, 0)
+        child.kill(); child.communicate(timeout=10)
+        with io.file_lock(lock, timeout=1):
+            self.assertEqual(lock.stat().st_size, 0)
+
     def test_timeout_and_killed_owner_release_without_deleting_lock(self):
         lock = self.root / 'shared.lock'
         ready = self.root / 'ready'

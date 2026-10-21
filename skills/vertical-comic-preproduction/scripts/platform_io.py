@@ -35,9 +35,9 @@ def file_lock(path, *, timeout=60.0):
     with path.open('a+b') as stream:
         if os.name == 'nt':
             import msvcrt
-            if stream.seek(0, os.SEEK_END) == 0:
-                stream.write(b'\0')
-                stream.flush()
+            # Windows permits byte-range locks beyond EOF. Do not initialize
+            # a sentinel before acquiring: another process can lock byte zero
+            # between our empty-file check and flush, making that write fail.
             def acquire():
                 stream.seek(0)
                 msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)

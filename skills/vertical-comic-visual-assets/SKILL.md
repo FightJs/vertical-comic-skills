@@ -5,7 +5,7 @@ description: Lock episode-specific character identities, costume states, scenes 
 
 # 条漫视觉基准与资产
 
-所有阶段启动与恢复即执行[阶段与交付进度](../vertical-comic-preproduction/references/review-progress.md)：总控汇报阶段、到本职责ZIP的百分比、进行事项、阻塞与下一步；正常制作每2分钟、仅服务等待每5分钟，重要变化立即报。显示独立于人工停点和少询问委托，子agent上报事实由总控合并；不为通知重跑检查、取消在途请求或改预算。
+所有阶段启动与恢复即执行[阶段与交付进度](../vertical-comic-preproduction/references/review-progress.md)：总控汇报阶段、到本职责ZIP的百分比、进行事项、阻塞与下一步；正常制作每10分钟、仅服务等待每15分钟，重要变化立即报。显示独立于人工停点和少询问委托，子agent上报事实由总控合并；不为通知重跑检查、取消在途请求或改预算。
 
 用户已明确委托前期“仅在无法消解的剧本与资产冲突时询问”时，优先执行[前期最少询问规则](../vertical-comic-preproduction/references/grouped-review.md#前期仅询问无法消解的剧本资产冲突)：A、B、生图包与导出由执行者审核并记录决定，不再请求逐项确认；该委托不自动扩大到正文生产。
 

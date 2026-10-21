@@ -28,8 +28,8 @@
   if (options.onInputHeadRefresh && jobs.some(j => j.kind !== 'asset' && (!j.book_id || !j.episode_id)))
     throw new Error("INPUT_HEAD_SCOPE_HOLD: exact book/episode required before invoking");
   if (options.onProgress !== undefined && typeof options.onProgress !== 'function') throw new Error('onProgress must be a function');
-  const progressIntervalMs = options.progressIntervalMs ?? 120000;
-  const serviceProgressIntervalMs = options.serviceProgressIntervalMs ?? 300000;
+  const progressIntervalMs = options.progressIntervalMs ?? 600000;
+  const serviceProgressIntervalMs = options.serviceProgressIntervalMs ?? 900000;
   const progressPollMs = options.progressPollMs ?? 30000;
   if (![progressIntervalMs, serviceProgressIntervalMs, progressPollMs].every(v => Number.isInteger(v) && v > 0) ||
       progressPollMs > 60000 || serviceProgressIntervalMs < progressIntervalMs)

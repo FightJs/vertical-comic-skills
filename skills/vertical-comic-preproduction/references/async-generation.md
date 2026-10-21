@@ -26,7 +26,7 @@ scripts/async_generation.js的单元测试使用假invoke验证请求重叠、�
 
 ## 低开销显示与让出控制
 
-新运行必须接入`onProgress(event)`显示回调；参数在程序接口中保留可选，以兼容原调用方。，正常间隔`progressIntervalMs=120000`，仅服务等待`serviceProgressIntervalMs=300000`，本地轻检查`progressPollMs=30000`。回调仅汇报内存中的提交/在途/返回/保存数量及变化信号，不重读全部输入。它不是图片QA，不记录watchdog真实进展。未接回调的旧执行器保持原行为。
+新运行必须接入`onProgress(event)`显示回调；参数在程序接口中保留可选，以兼容原调用方。正常间隔`progressIntervalMs=600000`，仅服务等待`serviceProgressIntervalMs=900000`，本地轻检查`progressPollMs=30000`。回调仅汇报内存中的提交/在途/返回/保存数量及变化信号，不重读全部输入。它不是图片QA，不记录watchdog真实进展。未接回调的旧执行器保持原行为。
 
 在现有异步exec中接入如下回调（与onReviewBatchReady并存）：
 

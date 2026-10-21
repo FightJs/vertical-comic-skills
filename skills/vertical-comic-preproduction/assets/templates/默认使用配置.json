@@ -73,8 +73,8 @@
   },
   "progress": {
     "policy": "task_progress_v1",
-    "active_seconds": 120,
-    "service_wait_seconds": 300,
+    "active_seconds": 600,
+    "service_wait_seconds": 900,
     "yield_seconds": 30
   }
 }

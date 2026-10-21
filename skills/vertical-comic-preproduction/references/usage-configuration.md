@@ -123,4 +123,4 @@ python <快照scripts>/init_preproduction.py --config <配置JSON> --runtime-sna
 当前安装版新建episode_async_v1默认写入input_quality_policy=execution_quality_v1，即使旧使用配置未列execution_quality。该默认只作用于新初始化；恢复现有RV继续使用其冻结快照和原字段，不自动补写策略或重签批准。
 
 
-显示默认无需首次配置：`progress.policy=task_progress_v1`，`active_seconds=120`、`service_wait_seconds=300`、`yield_seconds=30`。它是通知节奏，不调整生图容量、QA组大小、人工审核节点或worker_watchdog阈值；旧RV不回写该配置。可在新任务配置中调整通知间隔，服务等待不得比正常制作更频繁，让出检查不超过60秒。具体接线见[阶段与交付进度](review-progress.md)。
+显示默认无需首次配置：`progress.policy=task_progress_v1`，`active_seconds=600`、`service_wait_seconds=900`、`yield_seconds=30`。它是通知节奏，不调整生图容量、QA组大小、人工审核节点或worker_watchdog阈值；旧RV不回写该配置。可在新任务配置中调整通知间隔，服务等待不得比正常制作更频繁，让出检查不超过60秒。具体接线见[阶段与交付进度](review-progress.md)。

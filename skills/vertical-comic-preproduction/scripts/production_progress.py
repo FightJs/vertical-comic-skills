@@ -15,7 +15,7 @@ import time
 from platform_io import atomic_json
 
 POLICY = 'task_progress_v1'
-DEFAULTS = {'policy': POLICY, 'active_seconds': 120, 'service_wait_seconds': 300,
+DEFAULTS = {'policy': POLICY, 'active_seconds': 600, 'service_wait_seconds': 900,
             'yield_seconds': 30}
 WEIGHTS = {'preparation': {'input': 5, 'visual': 20, 'shots': 25, 'package': 30,
                            'rehearsal': 15, 'delivery': 5},

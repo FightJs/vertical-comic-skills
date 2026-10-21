@@ -64,6 +64,13 @@ class BatchedApprovalTests(unittest.TestCase):
         with file_session():
             self.assertEqual(self.check(), ['缺少原范围、原版本或未变条目适用的真实批准:P003,P004'])
 
+    def test_one_shot_scope_iterable_cannot_hide_unapproved_panels(self):
+        proof = {**self.proof, 'panel_ids': ['P001', 'P002']}
+        with file_session():
+            errors = readiness.approval_errors_for(self.state, self.root, 'shot_design',
+                self.artifacts, (pid for pid in self.ids), proof)
+        self.assertEqual(errors, ['缺少原范围、原版本或未变条目适用的真实批准:P003,P004'])
+
     def test_mixed_preserved_versions_fall_back_to_each_unchanged_row(self):
         # Neither old version covers every current row, but their union does.
         current = read_json(self.root / self.source['shot_manifest']['path'])

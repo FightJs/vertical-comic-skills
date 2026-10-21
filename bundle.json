@@ -620,8 +620,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/panel_readiness.py",
-      "sha256": "0581366fa2302582a64979dae078bdbd57bdc8f1e3456e44edadd89b46d822c1",
-      "bytes": 18959
+      "sha256": "122a9eba170edbb45900f5772519aa5da55fc401730f16c27a555099ab3f6471",
+      "bytes": 19054
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/parallel_dispatch.py",
@@ -1040,8 +1040,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/tests/test_preparation_speed.py",
-      "sha256": "dffef79f478acc079fbc8f16620cafddbe81c2224f3ba8e0123000872ed6b493",
-      "bytes": 7150
+      "sha256": "05f0b6269e1ff6c67dad831706b5edce903283cf7ed43b87b718b31d7afc16a5",
+      "bytes": 7583
     },
     {
       "path": "skills/vertical-comic-preproduction/tests/test_preparation_workflow.py",

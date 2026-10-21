@@ -120,6 +120,7 @@ def _artifacts_covered(state,root,proof,artifacts,ids,phase=None):
     except (OSError,ValueError,TypeError,KeyError,RecursionError):return False
 
 def approval_errors_for(state,root,phase,artifacts,ids,direct=None,*,proofs=()):
+    ids=tuple(ids)  # Preserve one-shot iterables for eligibility and missing-scope reporting.
     def indexed_candidates():
         candidates=[p for p in proofs if isinstance(p,dict)]
         if isinstance(direct,dict):candidates.append(direct)

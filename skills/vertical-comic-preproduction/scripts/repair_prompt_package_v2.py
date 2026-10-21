@@ -344,8 +344,13 @@ def character_details(panel: dict[str, Any], event: str, angle: str, visible: st
             "只显示本格实际可见的面；未明确露出正脸时不得擅自补正脸",
         )
         position = executable_text(item.get("screen_position"), position_map.get(name, "屏幕位置未明确，保持CAMERA_HOLD"))
+        from visual_evidence import BODY_CROP_LABELS
+        crop = item.get('body_crop') or (panel.get('framing') or {}).get('body_crop', '')
+        if crop in ('mixed', 'environment'):
+            raise ValueError(f"INPUT_CONFLICT:{name}:须在编译前明确逐人物body_crop，不能继承mixed/environment")
+        crop_label = BODY_CROP_LABELS.get(str(crop), crop)
         lines.append(
-            f"- {name}：屏幕位置={position}；动作/身体={action}；头部/视线={gaze}；微表情={expression}；可见面={face_visibility}；朝向关系={relation}；身体裁切={item.get('body_crop') or (panel.get('framing') or {}).get('body_crop', '')}。"
+            f"- {name}：屏幕位置={position}；动作/身体={action}；头部/视线={gaze}；微表情={expression}；可见面={face_visibility}；朝向关系={relation}；身体裁切={crop_label}。"
         )
     result = "逐人物执行：\n" + "\n".join(lines)
     from input_semantics import conflict_errors
@@ -374,7 +379,7 @@ def build_prompt(panel: dict[str, Any], angle: str, scale: str, ratio: str,
         "本格脚本场景",
     )
     framing = panel.get("framing")
-    crops = {"waist_up": "腰以上", "chest_up": "胸以上", "shoulders_up": "肩以上", "face_detail": "面部局部", "hands_detail": "手部局部", "object_detail": "物件局部", "full_body": "全身", "environment": "必要环境范围", "mixed": "逐人物指定的裁切"}
+    from visual_evidence import BODY_CROP_LABELS as crops
     crop_line = ""
     if isinstance(framing, dict):
         crop_line = f"身体裁切：{crops.get(str(framing.get('body_crop')), '')}；视觉重点：{compact(framing.get('focus'))}；必显信息：{compact(framing.get('required_visible'))}；背景层级：{framing.get('background_level', '')}。"

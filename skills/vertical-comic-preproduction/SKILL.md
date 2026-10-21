@@ -42,6 +42,8 @@ description: Coordinate first-batch per-panel comic production for further human
 
 ## 阶段职责
 
+批量铺开逐格包之前，按[真实入口先行验证](references/final-input-semantics.md#批量制作前先走真实入口)用本批代表性复杂格及跨话边界跑完整候选编译，先稳定字段、参考职责和可移植路径。前期授权与正文授权分开，同批候选不提前索要前话B批准；具体边界见该文档。
+
 A由[视觉资产](../vertical-comic-visual-assets/SKILL.md)维护身份、衣装、场景与画风；B由[镜头设计](../vertical-comic-shot-design/SKILL.md)落实动作、承托、机位及裁切；[逐格生图](../vertical-comic-panel-generation/SKILL.md)编译真实输入并提交；[图片验收](../vertical-comic-image-review/SKILL.md)完成实际QA、连续性与最终包。不要复制第二套身份、镜头或参考台账。
 
 全批先按[批次运行](references/batch-runtime.md)冻结唯一快照。每话唯一owner写本话状态，总控单写共享调度；多话可按实际槽位使用最多五个工作agent，不能用新聊天替代。额度服从实际核定服务容量；本话租约内自主领取、预检、提交和保存。独立格异步，状态落盘串行；真实返回保存后释放生图槽，不等待QA。未知结果先查证，不超时重发。

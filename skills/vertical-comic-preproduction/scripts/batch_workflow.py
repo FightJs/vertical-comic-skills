@@ -243,15 +243,27 @@ def completed_errors(state, root, record, shot, basis, records, *, require_pass=
     return errors
 
 
-def input_errors(state, root, record, shot, basis, records, *, candidate=False, dispatch_audit=False):
+def input_errors(state, root, record, shot, basis, records, *, candidate=False, dispatch_audit=False, preparation_only=False):
     """Full existing single-panel preflight; batching does not weaken inputs."""
     book, episode, pid = state["book_id"], state["episode_id"], record["panel_id"]
     authorization = state.get("production_authorization")
-    errors = approval_errors(authorization, root, [state["source_script"]], book, episode)
-    if pid not in (authorization or {}).get("panel_ids", []) and episode+'-'+pid not in (authorization or {}).get('panel_ids',[]):
-        errors.append("当前格不在已授权生产范围")
+    if preparation_only and not (candidate or dispatch_audit):
+        return ['PREPARATION_AUTHORITY_HOLD:前期授权只允许只读候选或接包审计']
+    if preparation_only and 'preparation_authorization' in state:
+        if state.get('parallel_context'):
+            return ['PREPARATION_AUTHORITY_HOLD:前期授权不得用于线上调度上下文']
+        from task_context import preparation_errors
+        errors = preparation_errors(state, root, [pid])
+    else:
+        errors = approval_errors(authorization, root, [state["source_script"]], book, episode)
+        if isinstance(authorization, dict) and (authorization.get('policy') == 'preparation_authorization_v1' or authorization.get('phase') == 'preparation'):
+            errors.append('PREPARATION_AUTHORITY_HOLD:前期记录不能用作正文生产授权')
+        if pid not in (authorization or {}).get("panel_ids", []) and episode+'-'+pid not in (authorization or {}).get('panel_ids',[]):
+            errors.append("当前格不在已授权生产范围")
     manifest_path = checked_file(root, record.get("package_manifest"))
     packet = read(manifest_path)
+    if preparation_only and 'preparation_authorization' in state and packet.get('dispatch_receipt'):
+        errors.append('PREPARATION_AUTHORITY_HOLD:前期授权不得用于已领取回执')
     from panel_readiness import binding_errors as readiness_binding
     errors.extend(readiness_binding(state,packet))
     if state.get('preparation_policy')=='episode_preparation_v1' and packet.get('preparation_policy')!=state['preparation_policy']:

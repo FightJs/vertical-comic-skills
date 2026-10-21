@@ -17,11 +17,44 @@ def review_context(state,root,candidate=False):
     try:yield
     finally:_REVIEW.reset(token)
 
+def review_scope():
+    active = _REVIEW.get()
+    if active is None:return None
+    state, root = active
+    return [str(root), {k:state.get(k) for k in (
+        'episode_id','source_script','source_snapshot','visual_basis','shot_manifest',
+        'task_context','continuity_sources','episode_order','preparation_authorization','parallel_context')}]
+
+
 def candidate_source(source):
     active=_REVIEW.get()
     if active is None:return False
     state,root=active
-    return resolve_path(Path(source.get('root', '')))==root and source.get('episode_id')==state['episode_id'] and all(source.get(k)==state.get(k) for k in ('source_script','source_snapshot','visual_basis','shot_manifest'))
+    if resolve_path(Path(source.get('root', '')))==root and source.get('episode_id')==state['episode_id']:
+        return all(source.get(k)==state.get(k) for k in ('source_script','source_snapshot','visual_basis','shot_manifest'))
+    # Only B may be pending, and only inside offline review of the same task.
+    # Source hashes, A, source order and continuity checks still run normally.
+    from continuity_context import runtime_source_state, registered_source
+    from task_context import state_errors, preparation_errors
+    normalized = {k:v for k,v in source.items() if k != 'root_mode'}
+    registered = registered_source(state, root, normalized, root)
+    if not registered or source.get('approval_resolution') != 'source_runtime_gates_v1':
+        return False
+    if state.get('parallel_context') or not state.get('task_context') or state_errors(state, root):
+        return False
+    other_root = Path(source['root'])
+    other = runtime_source_state(source, other_root, state['book_id'])
+    if (other.get('parallel_context') or not enabled(other) or
+            other.get('task_context') != state['task_context'] or state_errors(other, other_root)):
+        return False
+    order = state.get('episode_order', [])
+    if (other.get('episode_order') != order or source['episode_id'] not in order or
+            state['episode_id'] not in order or order.index(source['episode_id']) >= order.index(state['episode_id'])):
+        return False
+    for owner, base in ((state, root), (other, other_root)):
+        ids = read_json_readonly(checked_file(base, owner['source_snapshot']))['panel_ids']
+        if preparation_errors(owner, base, ids):return False
+    return True
 
 def enabled(state):return state.get('readiness_policy')==POLICY
 

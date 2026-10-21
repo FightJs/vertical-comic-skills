@@ -17,7 +17,7 @@ VISIBILITY = {'visible', 'occluded', 'out_of_frame', 'off_scene', 'omitted_by_de
 BACKGROUND_POLICY = 'narrative_background_v1'
 SIMPLIFIED_BACKGROUNDS = {'scene_flat', 'scene_softened', 'scene_outline'}
 BACKGROUND_TREATMENTS = {'clear_limited', 'approved_depth_of_field'} | SIMPLIFIED_BACKGROUNDS
-BODY_CROP_LABELS = {'waist_up': '腰以上', 'chest_up': '胸以上',
+BODY_CROP_LABELS = {'upper_thigh_up': '大腿上段以上', 'knees_up': '膝部以上', 'waist_up': '腰以上', 'chest_up': '胸以上',
     'shoulders_up': '肩以上', 'face_detail': '面部局部', 'hands_detail': '手部局部',
     'object_detail': '物件局部', 'full_body': '全身', 'mixed': '逐人物指定裁切',
     'environment': '必要环境范围'}

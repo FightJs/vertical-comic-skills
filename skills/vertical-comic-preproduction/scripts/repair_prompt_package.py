@@ -108,7 +108,7 @@ def content_block(panel: dict[str, Any], shot: dict[str, Any]) -> str:
     ]
     framing = shot.get("framing", panel.get("framing"))
     if isinstance(framing, dict):
-        crops = {"waist_up": "腰以上", "chest_up": "胸以上", "shoulders_up": "肩以上", "face_detail": "面部局部", "hands_detail": "手部局部", "object_detail": "物件局部", "full_body": "全身", "environment": "必要环境范围", "mixed": "逐人物指定的裁切"}
+        from visual_evidence import BODY_CROP_LABELS as crops
         lines.append(f"身体裁切：{crops.get(str(framing.get('body_crop')), '')}；画面重点：{compact(framing.get('focus'))}；必显信息：{compact(framing.get('required_visible'))}；背景层级：{framing.get('background_level', '')}。只画已选可见范围，不补出画外人物或腿脚。")
     if characters:
         lines.append("人物与关系：")

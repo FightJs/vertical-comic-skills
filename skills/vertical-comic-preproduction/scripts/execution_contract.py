@@ -123,6 +123,13 @@ def semantic_errors(state,root,batch,blocked=()):
     except (OSError,ValueError,TypeError,KeyError,AttributeError,IndexError,StopIteration) as exc:return [f'SEMANTIC_AUDIT_HOLD:{exc}']
 
 def semantic_template(state,root,bid):
+    from panel_readiness import review_context
+    from codex_reference_contract import file_session
+    with file_session(), review_context(state,root,True):
+        return _semantic_template(state,root,bid)
+
+
+def _semantic_template(state,root,bid):
     from scoped_inputs import half_view
     from scoped_inputs import full_preparation
     if full_preparation(state):

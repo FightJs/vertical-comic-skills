@@ -12,6 +12,12 @@ from scoped_inputs import EPISODE_MODE as MODE, EPISODE_POLICY as OPT, STATE_DIS
 
 @authority_scoped
 def evaluate_episode(state, root, check='status', requested=None):
+    from panel_readiness import review_context
+    with review_context(state, root, check == 'candidate_batch'):
+        return _evaluate_episode(state, root, check, requested)
+
+
+def _evaluate_episode(state, root, check='status', requested=None):
     """reservation_batch reuses status gates and checks only enough unreserved inputs.
 
     It grants no dispatch authority: receipts, final compile and submission checks
@@ -276,9 +282,10 @@ def evaluate_episode(state, root, check='status', requested=None):
                     # context and image dependencies; only other candidates
                     # may be deferred after enough ready inputs are found.
                     def validate_inputs():
-                        with review_context(state,root,check=='candidate_batch' or reserving):
+                        with review_context(state,root,check=='candidate_batch'):
                             issues=input_errors(state,root,record,shot_by_id[pid],basis,by_id,
-                                                candidate=check=='candidate_batch' or reserving,dispatch_audit=check=='input_audit_batch')
+                                                candidate=check=='candidate_batch' or reserving,dispatch_audit=check=='input_audit_batch',
+                                                preparation_only=check in {'candidate_batch','input_audit_batch'})
                         if check!='candidate_batch' and not reserving:
                             from production_runtime import package_review_errors
                             issues.extend(package_review_errors(original,root,batch,record))

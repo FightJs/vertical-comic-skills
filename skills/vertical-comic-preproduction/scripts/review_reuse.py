@@ -14,7 +14,7 @@ _SESSION=ContextVar('comic_qa_memo',default=None)
 
 def fingerprint(root, record):
     root=resolve_path(Path(root)); files={}; seen=set()
-    def walk(value, base):
+    def walk(value, base, document=None):
         if isinstance(value,dict):
             if value.get('frame_ratio_policy')=='content_balanced_ratios_v1':
                 for key in ('frame_ratio_plan','source_snapshot'):
@@ -31,22 +31,24 @@ def fingerprint(root, record):
                 walk(value['continuity_comparisons'],root)
                 value={k:v for k,v in value.items() if k!='continuity_comparisons'}
             if value.get('policy')=='approved_shot_context_v1':
-                for source in value.get('sources',[]):walk(source,Path(source['root']))
+                from continuity_context import source_base
+                for source in value.get('sources',[]):walk(source,source_base(source,document.parent if document else base))
                 return
             if value.get('policy')=='scoped_rule_exception_v1':
-                walk(value.get('artifacts',[]),Path(value['evidence_root']))
+                from rule_exception import evidence_base
+                walk(value.get('artifacts',[]),evidence_base(value,document or base/'exception.json'))
                 return
             if isinstance(value.get('path'),str) and isinstance(value.get('sha256'),str):
                 file=checked_file(base,value); collect(file,base)
             else:
-                for v in value.values():walk(v,base)
+                for v in value.values():walk(v,base,document)
         elif isinstance(value,list):
-            for v in value:walk(v,base)
+            for v in value:walk(v,base,document)
     def collect(file,base,recursive=True):
         file=resolve_path(Path(file)); token=(str(file),str(base))
         if token in seen:return
         seen.add(token); files[str(file)]=digest(file)
-        if recursive and file.suffix.lower()=='.json':walk(read_json(file),base)
+        if recursive and file.suffix.lower()=='.json':walk(read_json(file),base,file)
     manifest=checked_file(root,record['package_manifest']); collect(manifest,manifest.parent)
     qa=checked_file(root,record['qa_report']);collect(qa,manifest.parent)
     collect(checked_file(root,record['output']),root)

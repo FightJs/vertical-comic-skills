@@ -5,6 +5,8 @@ description: Design approved-script-driven per-panel shots, crop and physical co
 
 # 条漫镜头与空间设计
 
+用户已明确委托前期“仅在无法消解的剧本与资产冲突时询问”时，优先执行[前期最少询问规则](../vertical-comic-preproduction/references/grouped-review.md#前期仅询问无法消解的剧本资产冲突)：A、B、生图包与导出由执行者审核并记录决定，不再请求逐项确认；该委托不自动扩大到正文生产。
+
 新整话按[服饰与单画面](../vertical-comic-preproduction/references/appearance-and-single-frame.md)逐细节区分自身佩戴侧、本机位投影和遮挡；镜面另给反射依据。每格只选一个连续画面，脚本双格择关键一幅、另一幅忽略，原稿不改，B的动作/人物/裁切同步选定范围。
 
 从锁定脚本、确认身份/衣装/场景及批准画风设计全话镜头；保留源格号、事件、对白与必显信息，只适配机位、取景和可见表现。

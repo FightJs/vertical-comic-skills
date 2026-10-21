@@ -109,3 +109,6 @@ python <本次快照scripts>/production_runtime.py --state <本话生产流程.j
 - 可移植 `continuity_sources.root` 以本话根为基准，写 `root_mode=context_relative_v1`；context 文件中的来源根以该 context 文件目录为基准。使用 `continuity_context.build` 和 `portable_context`，按解析后的来源及准确证据比较，不能仅靠绝对路径字符串或改哈希伪装同一来源。
 
 版本变化时区分创作内容与引用地址：沿用现有逐格设计签名、原批准覆盖与语义摘要判断受影响格；来源记录、实际 prompt、参考或判据变更的格必须重审。仅更新汇总引用不要求重写无关格，也不能沿用已经不匹配的摘要。补齐共性结构后集中编译一次，按相同错误原因归组解决；不要逐格重复修改同一工具。
+
+
+前期耗时控制沿[减少重复检查与版本返工](runtime-efficiency.md#减少重复检查与版本返工)：使用现有批量入口，在准确依赖范围修输入、重建未审模板和复核，不为进度汇报重做同版技术检查。

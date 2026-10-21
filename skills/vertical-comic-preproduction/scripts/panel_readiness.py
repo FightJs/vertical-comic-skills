@@ -144,9 +144,12 @@ def approval_errors_for(state,root,phase,artifacts,ids,direct=None,*,proofs=()):
     key=content_key([str(resolve_path(Path(root))), state['book_id'], state['episode_id'], phase, state.get('approval_index'), direct, proofs])
     index=derived('approval_index',key,indexed_candidates)
     if index is None:return ['批准索引版本错误']
-    missing=[]
-    for pid in ids:
-        names={pid,state['episode_id']+'-'+pid};found=False
+    # A proof usually covers many panels. Verify that proof's eligible scope
+    # together instead of replaying the same file dependencies once per panel.
+    # Both the original proof and the lookup entry still restrict the scope.
+    eligible={}
+    for pid in dict.fromkeys(ids):
+        names={pid,state['episode_id']+'-'+pid}
         selected=set(index['unscoped'])
         for name in names:selected.update(index['scoped'].get(name,[]))
         for i in sorted(selected):
@@ -156,8 +159,21 @@ def approval_errors_for(state,root,phase,artifacts,ids,direct=None,*,proofs=()):
             if phase!='visual_basis' and (not isinstance(scope,list) or not names.intersection(scope)):continue
             if phase=='visual_basis' and scope is not None and not names.intersection(scope):continue
             if '_lookup_panel_ids' in proof and not names.intersection(proof['_lookup_panel_ids']):continue
-            if artifacts_covered(state,root,proof,artifacts,[pid],phase):found=True;break
-        if not found:missing.append(pid)
+            eligible.setdefault(i,[]).append(pid)
+    covered=set()
+    for i, scope in sorted(eligible.items()):
+        pending=[pid for pid in scope if pid not in covered]
+        if not pending:continue
+        proof=index['proofs'][i]
+        if artifacts_covered(state,root,proof,artifacts,pending,phase):
+            covered.update(pending)
+        elif len(pending)>1:
+            # A revised collection can invalidate just one row, or different
+            # preserved versions can cover different rows. Retain the original
+            # per-panel fallback and never let one bad row block its siblings.
+            for pid in pending:
+                if artifacts_covered(state,root,proof,artifacts,[pid],phase):covered.add(pid)
+    missing=[pid for pid in ids if pid not in covered]
     return ['缺少原范围、原版本或未变条目适用的真实批准:'+','.join(missing)] if missing else []
 
 def local_tags_manifest(manifest,panel):

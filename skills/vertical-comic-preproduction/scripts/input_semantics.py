@@ -377,8 +377,12 @@ def coverage(state, root, dependency_plan=None):
     if not enabled(state):
         return {'policy': None, 'status': 'LEGACY_FROZEN_CONTRACT'}
     from audit_cache import derived, content_key
-    return derived('final_semantic_coverage', content_key([str(root), state, dependency_plan]),
-                   lambda: _coverage(state, root, dependency_plan))
+    from codex_reference_contract import file_session
+    # This is also a public read-only entry, used without production_runtime.
+    # Keep all panels in one transaction; nested runtime callers reuse theirs.
+    with file_session():
+        return derived('final_semantic_coverage', content_key([str(root), state, dependency_plan]),
+                       lambda: _coverage(state, root, dependency_plan))
 
 
 def _coverage(state, root, dependency_plan=None):
@@ -417,11 +421,18 @@ def main():
         if not enabled(state): raise ValueError('旧冻结运行不自动启用新审查')
         plan_ref = {'path': args.dependency_plan, 'sha256': digest(root / args.dependency_plan)} if args.dependency_plan else None
         if not args.output:
-            report = coverage(state, root, plan_ref); print(json.dumps(report, ensure_ascii=False))
+            from codex_reference_contract import file_session
+            with file_session():
+                if read_json(path) != state:
+                    raise ValueError('CHECK_SNAPSHOT_CHANGED: 生产状态在审计开始前变化')
+                report = coverage(state, root, plan_ref)
+            print(json.dumps(report, ensure_ascii=False))
             return 0 if report['status'] != 'HOLD' else 1
         from panel_readiness import review_context
         from codex_reference_contract import file_session
         with file_session(), review_context(state, root, not args.completion):
+            if read_json(path) != state:
+                raise ValueError('CHECK_SNAPSHOT_CHANGED: 生产状态在审计开始前变化')
             audit = copy.deepcopy(read_json(checked_file(root, state['semantic_audit'])))
             shots = {r['panel_id']: r for r in read_json(checked_file(root, state['shot_manifest']))['panels']}
             records = {r['panel_id']: r for r in state['panels']}
@@ -449,4 +460,6 @@ def main():
 
 
 if __name__ == '__main__':
+    from platform_io import configure_stdio
+    configure_stdio()
     raise SystemExit(main())

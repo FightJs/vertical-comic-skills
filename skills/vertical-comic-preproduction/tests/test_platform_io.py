@@ -143,6 +143,21 @@ with file_lock(Path(sys.argv[2])):
         with patch.dict(os.environ, {'CODEX_HOME': str(self.root / '自定义 codex')}):
             self.assertEqual(io.codex_home(), (self.root / '自定义 codex').resolve())
 
+    def test_semantic_cli_reports_chinese_hold_under_non_utf8_redirect(self):
+        state = self.root / '中文 状态.json'
+        io.atomic_json(state, {'input_semantics_policy': 'unknown'})
+        before = state.read_bytes()
+        env = {**os.environ, 'PYTHONUTF8': '0', 'PYTHONIOENCODING': 'cp1252'}
+        result = subprocess.run([sys.executable, '-X', 'utf8=0', '-B',
+                                 str(SCRIPTS / 'input_semantics.py'), '--state', str(state)],
+                                capture_output=True, env=env, timeout=30)
+        self.assertEqual(result.returncode, 1, result.stderr.decode('utf-8', errors='replace'))
+        data = json.loads(result.stdout.decode('utf-8'))
+        self.assertEqual(data['status'], 'HOLD')
+        self.assertIn('未知最终输入审查策略', data['errors'][0])
+        self.assertNotIn(b'UnicodeEncodeError', result.stderr)
+        self.assertEqual(state.read_bytes(), before)
+
     def test_valid_xlsx_snapshot_preserves_text_formula_and_releases_file(self):
         from openpyxl import Workbook
         from source_workbook import snapshot

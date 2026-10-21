@@ -71,6 +71,33 @@ class EpisodeDispatchQueueTests(unittest.TestCase):
         self.h.flush()
         self.assertEqual(self.reserve()['status'], 'CAPACITY_FULL')
 
+    def test_observed_ready_wait_ends_after_both_legacy_commits(self):
+        import episode_dispatch_queue as queue
+        clock = [10.0]
+        write = queue._atomic_json
+        def gate(*args, **kwargs):
+            return {**self.gate(*args, **kwargs), '_ready_observed_monotonic': {'P002': clock[0]}}
+        def timed_write(*args):
+            write(*args)
+            clock[0] += 2.0
+        with patch('scoped_episode_workflow.evaluate_episode', side_effect=gate), \
+                patch.object(queue, '_atomic_json', side_effect=timed_write), \
+                patch.object(queue.time, 'perf_counter', side_effect=lambda: clock[0]):
+            result = queue.reserve_ready(self.h.state_path, digest(self.h.state_path), digest(self.h.control_path))
+        row = result['dispatch_metrics']['ready_wait']['panels'][0]
+        self.assertEqual(row['observed_ready_to_reserve_seconds'], 6.0)
+        self.assertEqual(row['permit_id'], result['reserved'][0]['permit_id'])
+        self.assertEqual((row['episode_id'], row['panel_id'], row['round_id'], row['attempt_id']),
+                         ('E021', 'P002', 1, 'P002-r1'))
+        self.assertIsNone(result['dispatch_metrics']['ready_wait']['historical_ready_to_reserve_seconds'])
+
+    def test_unobserved_readiness_is_unknown_and_capacity_full_has_no_samples(self):
+        result = self.reserve()
+        self.assertIsNone(result['dispatch_metrics']['ready_wait']['panels'][0]['observed_ready_to_reserve_seconds'])
+        full = self.reserve()
+        self.assertEqual(full['status'], 'CAPACITY_FULL')
+        self.assertEqual(full['dispatch_metrics']['ready_wait']['panels'], [])
+
 
 if __name__ == '__main__':
     unittest.main()

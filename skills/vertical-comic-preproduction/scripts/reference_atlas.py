@@ -1,4 +1,5 @@
 """Verify lossless reference layout against original approved assets, never new approval."""
+from codex_reference_contract import resolve_path
 from pathlib import Path
 from codex_reference_contract import checked_file
 
@@ -32,7 +33,7 @@ def verify_owner(ref, asset, subject, purpose, root):
             source=region.get('source_file')
             if isinstance(source,str):source={'path':source,'sha256':region.get('source_sha256')}
             files.append(checked_file(Path(root),source))
-        value={'validator_sha256':digest(Path(__file__)),'root':str(Path(root).resolve()),'ref':ref,'asset':asset,'subject':subject,'purpose':purpose,'files':[(str(p),digest(p)) for p in files]}
+        value={'validator_sha256':digest(Path(__file__)),'root':str(resolve_path(Path(root))),'ref':ref,'asset':asset,'subject':subject,'purpose':purpose,'files':[(str(p),digest(p)) for p in files]}
         key=hashlib.sha256(json.dumps(value,ensure_ascii=False,sort_keys=True).encode()).hexdigest()
         return memoized_validation('faithful_atlas_owner',key,lambda:_verify_owner(ref,asset,subject,purpose,root))
     except (OSError,ValueError,TypeError,KeyError,AttributeError) as exc:return [f'REFERENCE_ATLAS_HOLD:{exc}']
@@ -50,7 +51,8 @@ def _verify_owner(ref, asset, subject, purpose, root):
         selected=[r for r in regions if r.get('subject_id')==subject and r.get('purpose')==purpose]
         if not selected:raise ValueError('该人物/用途没有来源裁区')
         from PIL import Image
-        with Image.open(checked_file(Path(root),ref)) as image:atlas=image.convert('RGBA')
+        from codex_reference_contract import physical_file
+        with Image.open(physical_file(checked_file(Path(root),ref))) as image:atlas=image.convert('RGBA')
         occupied=[]
         for region in regions:
             box=rect(region.get('assembly_region'),atlas.size)
@@ -64,7 +66,7 @@ def _verify_owner(ref, asset, subject, purpose, root):
             if isinstance(source,str):source={'path':source,'sha256':region.get('source_sha256')}
             if not isinstance(source,dict) or source.get('sha256')!=asset.get('sha256'):raise ValueError('裁区不是原批准资产版本')
             if region.get('source_version',asset.get('version'))!=asset.get('version'):raise ValueError('来源版本不匹配')
-            with Image.open(checked_file(Path(root),source)) as image:
+            with Image.open(physical_file(checked_file(Path(root),source))) as image:
                 crop=image.convert('RGBA').crop(rect(region.get('crop_rect_pixels'),image.size))
             target=atlas.crop(rect(region.get('assembly_region'),atlas.size))
             if crop.size!=target.size or crop.tobytes()!=target.tobytes():raise ValueError('图集像素不是原图忠实裁区；禁止缩放、重绘或换人物')

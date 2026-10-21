@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Content-bound QA memo within one gate run; reuse proposals never grant user approval."""
+from codex_reference_contract import read_json, resolve_path
 import argparse
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -12,7 +13,7 @@ _SESSION=ContextVar('comic_qa_memo',default=None)
 
 
 def fingerprint(root, record):
-    root=Path(root).resolve(); files={}; seen=set()
+    root=resolve_path(Path(root)); files={}; seen=set()
     def walk(value, base):
         if isinstance(value,dict):
             if value.get('frame_ratio_policy')=='content_balanced_ratios_v1':
@@ -42,10 +43,10 @@ def fingerprint(root, record):
         elif isinstance(value,list):
             for v in value:walk(v,base)
     def collect(file,base,recursive=True):
-        file=Path(file).resolve(); token=(str(file),str(base))
+        file=resolve_path(Path(file)); token=(str(file),str(base))
         if token in seen:return
         seen.add(token); files[str(file)]=digest(file)
-        if recursive and file.suffix.lower()=='.json':walk(json.loads(file.read_text(encoding='utf-8-sig')),base)
+        if recursive and file.suffix.lower()=='.json':walk(read_json(file),base)
     manifest=checked_file(root,record['package_manifest']); collect(manifest,manifest.parent)
     qa=checked_file(root,record['qa_report']);collect(qa,manifest.parent)
     collect(checked_file(root,record['output']),root)
@@ -53,11 +54,11 @@ def fingerprint(root, record):
     # at the episode root. Its bytes bind the snapshot; validate_panel reads
     # the real package's references, already walked from the package root.
     if record.get('shot_subset'):collect(checked_file(root,record['shot_subset']),root,False)
-    data=json.loads(manifest.read_text(encoding='utf-8-sig')); panel=data['panels'][0]; rules=[]
+    data=read_json(manifest); panel=data['panels'][0]; rules=[]
     # validate_panel also reads this unhashed string path. It must invalidate a
     # memo just like a hashed image/reference/receipt does.
     prompt_name=Path(str(panel.get('prompt_file',f"{panel.get('panel_id')}/prompt.txt")))
-    prompt=(manifest.parent/prompt_name).resolve()
+    prompt=resolve_path(manifest.parent / prompt_name)
     if prompt_name.is_absolute() or not prompt.is_relative_to(manifest.parent):
         raise ValueError('prompt_file越出执行包')
     collect(prompt,manifest.parent)
@@ -105,14 +106,14 @@ def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--state',required=True);p.add_argument('--panel',required=True);p.add_argument('--write',required=True)
     a=p.parse_args()
     try:
-        path=Path(a.state).resolve();root=path.parent.parent;state=json.loads(path.read_text(encoding='utf-8-sig'));record=next(r for r in state['panels'] if r['panel_id']==a.panel)
+        path=resolve_path(Path(a.state));root=path.parent.parent;state=read_json(path);record=next(r for r in state['panels'] if r['panel_id']==a.panel)
         from staged_workflow import qa_errors
         errors=qa_errors(root,record)
         if errors:raise ValueError(';'.join(errors))
         value={'policy':'qa_reuse_candidate_v1','panel_id':a.panel,'fingerprint':fingerprint(root,record),
                'output':record['output'],'qa_report':record['qa_report'],'package_manifest':record['package_manifest'],
                'status':'REUSE_RECORDED_VISUAL_QA','user_approval':'NOT_GRANTED','scope':'Original QA only; current scope/basis/dispatch gates still required'}
-        dest=Path(a.write).resolve();dest.relative_to(root)
+        dest=resolve_path(Path(a.write));dest.relative_to(root)
         with dest.open('x',encoding='utf-8', newline='\n') as f:json.dump(value,f,ensure_ascii=False,indent=2);f.write('\n')
         print(json.dumps(value,ensure_ascii=False));return 0
     except (OSError,ValueError,TypeError,KeyError,StopIteration) as exc:

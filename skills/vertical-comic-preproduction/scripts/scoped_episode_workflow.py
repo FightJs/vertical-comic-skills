@@ -1,4 +1,7 @@
 """Episode gate: one source-contiguous production scope with rolling repairs."""
+from codex_reference_contract import resolve_path
+from authority_updates import authority_scoped
+import time
 from pathlib import Path
 from codex_reference_contract import checked_file
 from staged_workflow import POLICY, DONE, read, approval_errors
@@ -7,9 +10,19 @@ from batch_round import settings, TERMINAL
 from scoped_inputs import EPISODE_MODE as MODE, EPISODE_POLICY as OPT, STATE_DISPATCH, build_plan, half_view, approval_for, blocked_panels, validate_shots, global_hold, full_preparation
 
 
+@authority_scoped
 def evaluate_episode(state, root, check='status', requested=None):
+    """reservation_batch reuses status gates and checks only enough unreserved inputs.
+
+    It grants no dispatch authority: receipts, final compile and submission checks
+    remain separate. Other batch modes always check their complete requested set.
+    """
+    from codex_reference_contract import _READ_VIEW
+    view = _READ_VIEW.get()
+    if view is not None: view.authorize_check(check, requested)
     from batch_workflow import completed_errors, input_errors, batch_review_errors, cross_episode_errors
-    root=Path(root).resolve(); original=state
+    started = time.perf_counter()
+    root=resolve_path(Path(root)); original=state
     def result(action, errors=(), batch=None, eligible=(), round_id=1, blocked_ids=()):
         return {'policy':POLICY,'execution_mode':MODE,'optimization_policy':OPT,
                 'status':'PASS' if not errors and action in {'READY_FOR_EPISODE_PANEL','READY_TO_PACKAGE','READY_FOR_CROSS_REVIEW'} else 'HOLD',
@@ -17,9 +30,20 @@ def evaluate_episode(state, root, check='status', requested=None):
                 'round_id':round_id,'eligible_panel_ids':list(eligible),'blocked_panel_ids':sorted(blocked_ids),
                 'cursor':requested,'errors':list(errors),'user_acceptance':'NOT_GRANTED_BY_SCRIPT'}
     try:
+        reserving = check == 'reservation_batch'
+        if reserving:
+            if (not isinstance(requested, dict) or type(requested.get('limit')) is not int
+                    or requested['limit'] < 1 or not isinstance(requested.get('excluded'), list)
+                    or any(not isinstance(pid, str) for pid in requested['excluded'])):
+                return result('SOURCE_EPISODE_HOLD', ['领取选集须有正整数limit和excluded格号清单'])
         from execution_contract import state_errors
         errors=state_errors(state,root)
         if errors:return result('EXECUTION_CONTRACT_HOLD',errors)
+        from production_decisions import enabled as first_batch, priority as production_priority
+        if first_batch(state) and check == 'deliver':
+            if state.get('cancelled'): return result('CANCELLED', ['用户取消；不能自动恢复'])
+            from panel_delivery import gate
+            return gate(state, root)
         book,episode=state.get('book_id'),state.get('episode_id')
         if state.get('policy')!=POLICY or state.get('execution_mode')!=MODE or state.get('optimization_policy')!=OPT or not book or not episode:
             return result('COMPLETE_INPUT_AUDIT',['流程/书话/优化策略缺失'])
@@ -58,7 +82,9 @@ def evaluate_episode(state, root, check='status', requested=None):
                 for pid in ids:hold_reasons.extend(readiness['blockers'].get(pid,[]))
             panels=validate_shots(state,source,window,shots,blocked)
             from image_risk_guards import shot_errors as risk_shot_errors
-            risk_errors=[f"{p['panel_id']}:{e}" for p in panels if p['panel_id'] not in blocked for e in risk_shot_errors(p)]
+            # Readiness-enabled runs classify local risk errors and propagate
+            # their actual design/image dependencies before this fallback.
+            risk_errors=[] if readiness else [f"{p['panel_id']}:{e}" for p in panels if p['panel_id'] not in blocked for e in risk_shot_errors(p)]
             if risk_errors:return result('SHOT_RISK_HOLD',risk_errors,window)
             from frame_ratio_plan import panel_errors
             errors=panel_errors(state,root,panels)
@@ -144,6 +170,8 @@ def evaluate_episode(state, root, check='status', requested=None):
                 if errors:return result('PARALLEL_HOLD',errors,batch)
             from episode_repair import repair_errors, systemic_errors
             systemic = systemic_errors(original, current, root)
+            # Full-scope round/history checks protect the call budget, including
+            # blocked/excluded rows beyond the requested reservation count.
             for r in current:
                 if r.get('round_id') == 2:
                     errors = repair_errors(original, root, r)
@@ -153,6 +181,25 @@ def evaluate_episode(state, root, check='status', requested=None):
             if any(type(r.get('round_id', 1)) is not int or r.get('round_id', 1) not in (1, 2) for r in current):
                 return result('STOP_DIAGNOSE', ['不允许第三轮自动调用'], batch)
             complete = all(r.get('status') in DONE for r in current)
+            if first_batch(original) and check == 'status' and all(r.get('status') in TERMINAL for r in current):
+                from production_decisions import selected
+                undecided = []
+                for row in current:
+                    if row.get('status') in {'CALL_FAILED','RESULT_UNKNOWN','CANCELLED'}: continue
+                    try:
+                        _, d, _, _ = selected(root, row)
+                        if d['action'] not in {'complete','defer_manual','stop_diagnose'}:
+                            undecided.append(row['panel_id'])
+                    except (ValueError, KeyError, TypeError, OSError):
+                        undecided.append(row['panel_id'])
+                if not undecided:
+                    if original.get('delivery_review'):
+                        from panel_delivery import gate
+                        return gate(original, root)
+                    return result('PREPARE_FIRST_BATCH_HANDOFF', batch=batch)
+                if complete:
+                    return result('PREPARE_PRODUCTION_DECISIONS', ['已审图须登记采用版本和问题去向'], batch=batch)
+
             if complete and blocked:
                 if any(isinstance(h,dict) and h.get('reason')=='WAIT_NEW_STATE_APPROVAL' for h in hold_reasons):
                     return result('WAIT_NEW_STATE_APPROVAL',hold_reasons,batch,blocked_ids=blocked)
@@ -169,31 +216,52 @@ def evaluate_episode(state, root, check='status', requested=None):
                         and (r.get('status') == 'PENDING' and r.get('round_id', 1) == 1 or r.get('status') == 'REPAIR_AUTHORIZED' and r.get('round_id') == 2 and not systemic)]
             active = any(r.get('status') == 'IN_FLIGHT' for r in current)
             round_id = 1
-            if check == 'status':
+            if reserving:
+                excluded = set(requested['excluded'])
+                eligible = [pid for pid in eligible if pid not in excluded]
+            if first_batch(original):
+                eligible.sort(key=lambda pid: production_priority(original, by_id[pid], panels, root))
+            if check == 'status' or reserving:
                 if eligible and original.get('runtime'):
                     from production_runtime import package_review_errors
                     approved = [p for p in eligible if not package_review_errors(original,root,batch,by_id[p])]
                     if not approved:
                         return result('WAIT_GENERATION_PACKAGE_APPROVAL', ['当前就绪格须有准确生图包批准'], batch, eligible=eligible, round_id=round_id, blocked_ids=blocked)
                     eligible=approved
-                if eligible:
+                if eligible and not reserving:
                     value=result('SUBMIT_READY_EPISODE_REQUESTS', batch=batch, eligible=eligible, blocked_ids=blocked)
                     value['pending_state_review_panel_ids']=[h['panel_id'] for h in hold_reasons if isinstance(h,dict) and h.get('reason')=='WAIT_NEW_STATE_APPROVAL']
                     return value
-                if active: return result('COLLECT_INFLIGHT_RESULTS', batch=batch, round_id=round_id, blocked_ids=blocked)
-                if systemic: return result('DIAGNOSE_COMMON_CAUSE', systemic, batch, blocked_ids=blocked)
-                if blocked:
-                    action='WAIT_NEW_STATE_APPROVAL' if any(isinstance(h,dict) and h.get('reason')=='WAIT_NEW_STATE_APPROVAL' for h in hold_reasons) else 'SCOPED_HOLD'
-                    return result(action, hold_reasons or ['本话局部状态待确认'], batch, blocked_ids=blocked)
-                if any(by_id[p].get('status') in {'VISUAL_FAIL', 'CALL_FAILED', 'RESULT_UNKNOWN', 'CANCELLED'} for p in hard_barrier_ids) and any(r.get('status') == 'PENDING' for r in current):
-                    return result('STATE_FAILURE_HOLD', ['新状态校准图失败使后格未提交；先诊断校准状态，不要求虚假的完整整话汇总'], batch, round_id=round_id)
-                if any(r.get('status') == 'PENDING' and any(by_id[d].get('status') in {'VISUAL_FAIL', 'CALL_FAILED', 'RESULT_UNKNOWN', 'CANCELLED'} for d in shot_by_id[r['panel_id']]['generation_dependencies']) for r in current):
-                    return result('DEPENDENCY_FAILURE_HOLD', ['前置实图失败导致后格未提交；先诊断依赖链，不虚构完整批次或失败数'], batch, round_id=round_id)
-                if any(r.get('status') == 'VISUAL_FAIL' and r.get('round_id') == 1 for r in current):
-                    return result('PREPARE_ROLLING_REPAIR', batch=batch)
-                if any(r.get('round_id') == 2 and r.get('status') in {'VISUAL_FAIL','CALL_FAILED','RESULT_UNKNOWN','CANCELLED'} for r in current):
-                    return result('STOP_DIAGNOSE', ['第二轮仍失败或结果未知；保留原尝试'], batch)
-                return result('REVIEW_PENDING_IMAGES', batch=batch)
+                if not eligible:
+                    if active: return result('COLLECT_INFLIGHT_RESULTS', batch=batch, round_id=round_id, blocked_ids=blocked)
+                    if systemic: return result('DIAGNOSE_COMMON_CAUSE', systemic, batch, blocked_ids=blocked)
+                    if blocked:
+                        action='WAIT_NEW_STATE_APPROVAL' if any(isinstance(h,dict) and h.get('reason')=='WAIT_NEW_STATE_APPROVAL' for h in hold_reasons) else 'SCOPED_HOLD'
+                        return result(action, hold_reasons or ['本话局部状态待确认'], batch, blocked_ids=blocked)
+                    if any(by_id[p].get('status') in {'VISUAL_FAIL', 'CALL_FAILED', 'RESULT_UNKNOWN', 'CANCELLED'} for p in hard_barrier_ids) and any(r.get('status') == 'PENDING' for r in current):
+                        return result('STATE_FAILURE_HOLD', ['新状态校准图失败使后格未提交；先诊断校准状态，不要求虚假的完整整话汇总'], batch, round_id=round_id)
+                    if any(r.get('status') == 'PENDING' and any(by_id[d].get('status') in {'VISUAL_FAIL', 'CALL_FAILED', 'RESULT_UNKNOWN', 'CANCELLED'} for d in shot_by_id[r['panel_id']]['generation_dependencies']) for r in current):
+                        return result('DEPENDENCY_FAILURE_HOLD', ['前置实图失败导致后格未提交；先诊断依赖链，不虚构完整批次或失败数'], batch, round_id=round_id)
+                    if first_batch(original):
+                        from production_decisions import selected
+                        settled = []
+                        for row in current:
+                            try:
+                                _, decision, _, _ = selected(root, row)
+                                if decision['action'] in {'complete', 'defer_manual', 'stop_diagnose'}:
+                                    settled.append(row['panel_id'])
+                            except (ValueError, KeyError, TypeError, OSError):
+                                pass
+                        if len(settled) == len(current):
+                            return result('PREPARE_FIRST_BATCH_HANDOFF', batch=batch)
+                        pending = [r for r in current if r['panel_id'] not in settled]
+                    else:
+                        pending = current
+                    if any(r.get('status') == 'VISUAL_FAIL' and r.get('round_id') == 1 for r in pending):
+                        return result('PREPARE_ROLLING_REPAIR', batch=batch)
+                    if any(r.get('round_id') == 2 and r.get('status') in {'VISUAL_FAIL','CALL_FAILED','RESULT_UNKNOWN','CANCELLED'} for r in current):
+                        return result('STOP_DIAGNOSE', ['第二轮仍失败或结果未知；保留原尝试'], batch)
+                    return result('REVIEW_PENDING_IMAGES', batch=batch)
             def check_one(pid):
                 try:
                     if pid not in ids: return result('SOURCE_EPISODE_HOLD', ['只允许当前整话'], batch, eligible, round_id)
@@ -204,11 +272,14 @@ def evaluate_episode(state, root, check='status', requested=None):
                     if not record.get('attempt_id') or type(local_round) is not int or local_round not in (1,2):
                         return result('ROUND_HOLD', ['新请求须有准确轮次与唯一attempt_id'], batch, eligible, round_id)
                     from panel_readiness import review_context
+                    # Candidate input checks still traverse the complete real
+                    # context and image dependencies; only other candidates
+                    # may be deferred after enough ready inputs are found.
                     def validate_inputs():
-                        with review_context(state,root,check=='candidate_batch'):
+                        with review_context(state,root,check=='candidate_batch' or reserving):
                             issues=input_errors(state,root,record,shot_by_id[pid],basis,by_id,
-                                                candidate=check=='candidate_batch',dispatch_audit=check=='input_audit_batch')
-                        if check!='candidate_batch':
+                                                candidate=check=='candidate_batch' or reserving,dispatch_audit=check=='input_audit_batch')
+                        if check!='candidate_batch' and not reserving:
                             from production_runtime import package_review_errors
                             issues.extend(package_review_errors(original,root,batch,record))
                         return issues
@@ -232,23 +303,33 @@ def evaluate_episode(state, root, check='status', requested=None):
                     return result('INPUT_HOLD' if errors else 'READY_FOR_EPISODE_PANEL', errors, batch, eligible, local_round)
                 except (OSError, ValueError, TypeError, KeyError, AttributeError, IndexError) as exc:
                     return result('INPUT_EVIDENCE_HOLD', [str(exc)], batch, round_id=round_id)
-            if check in {'generate_batch', 'candidate_batch', 'input_audit_batch'}:
-                selection = eligible if requested is None else requested
+            if check in {'generate_batch', 'candidate_batch', 'input_audit_batch'} or reserving:
+                selection = eligible if requested is None or reserving else requested
                 if not isinstance(selection, list) or any(not isinstance(p, str) for p in selection) or len(selection) != len(set(selection)):
                     return result('SOURCE_EPISODE_HOLD', ['批量格号须为不重复清单'], batch)
                 from audit_progress import mark
-                reports=[]
+                inputs_started = time.perf_counter()
+                reports=[]; ready=[]; ready_observed={}
                 for index,pid in enumerate(selection):
                     mark(panel_id=pid,completed=index,total=len(selection))
                     reports.append({'panel_id':pid,**check_one(pid)})
                     mark(panel_id=pid,completed=index+1,total=len(selection))
-                ready = [r['panel_id'] for r in reports if r['status'] == 'PASS']
+                    if reports[-1]['status'] == 'PASS':
+                        ready.append(pid)
+                        if reserving: ready_observed[pid] = time.perf_counter()
+                    if reserving and len(ready) >= requested['limit']: break
                 value = result('READY_FOR_EPISODE_PANEL' if ready else 'INPUT_HOLD', batch=batch, eligible=ready, blocked_ids=blocked)
                 if check=='input_audit_batch':
                     value.update(dispatch_authorized=False,input_audit_only=True,audit_policy='receiver_input_audit_v1')
-                if check == 'candidate_batch':
+                if check == 'candidate_batch' or reserving:
                     value['dispatch_authorized'] = False
                     value['candidate_only'] = True
+                if reserving:
+                    value.update(reservation_preflight_only=True, candidate_count=len(selection),
+                                 _ready_observed_monotonic=ready_observed,
+                                 checked_panel_count=len(reports), deferred_panel_ids=selection[len(reports):],
+                                 common_check_seconds=round(inputs_started-started,6),
+                                 panel_check_seconds=round(time.perf_counter()-inputs_started,6))
                 value.update(status='READY' if reports and len(ready) == len(reports) else 'PARTIAL_READY' if ready else 'HOLD',
                              ready_panel_ids=ready, reports=reports)
                 return value

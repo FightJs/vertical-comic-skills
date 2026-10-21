@@ -17,10 +17,16 @@
     if (Array.isArray(refs) && new Set(refs).size !== refs.length)
       throw new Error(`REFERENCE_DUPLICATE_HOLD: ${job.panel_id}, merge same-file purposes before submitting`);
   }
+  if (jobs.some(j => j.managed_submission_required === true) && typeof options.onBeforeInvoke !== 'function')
+    throw new Error('SUBMISSION_HOLD: managed jobs require durable onBeforeInvoke');
+  if (options.onBeforeInvoke !== undefined && typeof options.onBeforeInvoke !== 'function') throw new Error('onBeforeInvoke must be a function');
   if (options.onReviewReady !== undefined && typeof options.onReviewReady !== "function") throw new Error("onReviewReady must be a function");
   if (options.onReviewBatchReady !== undefined && typeof options.onReviewBatchReady !== "function") throw new Error("onReviewBatchReady must be a function");
   if (options.onLongRequest !== undefined && typeof options.onLongRequest !== "function") throw new Error("onLongRequest must be a function");
   if (options.onPersisted !== undefined && typeof options.onPersisted !== "function") throw new Error("onPersisted must be a function");
+  if (options.onInputHeadRefresh !== undefined && typeof options.onInputHeadRefresh !== "function") throw new Error("onInputHeadRefresh must be a function");
+  if (options.onInputHeadRefresh && jobs.some(j => j.kind !== 'asset' && (!j.book_id || !j.episode_id)))
+    throw new Error("INPUT_HEAD_SCOPE_HOLD: exact book/episode required before invoking");
   const requestWarningMs = options.requestWarningMs ?? 900000;
   const requestEscalationMs = options.requestEscalationMs ?? 1800000;
   if (!Number.isInteger(requestWarningMs) || !Number.isInteger(requestEscalationMs) ||
@@ -85,7 +91,21 @@
   async function worker() {
     while (!stop && cursor < jobs.length) {
       const index = cursor++, job = jobs[index];
-      let item = {job_id: job.job_id, kind: job.kind ?? 'panel', panel_id: job.panel_id, asset_id: job.asset_id, attempt_id: job.attempt_id, batch_id: job.batch_id, round_id: job.round_id, ...(job.ready_at ? {ready_at:job.ready_at} : {}), submitted_at: new Date().toISOString()};
+      let item = {job_id: job.job_id, kind: job.kind ?? 'panel', panel_id: job.panel_id, asset_id: job.asset_id, attempt_id: job.attempt_id, batch_id: job.batch_id, round_id: job.round_id, ...(job.ready_at ? {ready_at:job.ready_at} : {})};
+      if (options.onBeforeInvoke && job.kind !== 'asset') {
+        try {
+          const ack = await options.onBeforeInvoke(job);
+          if (ack?.status !== 'SUBMISSION_REGISTERED' || ack.invoke_allowed !== true ||
+              ack.scope?.book_id !== job.book_id || ack.scope?.episode_id !== job.episode_id ||
+              ack.panel_id !== job.panel_id || ack.attempt_id !== job.attempt_id || ack.round_id !== job.round_id ||
+              !job.dispatch_receipt?.permit_id || ack.permit_id !== job.dispatch_receipt.permit_id)
+            throw new Error('SUBMISSION_HOLD: no fresh exact registration; do not repeat image call');
+        } catch (err) {
+          stop = true; item.status = 'NOT_DISPATCHED'; item.outcome_hint = 'CHECK_SUBMISSION_REGISTRATION';
+          item.submission_error = errorData(err); results[index] = item; continue;
+        }
+      }
+      item.submitted_at = new Date().toISOString();
       const longRequestTimers = [];
       if (options.onLongRequest) {
         for (const [level, delay] of [['T1', requestWarningMs], ['T2', requestEscalationMs]]) {
@@ -125,6 +145,27 @@
           const timedSave = persistence.then(() => options.onPersisted(job, item));
           persistence = timedSave.catch(() => {});
           await timedSave;
+        }
+        if (options.onInputHeadRefresh && job.kind !== 'asset') {
+          // Refresh only after the real save and final timing persistence. This
+          // callback invokes capture/bind, never image tools or QA approval.
+          const refresh = persistence.then(() => options.onInputHeadRefresh(job, item));
+          persistence = refresh.catch(() => {});
+          try {
+            const head = await refresh;
+            const sha = v => typeof v === 'string' && /^[0-9a-f]{64}$/.test(v);
+            if (head?.status !== 'BOUND_NOT_DISPATCHABLE' || head.dispatch_authorized !== false ||
+                head.scope?.book_id !== job.book_id || head.scope?.episode_id !== job.episode_id ||
+                !sha(head.head_sha256) || !sha(head.state_sha256) || !sha(head.control_sha256))
+              throw new Error('INPUT_HEAD_HOLD: missing or mismatched bound head acknowledgement');
+            item.input_read_head = head;
+          } catch (err) {
+            // Saved bytes and original attempt remain real. Stop new invocations,
+            // retain existing in-flight results and do not repeat onResult.
+            stop = true;
+            item.input_head_refresh_error = String(err);
+            item.input_head_refresh_error_detail = errorData(err);
+          }
         }
         if (item.status === 'FULFILLED' && item.result !== undefined && item.output_saved !== false) {
           // Signal persisted outputs now, without holding an image-call slot during review.

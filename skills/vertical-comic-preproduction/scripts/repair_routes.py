@@ -8,6 +8,17 @@ LOCAL={'accessory','eyelid','finger','local_clarity','costume_detail','expressio
 ALL=SPATIAL|LOCAL|{'crop'}
 def text(v):return isinstance(v,str) and bool(v.strip())
 def plan(d,record):
+    if d.get('policy') == 'first_batch_production_v1':
+        from production_decisions import CALL_ACTIONS, decision_errors
+        if d.get('image') != record.get('output') or d.get('attempt_id') != record.get('attempt_id'):
+            raise ValueError('生产决定未绑定原图/尝试')
+        action = d.get('action')
+        route = action
+        if record.get('round_id', 1) >= 2 or d.get('same_problem_persists') is True:
+            route = 'stop_diagnose'
+        return {'route': route, 'image_call_allowed': route in CALL_ACTIONS,
+                'source_image_sha256': d.get('image', {}).get('sha256'),
+                'production_approved': False, 'required_next': d.get('reason')}
     if not isinstance(d,dict) or not text(d.get('reviewer')) or not text(d.get('evidence')):raise ValueError('缺实际诊断者与证据')
     if d.get('source_image_sha256')!=record.get('output',{}).get('sha256') or not text(d.get('source_image_sha256')):raise ValueError('诊断未绑定本格真实底图')
     defects=d.get('defects')

@@ -24,6 +24,7 @@ def build(state_paths,*,native_events=None,verify_images=False,capacity=None):
     attempts={};panels={};warnings=[];sources=[];episodes=set();duplicates=0;diagnostics=Counter();windows=[];qa_windows=[];verified=set();declared=set();reads=[];conflicts=set()
     timings={k:[] for k in ('ready_to_submit','submit_to_return','return_to_save','save_to_qa')}
     edit_reviews=[]
+    production_actions=Counter();delivery_outcomes=Counter();issue_classes=Counter();decision_errors=[]
     def referenced(root,ref):
         if not isinstance(ref,dict) or not isinstance(ref.get('path'),str):return None
         p=Path(ref['path']);p=p if p.is_absolute() else root/p
@@ -33,6 +34,19 @@ def build(state_paths,*,native_events=None,verify_images=False,capacity=None):
         eid=data.get('episode_id',data.get('episode',str(root)));book=data.get('book_id',data.get('book','UNKNOWN'))
         if (book,eid) in episodes:raise ValueError('每话只指定一个权威状态，禁止混算迁移RV：'+str(eid))
         episodes.add((book,eid));sources.append({'path':str(sp),'sha256':digest(sp)})
+        if data.get('production_policy') == 'first_batch_production_v1':
+            from production_decisions import load_decision, selected, outcome
+            for row in data.get('panels', []):
+                for aid in row.get('production_decisions', {}):
+                    try:
+                        _, d, _, _ = load_decision(root, row, aid)
+                        production_actions[d['action']] += 1
+                    except (ValueError, KeyError, TypeError, OSError) as exc: decision_errors.append(str(exc))
+                try:
+                    _, d, _, _ = selected(root, row)
+                    delivery_outcomes[outcome(d)] += 1
+                    issue_classes.update(str(i['category']) for i in d['issues'])
+                except (ValueError, KeyError, TypeError, OSError): delivery_outcomes['INCOMPLETE'] += 1
         for current in data.get('panels',[]):
             pid=current['panel_id'];panels[(book,eid,pid)]=current
             history=[*current.get('attempt_history',[]),current]
@@ -125,6 +139,12 @@ def build(state_paths,*,native_events=None,verify_images=False,capacity=None):
                   'note':'各阶段并集分别报告，不相加冒充互斥总耗时；ready_at仅记录实际观察到就绪的时间，未记录即未知。'},
         'edit_regression':{'complete_structured_comparisons':len(edit_reviews),'regressed':sum(edit_reviews),'rate':sum(edit_reviews)/len(edit_reviews) if edit_reviews else None,'population':'有图像hash绑定QA且清晰度与保留区域均有明确结论的编辑结果'},
         'unavailable':['服务计费请求总量及原生事件与attempt的完整对应','用户最终批准数量（不能由VISUAL_PASS推导）','准备/人工/总控握手/依赖等待的互斥区间','局部编辑新增错误率（缺少前后错误分类时不推断）'],
+        'first_batch_decisions':{'recorded_actions':dict(production_actions),
+            'adopted_problem_class_mentions':dict(issue_classes),
+            'declared_outcomes_before_final_gate':dict(delivery_outcomes),
+            'decision_evidence_errors':decision_errors,'actual_user_question_count':None,
+            'actual_repeat_ineffective_call_count':None,
+            'note':'决定数不是实际提问/调用数，采用问题统计不代表最终交付门禁通过；缺事件数据不填0'},
         'warnings':warnings,'limitations':'状态比率为登记口径，历史未保留的调用和失败不可补造；verify-images仅核验原图格式和哈希，不授予视觉通过。'}
 
 def main():

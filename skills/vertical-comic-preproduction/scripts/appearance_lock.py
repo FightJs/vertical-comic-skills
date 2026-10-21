@@ -5,6 +5,7 @@ No generation, approval synthesis, changed source script or additional QA store.
 """
 from __future__ import annotations
 import hashlib
+import copy
 import json
 from pathlib import Path
 
@@ -13,7 +14,7 @@ FRAME = 'single_frame_v1'
 SIDES = {'left','right','bilateral','center'}
 PARTS = {'ear_lobe','neck','chest','wrist','finger','lapel','sleeve','collar','torso','waist','leg','foot','hair','other'}
 FINGERS = {'thumb','index','middle','ring','little'}
-QUALITY_CHECKS = ('design','attachment','screen_position','clarity')
+QUALITY_CHECKS = ('design','anchor','attachment','screen_position','clarity')
 SINGLE_TEXT = '整张成品只画一个连续场景、一个镜头画面；禁止上下分格、左右分屏、拼贴和漫画内嵌小格。真实镜面或屏幕道具属于同一场景，不另开画格。'
 
 
@@ -102,6 +103,11 @@ def panel_errors(panel,context=None):
             if (not isinstance(projection,dict) or projection.get('surface') not in {'direct','mirror_reflection'} or
                 any(not text(projection.get(k)) for k in ('screen_position','occlusion')) or
                 projection.get('surface')=='mirror_reflection' and not text(projection.get('reflection_basis'))):out.append(did+':缺本机位画面位置/遮挡或真实反射依据')
+            count=projection.get('visible_count') if isinstance(projection,dict) else None
+            needs_count=d['count']>1 or d['category']=='accessory' and d['placement']['side']=='bilateral'
+            if needs_count or count is not None:
+                if type(count) is not int or not (0 if d['presence']=='absent' else 1)<=count<=d['count']:
+                    out.append(did+':多件/双侧配饰须明确本机位可见数量，不把总数当作必须全部露出')
             checks=[c for c in ev.get('checks',[]) if isinstance(c,dict) and c.get('kind')=='accessory' and c.get('detail_id')==did]
             if not checks or any(c.get('subject_ids')!=[d['subject_id']] for c in checks):out.append(did+':细节检查须准确归属本人物，不可借他人配饰')
     return out
@@ -110,6 +116,10 @@ def panel_errors(panel,context=None):
 def visible_details(panel):
     details=(panel.get('visual_evidence_context') or {}).get('details',{})
     return {k:d for k,d in details.items() if (panel.get('visual_evidence') or {}).get('detail_visibility',{}).get(k,{}).get('status')=='visible'}
+
+
+def visible_count(panel,did,detail):
+    return (panel.get('visual_evidence') or {}).get('detail_visibility',{}).get(did,{}).get('projection',{}).get('visible_count',detail['count'])
 
 
 def execution_block(panel,context=None):
@@ -123,12 +133,14 @@ def execution_block(panel,context=None):
         details=(context if context is not None else panel['visual_evidence_context'])['details']
         for did,d in details.items():
             row=panel['visual_evidence']['detail_visibility'][did]
-            if row['status']!='visible':continue
             a=d['placement'];design=d.get('design',{})
+            if row['status']!='visible':
+                lines.append(f"{did}｜人物{d['subject_id']}｜当前衣装{d['costume_state']}｜自身侧={a['side']}，部位={a['body_part']}，手指={a.get('finger','不适用')}；锚点={a['anchor']}；本格{row['status']}：{row['basis']}。不为展示该细节改变裁切、解除遮挡或移到另一身体位置。")
+                continue
             lines.append(f"{did}｜人物{d['subject_id']}｜当前衣装{d['costume_state']}｜{d['expected']}；数量{d['count']}；"+
                 ('保持无该装饰；' if d['presence']=='absent' else '款式/颜色/材质：'+'、'.join(design[k] for k in ('style','color','material'))+'；')+
                 f"自身侧={a['side']}，部位={a['body_part']}，手指={a.get('finger','不适用')}；锚点={a['anchor']}；附着={a['attachment']}；活动={a['motion']}；"+
-                f"本镜头位置={row['projection']['screen_position']}；遮挡={row['projection']['occlusion']}；呈现={row['projection']['surface']}。"+
+                f"本镜头可见数量={row['projection'].get('visible_count',d['count'])}（总数不变，不强求全部露出）；本镜头位置={row['projection']['screen_position']}；遮挡={row['projection']['occlusion']}；呈现={row['projection']['surface']}。"+
                 ('反射依据='+row['projection']['reflection_basis'] if row['projection']['surface']=='mirror_reflection' else ''))
         lines.append('不得换人物、换衣装、换佩戴侧或换手指，不增减装饰与层数；允许符合姿态的透视缩短及首饰自然摆动，不把衣料褶皱/高光当新配饰。')
     if panel.get('operation')=='repair' and enabled(panel):
@@ -153,7 +165,8 @@ def reference_errors(panel,root):
         for ref in refs:
             if ref.get('sha256')!=d['reference_sha256']:continue
             try:
-                with Image.open(checked_file(Path(root),ref)) as image:
+                from codex_reference_contract import physical_file
+                with Image.open(physical_file(checked_file(Path(root),ref))) as image:
                     x0,y0,x1,y1=d['source_region']
                     if not (0<=x0<x1<=image.width and 0<=y0<y1<=image.height):out.append(did+':来源裁区超出实际上传图')
             except (OSError,KeyError,ValueError,TypeError):out.append(did+':无法核对实际细节参考原图')
@@ -165,8 +178,11 @@ def review_template(panel):
     if single(panel):value['frame_observation']={'expectations_sha256':digest(panel['frame_plan']),'status':'UNREVIEWED','reviewer':'','image_sha256':None,'scene_count':None,'layout':None,'observed':''}
     if enabled(panel):
         value['appearance_observations']={did:{'status':'UNREVIEWED','reviewer':'','observed':'','side_evidence':'',
+            'expected':{'subject_id':d['subject_id'],'costume_state':d['costume_state'],
+                        'design':copy.deepcopy(d.get('design')), 'placement':copy.deepcopy(d['placement']),'total_count':d['count'],
+                        'visible_count':visible_count(panel,did,d)},
             'actual_owner':None,'actual_costume_state':None,'actual_side':None,'actual_body_part':None,'actual_finger':None,'actual_count':None,
-            'checks':{k:{'status':'UNREVIEWED','observed':''} for k in QUALITY_CHECKS},'observation_id':None} for did in visible_details(panel)}
+            'checks':{k:{'status':'UNREVIEWED','observed':''} for k in QUALITY_CHECKS},'observation_id':None} for did,d in visible_details(panel).items()}
     return value
 
 
@@ -188,6 +204,8 @@ def review_errors(panel,item,*,require_pass=True):
         r=rows[did]
         if not isinstance(r,dict) or r.get('status') not in verdicts or any(not text(r.get(k)) for k in ('reviewer','observed','side_evidence')):
             out.append(did+':服饰位置缺真实观察或未通过');continue
+        expected_detail=review_template(panel)['appearance_observations'][did]['expected']
+        if r.get('expected')!=expected_detail:out.append(did+':服饰审核目标与冻结身体锚点/可见数量不符')
         check=observations.get(r.get('observation_id'),{})
         if check.get('detail_id')!=did or check.get('kind')!='accessory' or check.get('status')!=r['status']:out.append(did+':须引用本细节原尺寸检查，不能借别人的局部')
         checks=r.get('checks',{})
@@ -195,7 +213,7 @@ def review_errors(panel,item,*,require_pass=True):
         elif r['status']=='PASS' and any(c['status']!='PASS' for c in checks.values()):out.append(did+':局部失败不能被总PASS覆盖')
         if r['status']=='PASS':
             expected={'actual_owner':d['subject_id'],'actual_costume_state':d['costume_state'],'actual_side':d['placement']['side'],
-                      'actual_body_part':d['placement']['body_part'],'actual_finger':d['placement'].get('finger'),'actual_count':d['count']}
+                      'actual_body_part':d['placement']['body_part'],'actual_finger':d['placement'].get('finger'),'actual_count':visible_count(panel,did,d)}
             if any(r.get(k)!=v for k,v in expected.items()) or type(r.get('actual_count')) is not int:out.append(did+':人物/衣装/佩戴侧/部位/手指/数量与批准不符')
     if dimensions and any(isinstance(r,dict) and r.get('status')=='FAIL' for r in rows.values()) and (dimensions.get('costume') or {}).get('status')!='FAIL':out.append('APPEARANCE_HOLD:服饰失败须同时记入原costume维度')
     if panel.get('operation')=='repair':

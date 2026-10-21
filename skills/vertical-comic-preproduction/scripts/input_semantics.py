@@ -5,6 +5,7 @@ the reviewer must still read the final prompt and actual references. Legacy
 frozen states without this capability keep their original contract.
 """
 from __future__ import annotations
+from codex_reference_contract import resolve_path
 
 import argparse
 import copy
@@ -16,6 +17,9 @@ from pathlib import Path
 from codex_reference_contract import checked_file, digest, read_json, validate_panel
 
 POLICY = 'final_input_semantics_v1'
+PREPARED_POLICY = 'final_input_semantics_v2'
+POLICIES = {POLICY, PREPARED_POLICY}
+PREPARED_CHECKS = ('continuity_and_dependencies', 'rule_execution_coverage', 'appearance_anchors')
 CHECKS = ('source_and_expression', 'crop_and_required_information',
           'per_subject_visibility', 'action_and_space', 'actual_references',
           'all_execution_text_and_criteria')
@@ -41,9 +45,9 @@ def fingerprint(value):
 
 def enabled(state):
     policy = state.get('input_semantics_policy')
-    if policy not in (None, POLICY):
+    if policy is not None and policy not in POLICIES:
         raise ValueError('INPUT_SEMANTICS_HOLD:未知最终输入审查策略')
-    return policy == POLICY
+    return policy in POLICIES
 
 
 def _content(value):
@@ -159,7 +163,7 @@ def _basis(state, root, shot):
 def actual_input(state, root, shot, packet, package_root):
     from audit_cache import derived, content_key
     authority = {k: state.get(k) for k in ('book_id', 'episode_id', 'source_snapshot',
-                 'visual_basis', 'toolchain', 'memory_source')}
+                 'visual_basis', 'shot_manifest', 'toolchain', 'memory_source', 'input_semantics_policy')}
     return derived('final_semantic_input', content_key([str(root), str(package_root), authority, shot, packet]),
                    lambda: _actual_input(state, root, shot, packet, package_root))
 
@@ -179,7 +183,8 @@ def _actual_input(state, root, shot, packet, package_root):
     references = []
     for ref, path in zip(panel['reference_images'], args['referenced_image_paths']):
         references.append({**_content(ref), 'sha256': digest(Path(path))})
-    return {**_basis(state, Path(root), shot), 'prompt': args['prompt'],
+    return {**_basis(state, Path(root), shot),
+            **preparation_basis(state, root, shot, panel, args['prompt']), 'prompt': args['prompt'],
             'transparent_background': args['transparent_background'],
             'output_spec': panel.get('output_spec'), 'references': references,
             'execution_metadata': _content({k: panel.get(k) for k in (
@@ -206,32 +211,107 @@ def planned_input(state, root, shot, plan_row):
         else:
             fixed = checked_file(Path(root), ref)
             from PIL import Image
-            with Image.open(fixed) as image: image.verify()
+            from codex_reference_contract import physical_file
+            with Image.open(physical_file(fixed)) as image: image.verify()
             references.append(_content(ref))
     if sorted(found) != sorted(shot.get('generation_dependencies', [])) or len(found) != len(set(found)):
         raise ValueError('INPUT_SEMANTICS_HOLD:依赖槽与真实前置不符')
-    return {**_basis(state, Path(root), shot), 'prompt': args['prompt'],
+    return {**_basis(state, Path(root), shot),
+            **preparation_basis(state, root, shot, {**shot, 'memory_applications': plan_row.get('memory_applications', shot.get('memory_applications', {}))}, args['prompt']), 'prompt': args['prompt'],
             'transparent_background': args.get('transparent_background'),
             'output_spec': plan_row.get('output_spec'), 'references': references,
             'reference_bindings': plan_row['reference_bindings'], 'dependency_plan': True}
 
 
+def review_checks(policy):
+    return CHECKS + (PREPARED_CHECKS if policy == PREPARED_POLICY else ())
+
+
+def preparation_basis(state, root, shot, panel, prompt):
+    """Read existing authorities once; expose concrete review targets, not new approvals."""
+    if state.get('input_semantics_policy') != PREPARED_POLICY:
+        return {}
+    from visual_evidence import context_for, continuity_targets, execution_block
+    basis = read_json(checked_file(Path(root), state['visual_basis']))
+    context = context_for(basis, shot) if shot.get('visual_evidence_policy') else {}
+    contract = shot.get('continuity_contract') or {}
+    deps = shot.get('generation_dependencies', [])
+    reasons = contract.get('generation_dependency_reasons', {})
+    if (not isinstance(deps, list) or any(not isinstance(d, str) or not d.strip() for d in deps)
+            or len(deps) != len(set(deps)) or shot.get('panel_id') in deps
+            or not isinstance(reasons, dict) or set(reasons) != set(deps)
+            or any(not isinstance(v, str) or not v.strip() for v in reasons.values())):
+        raise ValueError('INPUT_SEMANTICS_HOLD:真实实图依赖须逐项说明用途与等待原因；比较关系不自动成为生图依赖')
+    if panel.get('generation_dependencies', []) != deps or panel.get('continuity_contract') != shot.get('continuity_contract'):
+        raise ValueError('INPUT_SEMANTICS_HOLD:实际包连续性或实图依赖与镜头不同')
+    if shot.get('visual_evidence_policy'):
+        # Includes invisible accessory constraints; planned inputs need them too.
+        block = execution_block({**shot, 'visual_evidence_context': context}, context)
+        if block not in prompt:
+            raise ValueError('INPUT_SEMANTICS_HOLD:最终输入缺已准备的可见关系/服饰约束')
+    from rule_memory import select, execution_constraints
+    from continuity_context import rule_tags
+    source = state.get('memory_source')
+    # Contextual tags belong to the whole manifest, including cross-episode context.
+    manifest_path = checked_file(Path(root), state['shot_manifest'])
+    manifest = read_json(manifest_path)
+    tags = rule_tags(manifest, manifest_path.parent, shot) if source else []
+    rules = {}
+    for stage in ('shot_design', 'generation', 'image_review'):
+        rows = []
+        for match in select(source, stage, panel, tags):
+            rule = match['rule']; checked_file(Path(source['root']), rule['file'])
+            apps = (panel.get('memory_applications') or {}).get(stage, [])
+            app = next((a for a in apps if a.get('memory_id') == rule['id']), {})
+            constraints = app.get('prompt_constraints', []) if stage == 'generation' else []
+            if stage == 'generation' and (app.get('decision') not in {'APPLIED', 'NOT_APPLICABLE'}
+                    or app.get('rule_signature') != match['rule_signature']
+                    or app.get('decision') == 'NOT_APPLICABLE' and (match['matched_tags'] or not app.get('reason'))):
+                raise ValueError('INPUT_SEMANTICS_HOLD:'+rule['id']+':缺准确规则执行或排除依据')
+            if stage == 'generation' and rule['requirements'][stage]['prompt_constraints'] and app.get('decision') != 'NOT_APPLICABLE':
+                if not constraints or any(not isinstance(x, str) or not x.strip() or x not in prompt for x in constraints):
+                    raise ValueError('INPUT_SEMANTICS_HOLD:'+rule['id']+':本格规则约束未落实到最终prompt')
+            rows.append({'memory_id':rule['id'], 'rule_signature':match['rule_signature'],
+                         'matched_tags':match['matched_tags'], 'matched_terms':match['matched_terms'],
+                         'checks':rule['requirements'][stage]['checks'],
+                         'decision':app.get('decision'), 'evidence':app.get('evidence'),
+                         'prompt_constraints':constraints})
+        rules[stage] = rows
+    if any(line not in prompt for line in execution_constraints(panel)):
+        raise ValueError('INPUT_SEMANTICS_HOLD:已收敛的规则约束未全部进入实际输入')
+    targets = {
+        'continuity_and_dependencies': {'design':contract, 'generation_dependencies':deps,
+            'comparison_panel_ids':continuity_targets(shot) if shot.get('visual_evidence_policy') else []},
+        'rule_execution_coverage': rules,
+        'appearance_anchors': {'details':context.get('details', {}),
+            'visibility':(shot.get('visual_evidence') or {}).get('detail_visibility', {}),
+            'checks': [c for c in (shot.get('visual_evidence') or {}).get('checks', []) if c.get('kind') == 'accessory']}}
+    return {'input_semantics_policy': PREPARED_POLICY, 'preparation_targets':copy.deepcopy(targets)}
+
+
 def review_template(inputs):
-    return {'policy': POLICY, 'status': 'UNREVIEWED', 'reviewer': '', 'evidence': '',
+    policy = inputs.get('input_semantics_policy', POLICY)
+    return {'policy': policy, 'status': 'UNREVIEWED', 'reviewer': '', 'evidence': '',
             'input_digest': fingerprint(inputs), 'checks': {
-                key: {'status': 'UNREVIEWED', 'evidence': ''} for key in CHECKS}}
+                key: {'status': 'UNREVIEWED', 'evidence': '',
+                      **({'expected': copy.deepcopy(inputs['preparation_targets'][key])}
+                         if key in inputs.get('preparation_targets', {}) else {})}
+                for key in review_checks(policy)}}
 
 
 def review_errors(review, inputs):
     if not isinstance(review, dict):
         return ['INPUT_SEMANTICS_HOLD:缺最终输入逐格审查']
-    if review.get('policy') != POLICY or review.get('input_digest') != fingerprint(inputs):
+    policy = inputs.get('input_semantics_policy', POLICY)
+    if review.get('policy') != policy or review.get('input_digest') != fingerprint(inputs):
         return ['INPUT_SEMANTICS_HOLD:最终输入已变化或审查版本失配']
     if (review.get('status') != 'REVIEWED' or not review.get('reviewer')
             or not review.get('evidence') or review.get('unresolved_issues', [])):
         return ['INPUT_SEMANTICS_HOLD:最终输入未实审或存在未解决项']
-    return ['INPUT_SEMANTICS_HOLD:' + key + ':缺具体审查依据' for key in CHECKS
-            if review.get('checks', {}).get(key, {}).get('status') != 'PASS'
+    return ['INPUT_SEMANTICS_HOLD:' + key + ':缺具体审查依据' for key in review_checks(policy)
+            if (key in inputs.get('preparation_targets', {}) and
+                review.get('checks', {}).get(key, {}).get('expected') != inputs['preparation_targets'][key])
+            or review.get('checks', {}).get(key, {}).get('status') != 'PASS'
             or not review.get('checks', {}).get(key, {}).get('evidence')]
 
 
@@ -317,7 +397,7 @@ def _coverage(state, root, dependency_plan=None):
             if found: errors[pid] = found
         except (OSError, ValueError, TypeError, KeyError, IndexError) as exc:
             errors[pid] = ['INPUT_SEMANTICS_HOLD:' + str(exc)]
-    return {'policy': POLICY, 'status': 'HOLD' if errors else 'PREPRODUCTION_INPUTS_REVIEWED',
+    return {'policy': state['input_semantics_policy'], 'status': 'HOLD' if errors else 'PREPRODUCTION_INPUTS_REVIEWED',
             'panel_ids': source['panel_ids'], 'reviewed_panel_ids': [p for p in source['panel_ids'] if p not in errors],
             'pending_real_reference_review_ids': pending, 'errors': errors,
             'dispatch_authorized': False, 'image_calls': 0}
@@ -332,7 +412,7 @@ def main():
     parser.add_argument('--completion', action='store_true', help='为真实依赖补入后的请求生成未审模板')
     args = parser.parse_args()
     try:
-        path = Path(args.state).resolve(); root = path.parent.parent; state = read_json(path)
+        path = resolve_path(Path(args.state)); root = path.parent.parent; state = read_json(path)
         if not enabled(state): raise ValueError('旧冻结运行不自动启用新审查')
         plan_ref = {'path': args.dependency_plan, 'sha256': digest(root / args.dependency_plan)} if args.dependency_plan else None
         if not args.output:
@@ -356,7 +436,7 @@ def main():
             field = 'dependency_completion_review' if args.completion else 'execution_review'
             row[field] = review_template(inputs)
             row[field]['detected_conflicts'] = conflict_errors(shots[pid], inputs['prompt'])
-        output = Path(args.output).resolve(); output.relative_to(root)
+        output = resolve_path(Path(args.output)); output.relative_to(root)
         with output.open('x', encoding='utf-8') as f: json.dump(audit, f, ensure_ascii=False, indent=2)
         print(json.dumps({'status': 'UNREVIEWED_TEMPLATE', 'output': str(output), 'image_calls': 0, 'dispatch_authorized': False}))
         return 0

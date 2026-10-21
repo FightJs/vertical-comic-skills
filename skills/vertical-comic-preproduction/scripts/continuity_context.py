@@ -1,4 +1,5 @@
 """Read approved prior shots for a single-panel package; no invented prior output."""
+from codex_reference_contract import is_file, resolve_path
 import json
 import os
 import copy
@@ -23,8 +24,8 @@ def runtime_source_state(source,base,book):
     name=Path(source.get('source_state_file',''))
     if not str(name) or name.is_absolute() or '..' in name.parts or str(name)=='.':
         raise ValueError('来源状态须为来源根内安全相对路径')
-    path=(Path(base)/name).resolve()
-    if not path.is_relative_to(Path(base).resolve()) or not path.is_file():
+    path=resolve_path(Path(base) / name)
+    if not path.is_relative_to(resolve_path(Path(base))) or not is_file(path):
         raise ValueError('来源状态不存在或逃逸来源根')
     state=read_json_readonly(path)
     if state.get('book_id')!=book or state.get('episode_id')!=source.get('episode_id'):
@@ -39,13 +40,13 @@ def source_base(source,context_dir):
     mode=source.get('root_mode')
     if mode=='context_relative_v1':
         if value.is_absolute():raise ValueError('可移植上下文须使用相对根')
-        return (Path(context_dir)/value).resolve()
+        return resolve_path(Path(context_dir) / value)
     if mode is not None or not value.is_absolute():raise ValueError('来源根模式或绝对路径无效')
-    return value.resolve()
+    return resolve_path(value)
 
 def portable_context(context,context_dir):
     """Call BEFORE approval; relocation never rewrites approved context bytes."""
-    return {**context,'sources':[{**s,'root':Path(os.path.relpath(source_base(s,context_dir),Path(context_dir).resolve())).as_posix(),'root_mode':'context_relative_v1'} for s in context['sources']]}
+    return {**context,'sources':[{**s,'root':Path(os.path.relpath(source_base(s, context_dir), resolve_path(Path(context_dir)))).as_posix(),'root_mode':'context_relative_v1'} for s in context['sources']]}
 
 def uid(episode,panel):return panel if panel.startswith(episode+'-') else episode+'-'+panel
 
@@ -69,9 +70,7 @@ def load_context(manifest,root,*,readonly=False):
         ('episode_id','source_script','source_snapshot','visual_basis','shot_manifest')}]
     try:
         panels=manifest.get('panels',[])
-        key=content_key([str(Path(root).resolve()) if root is not None else None,
-                         manifest.get('book_id'),episode,manifest['continuity_context'],
-                         panels[0].get('panel_id') if panels else None,review])
+        key=content_key([str(resolve_path(Path(root))) if root is not None else None, manifest.get('book_id'), episode, manifest['continuity_context'], panels[0].get('panel_id') if panels else None, review])
         rows,errors=derived('continuity_context',key,lambda:_load_context(manifest,root),
                             accept=lambda result:not result[1])
         previous.update(rows if readonly else copy.deepcopy(rows))
@@ -153,7 +152,7 @@ def binding_errors(state,root,packet,package_root):
         if data.get('episode_order')!=state.get('episode_order',data.get('episode_order')):return ['上下文话序与本次任务不一致']
         for source in data['sources']:
             if source['episode_id']==state['episode_id']:
-                same=source_base(source,context_path.parent)==Path(root).resolve() and source['source_script']==state['source_script'] and source['source_snapshot']==state['source_snapshot']
+                same=source_base(source,context_path.parent)==resolve_path(Path(root)) and source['source_script']==state['source_script'] and source['source_snapshot']==state['source_snapshot']
                 inputs=list(state.get('half_inputs',{}).values()) or [state]
                 from panel_readiness import enabled,compatible_collection
                 context_ids=[e['panel_id'] for e in data['entries'] if data['sources'][e['source']]==source]
@@ -202,7 +201,7 @@ def rule_tags(manifest,root,panel):
 
 def build(state,root,pid,candidate=False):
     """Build pointers to already approved prior designs, without copying images."""
-    root=Path(root).resolve();order=read(checked_file(root,state['source_snapshot']))['panel_ids'];index=order.index(pid)
+    root=resolve_path(Path(root));order=read(checked_file(root,state['source_snapshot']))['panel_ids'];index=order.index(pid)
     sources=list(state.get('continuity_sources',[]));episode=state['episode_id']
     from scoped_inputs import approval_for
     from scoped_inputs import full_preparation
@@ -260,7 +259,7 @@ def main():
     import argparse
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--state',required=True);p.add_argument('--panel',required=True);p.add_argument('--write',required=True);p.add_argument('--candidate',action='store_true');p.add_argument('--portable',action='store_true');a=p.parse_args()
     try:
-        path=Path(a.state).resolve();root=path.parent.parent;value=build(read(path),root,a.panel,a.candidate);dest=Path(a.write).resolve();dest.relative_to(root)
+        path=resolve_path(Path(a.state));root=path.parent.parent;value=build(read(path),root,a.panel,a.candidate);dest=resolve_path(Path(a.write));dest.relative_to(root)
         if a.portable:value=portable_context(value,dest.parent)
         with dest.open('x',encoding='utf-8', newline='\n') as f:json.dump(value,f,ensure_ascii=False,indent=2)
         print(json.dumps({'status':'CANDIDATE_DESIGN_POINTERS_NOT_AUTHORIZED' if a.candidate else 'APPROVED_DESIGN_POINTERS_ONLY','path':str(dest)},ensure_ascii=False));return 0

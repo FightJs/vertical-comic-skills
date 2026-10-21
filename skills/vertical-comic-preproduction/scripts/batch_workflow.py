@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Five-panel stage gates. Read evidence; never call image tools or grant approval."""
 from __future__ import annotations
+from codex_reference_contract import resolve_path
 
 import argparse
 import json
@@ -102,9 +103,9 @@ def dispatch_errors(state, root, packet, pid, output_sha256=None):
                           pid, packet.get("dispatch_receipt"), output_sha256)
 
 
-def cross_episode_errors(context):
+def cross_episode_errors(context, *, first_batch=False):
     """Bind the coordinator's visual comparison to all current episode outputs."""
-    control_path = Path(context["control_file"]).resolve()
+    control_path = resolve_path(Path(context['control_file']))
     control = read(control_path)
     jobs = control["jobs"]
     if len(jobs) <= 1:
@@ -116,13 +117,13 @@ def cross_episode_errors(context):
     errors = []
     if report.get("policy") != "cross_episode_review_v1" or report.get("book_id") != control["book_id"] or report.get("epoch") != control["epoch"] or report.get("shared_files") != control["shared_files"]:
         errors.append("跨话复核的本书/epoch/共用基准版本不一致")
-    if report.get("status") != "PASS" or not isinstance(report.get("reviewer"), str) or not report["reviewer"].strip() or not isinstance(report.get("evidence"), str) or not report["evidence"].strip():
+    if report.get("status") not in ({"PASS", "FAIL"} if first_batch else {"PASS"}) or not isinstance(report.get("reviewer"), str) or not report["reviewer"].strip() or not isinstance(report.get("evidence"), str) or not report["evidence"].strip():
         errors.append("跨话比较尚未实际看图通过并记录审查者与依据")
     expected = []
     for job in jobs:
-        episode_root = Path(job["root"]).resolve()
+        episode_root = resolve_path(Path(job['root']))
         name = Path(job.get("state_file", "00_输入审计/生产流程.json"))
-        state_path = (episode_root / name).resolve()
+        state_path = resolve_path(episode_root / name)
         if name.is_absolute() or not state_path.is_relative_to(episode_root):
             raise ValueError("跨话状态路径越界")
         other = read(state_path)
@@ -135,7 +136,7 @@ def cross_episode_errors(context):
             if other.get(key) != job["frozen_inputs"].get(key):
                 errors.append(f"{job['episode_id']}:{key}已换版")
             checked_file(episode_root, other.get(key))
-        if scoped:
+        if scoped and not first_batch:
             if not whole and job.get("frozen_halves") != other.get("half_inputs"):
                 errors.append(f"{job['episode_id']}:最终半话冻结输入版本不一致")
             if whole and job.get('frozen_halves'):
@@ -148,12 +149,24 @@ def cross_episode_errors(context):
             if verified.get('next_action')!='READY_FOR_CROSS_REVIEW': errors.extend([f"{job['episode_id']}:半话放行不完整",*verified.get('errors',[])])
         source = read(checked_file(episode_root, other["source_snapshot"]))
         records = other.get("panels", [])
-        if not records or [r.get("panel_id") for r in records] != source.get("panel_ids") or any(r.get("status") not in DONE for r in records):
+        if first_batch:
+            from production_decisions import selected, enabled
+            if not enabled(other):
+                errors.append(f"{job['episode_id']}:未声明第一批生产合同")
+            try:
+                records = [selected(episode_root, r)[0] for r in records]
+            except (ValueError, KeyError, TypeError, OSError) as exc:
+                errors.append(str(exc)); continue
+        if not records or [r.get("panel_id") for r in records] != source.get("panel_ids") or any(r.get("status") not in (DONE | {"VISUAL_FAIL"} if first_batch else DONE) for r in records):
             errors.append(f"{job['episode_id']}:尚非完整已检查源格清单")
         for r in records:
             checked_file(episode_root, r.get("output"))
             checked_file(episode_root, r.get("qa_report"))
-            errors.extend(f"{job['episode_id']}:{r['panel_id']}:{e}" for e in qa_errors(episode_root, r))
+            if first_batch:
+                from batch_round import attempt_errors
+                errors.extend(attempt_errors(other, episode_root, r))
+            else:
+                errors.extend(f"{job['episode_id']}:{r['panel_id']}:{e}" for e in qa_errors(episode_root, r))
         expected.append({"job_id": job["job_id"], "episode_id": job["episode_id"],
                          **({"half_inputs": other["half_inputs"]} if scoped and not whole else {"visual_basis": other["visual_basis"], "shot_manifest": other["shot_manifest"]}),
                          "outputs": [r["output"] for r in records], "qa_reports": [r["qa_report"] for r in records]})
@@ -162,8 +175,23 @@ def cross_episode_errors(context):
     return errors
 
 
-def completed_errors(state, root, record, shot, basis, records):
-    errors = qa_errors(root, record)
+def completed_errors(state, root, record, shot, basis, records, *, require_pass=True):
+    if require_pass:
+        errors = qa_errors(root, record)
+    else:
+        from batch_round import attempt_errors
+        errors = attempt_errors(state, root, record)
+        packet_path = checked_file(root, record['package_manifest'])
+        packet = read(packet_path); panel = packet['panels'][0]
+        qa = read(checked_file(root, record['qa_report'])); item = qa['panels'][0]
+        tags = []
+        if state.get('execution_contract') == 'comic_execution_v2':
+            from continuity_context import rule_tags
+            tags = rule_tags(packet, packet_path.parent, panel)
+        from rule_memory import application_errors
+        errors.extend(application_errors(packet.get('memory_source'), 'image_review', panel,
+            packet_path.parent, applications=item.get('memory_review', []),
+            image_sha256=record['output']['sha256'], context_tags=tags, scope=packet, require_pass=False))
     packet = read(checked_file(root, record.get("package_manifest")))
     from panel_readiness import binding_errors as readiness_binding
     errors.extend(readiness_binding(state,packet))
@@ -188,6 +216,8 @@ def completed_errors(state, root, record, shot, basis, records):
     if packet.get("execution_mode") != state.get("execution_mode", MODE) or len(packet.get("panels", [])) != 1:
         return errors + ["验收包执行模式不一致或非单格包"]
     panel = packet["panels"][0]
+    if panel.get('repair_method') == 'regenerate' and state.get('production_policy') != 'first_batch_production_v1':
+        errors.append('旧运行不支持新重生决定；不允许补字段绕过')
     from visual_evidence import binding_errors as visual_binding, packet_errors as visual_packet_errors
     errors.extend(visual_binding(state, packet))
     errors.extend(visual_packet_errors(state, shot, panel, basis))
@@ -201,7 +231,7 @@ def completed_errors(state, root, record, shot, basis, records):
     if state.get('execution_contract')=='comic_execution_v2' and panel.get('source_panel_id')!=record.get('source_panel_id'):errors.append('SOURCE_ID_HOLD:验收包原格号与准确源映射不一致')
     effective_basis = dependency_basis(root, checked_file(root, record["package_manifest"]), packet, shot, basis, records,state)
     errors.extend(basis_errors(panel, effective_basis))
-    if state.get("visual_evidence_policy"):
+    if state.get("visual_evidence_policy") and require_pass:
         from visual_evidence import comparison_errors
         qa = read(checked_file(root, record["qa_report"]))
         item = next((q for q in qa.get("panels", []) if q.get("panel_id") == record["panel_id"]), {})
@@ -248,6 +278,8 @@ def input_errors(state, root, record, shot, basis, records, *, candidate=False, 
     if packet.get("execution_mode") != state.get("execution_mode", MODE) or packet.get("style_policy") != STYLE_POLICY or packet.get("workflow_policy") != POLICY or len(packet.get("panels", [])) != 1:
         return errors + ["每次请求须为当前模式的单格执行包，保留阶段/画风合同"]
     panel = packet["panels"][0]
+    if panel.get('repair_method') == 'regenerate' and state.get('production_policy') != 'first_batch_production_v1':
+        errors.append('旧运行不支持新重生决定；不允许补字段绕过')
     from visual_evidence import binding_errors as visual_binding, packet_errors as visual_packet_errors
     errors.extend(visual_binding(state, packet))
     errors.extend(visual_packet_errors(state, shot, panel, basis))
@@ -315,7 +347,7 @@ def batch_review_errors(state, root, batch, records, previous):
 
 
 def evaluate_batch(state, root, check="status", requested=None):
-    root = Path(root).resolve()
+    root = resolve_path(Path(root))
     def result(action, errors=(), batch=None, eligible=()):
         return {"policy": POLICY, "execution_mode": MODE,
                 "status": "PASS" if not errors and action in {"READY_FOR_BATCH_PANEL", "READY_TO_PACKAGE"} else "HOLD",
@@ -449,8 +481,8 @@ def main():
     parser.add_argument("--root")
     parser.add_argument("--write-plan", required=True, help="新计划文件；不覆盖、不写批准或状态")
     args = parser.parse_args()
-    state_path = Path(args.state).resolve()
-    root = Path(args.root).resolve() if args.root else state_path.parent.parent
+    state_path = resolve_path(Path(args.state))
+    root = resolve_path(Path(args.root)) if args.root else state_path.parent.parent
     try:
         state = read(state_path)
         if state.get("optimization_policy") == "scoped_half_review_v1":
@@ -460,7 +492,7 @@ def main():
             shots = read(checked_file(root, state.get("shot_manifest")))
             source = None
         plan = build_plan(state, shots, source)
-        dest = Path(args.write_plan).resolve()
+        dest = resolve_path(Path(args.write_plan))
         dest.relative_to(root)
         with dest.open("x", encoding="utf-8", newline='\n') as output:
             json.dump(plan, output, ensure_ascii=False, indent=2)

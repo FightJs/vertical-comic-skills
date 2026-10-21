@@ -82,7 +82,8 @@ def attempt_errors(state, root, item):
         actual_size = None
         if panels[0].get("visual_evidence_policy"):
             from PIL import Image
-            with Image.open(output) as opened: actual_size = opened.size
+            from codex_reference_contract import physical_file
+            with Image.open(physical_file(output)) as opened: actual_size = opened.size
         errors.extend(visual_review_errors(panels[0], items[0], require_pass=False, image_size=actual_size))
         diagnosis = item.get('failure_diagnosis', {})
         if not diagnosis.get('reviewer') or not diagnosis.get('evidence') or not diagnosis.get('layer'):
@@ -198,7 +199,8 @@ def write_contact_sheet(root, batch, records, destination):
     tiles = []
     for pid in batch['panel_ids']:
         path = checked_file(root, records[pid].get('output'))
-        with Image.open(path) as opened:
+        from codex_reference_contract import physical_file
+        with Image.open(physical_file(path)) as opened:
             thumb = opened.convert('RGB'); thumb.thumbnail((360, 480))
         tile = Image.new('RGB', (380, 520), 'white')
         tile.paste(thumb, ((380-thumb.width)//2, 30)); ImageDraw.Draw(tile).text((10,8), pid, fill='black'); tiles.append(tile)

@@ -2,6 +2,7 @@
 """Reference-purpose preflight and dimension-review checks; never image approval."""
 
 from __future__ import annotations
+from codex_reference_contract import is_file, read_json, resolve_path, digest
 
 import argparse
 import hashlib
@@ -31,7 +32,7 @@ SCENE_MODES = {"same_scene_same_view", "same_scene_new_view", "new_scene", "scen
 
 
 def sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    return digest(path)
 
 
 def strings(value: Any, nonempty: bool = False) -> bool:
@@ -338,7 +339,7 @@ def check_dimension_report(manifest: dict[str, Any], report: dict[str, Any], man
             errors.extend(f"{pid}: {e}" for e in validate_style(panel, manifest_path.parent))
             errors.extend(f"{pid}: {e}" for e in review_errors(panel, item))
         image = Path(item.get("image") or "")
-        if not image.is_file() or sha256(image) != item.get("image_sha256"):
+        if not is_file(image) or sha256(image) != item.get("image_sha256"):
             errors.append(f"{pid}:待审图片缺失、已改变或未登记哈希")
         if item.get("ratio_check") != "PASS":
             errors.append(f"{pid}:实际比例未通过")
@@ -347,7 +348,8 @@ def check_dimension_report(manifest: dict[str, Any], report: dict[str, Any], man
         if panel.get("visual_evidence_policy"):
             try:
                 from PIL import Image
-                with Image.open(image) as opened: actual_size = opened.size
+                from codex_reference_contract import physical_file
+                with Image.open(physical_file(image)) as opened: actual_size = opened.size
             except (OSError, ValueError): errors.append(f"{pid}:原图无法读取，不能进行原尺寸审查")
         errors.extend(f"{pid}: {e}" for e in visual_review_errors(panel, item, image_size=actual_size))
         expected = dimension_template(panel)
@@ -374,10 +376,10 @@ def main() -> int:
     parser.add_argument("--manifest", required=True)
     parser.add_argument("--qa-report", help="检查已人工填写的生成图QA报告")
     args = parser.parse_args()
-    path = Path(args.manifest).resolve()
-    manifest = json.loads(path.read_text(encoding="utf-8-sig"))
+    path = resolve_path(Path(args.manifest))
+    manifest = read_json(path)
     if args.qa_report:
-        report = json.loads(Path(args.qa_report).read_text(encoding="utf-8-sig"))
+        report = read_json(Path(args.qa_report))
         result = check_dimension_report(manifest, report, path)
     else:
         errors, warnings = validate_manifest(manifest,root=path.parent)

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Read-only staged workflow gate. Checks evidence consistency, never invents approval."""
 from __future__ import annotations
+from codex_reference_contract import resolve_path
 
 import argparse
 import json
@@ -10,6 +11,8 @@ from codex_reference_contract import read_json, checked_file, digest, ratio, val
 from continuity_contract import check_dimension_report
 from style_contract import POLICY as STYLE_POLICY, validate_style, output_spec_errors
 from rule_memory import application_errors as memory_errors, binding_errors as memory_binding_errors
+from authority_updates import authority_scoped, revocation_errors, revocation_token
+from codex_reference_contract import physical_file
 
 POLICY = "staged_comic_v1"
 DONE = {"VISUAL_PASS", "USER_ACCEPTED"}
@@ -42,8 +45,10 @@ def read(path):
 
 
 def approval_errors(approval, root, artifacts, book, episode, *, phase=None, panel_ids=None):
+    revoked = revocation_errors(approval, book, episode)
+    if revoked: return revoked
     from audit_cache import derived, content_key
-    key=content_key([str(Path(root).resolve()),approval,artifacts,book,episode,phase,panel_ids])
+    key=content_key([str(resolve_path(Path(root))), approval, artifacts, book, episode, phase, panel_ids, revocation_token()])
     value=derived('approval_validation',key,
                   lambda:_approval_errors(approval,root,artifacts,book,episode,phase=phase,panel_ids=panel_ids),
                   accept=lambda errors:not errors)
@@ -116,7 +121,7 @@ def _qa_errors(root, record):
         tags=rule_tags(manifest,manifest_path.parent,panel)
     errors.extend(memory_errors(manifest.get("memory_source"), "generation", panel, manifest_path.parent,context_tags=tags,scope=manifest))
     from PIL import Image
-    with Image.open(output) as opened:
+    with Image.open(physical_file(output)) as opened:
         if ratios_enabled(manifest):errors.extend(ratio_image_errors(panel,opened.size))
         errors.extend(output_spec_errors(panel, opened.size, opened.format))
         target, tolerance = ratio(panel.get("frame_ratio")), panel.get("ratio_tolerance")
@@ -330,7 +335,10 @@ def _evaluate_impl(state, root, check="status", requested=None):
 def _evaluate_with_session(state, root, check="status", requested=None):
     from review_reuse import session
     from execution_contract import state_errors
-    errors=state_errors(state,root)
+    # The episode router calls evaluate_episode, which checks the same contract
+    # before reading any episode input. Keep its direct-call guard, without
+    # introducing a second contract/toolchain walk through the standard entry.
+    errors=state_errors(state,root) if state.get('execution_mode')!='episode_async_v1' else []
     if errors:return {'status':'HOLD','next_action':'EXECUTION_CONTRACT_HOLD','errors':errors,'user_acceptance':'NOT_GRANTED_BY_SCRIPT'}
     if state.get('optimization_policy') not in (None,'scoped_half_review_v1','scoped_episode_review_v1'):
         return {'status':'HOLD','next_action':'OPTIMIZATION_POLICY_HOLD','errors':['未知审查优化策略，不能静默降级'],'user_acceptance':'NOT_GRANTED_BY_SCRIPT'}
@@ -341,16 +349,20 @@ def _evaluate_with_session(state, root, check="status", requested=None):
         return result
 
 
+@authority_scoped
 def evaluate(state, root, check="status", requested=None):
     from codex_reference_contract import file_session
+    from codex_reference_contract import _READ_VIEW
+    view = _READ_VIEW.get()
+    if view is not None: view.authorize_check(check, requested)
     if check=='input_audit_batch' and (state.get('execution_mode')!='episode_async_v1' or state.get('parallel_context')):
         raise ValueError('接包输入审计不能用于旧模式或线上调度上下文')
     from task_context import state_errors
-    scoped=state_errors(state,root)
-    if scoped:
-        return {'status':'HOLD','next_action':'TASK_SCOPE_HOLD','errors':scoped,
-                'ready_panel_ids':[],'reports':[],'failure_domain':'INPUT_OR_REVIEW_CONTEXT'}
     with file_session() as memo:
+        scoped=state_errors(state,root)
+        if scoped:
+            return {'status':'HOLD','next_action':'TASK_SCOPE_HOLD','errors':scoped,
+                    'ready_panel_ids':[],'reports':[],'failure_domain':'INPUT_OR_REVIEW_CONTEXT'}
         result = _evaluate_with_session(state, root, check, requested)
         action=result.get('next_action','')
         if 'SNAPSHOT' in str(result.get('errors',[])) or action=='EXECUTION_CONTRACT_HOLD':
@@ -382,8 +394,8 @@ def main():
     parser.add_argument("--check", choices=("status", "generate", "deliver"), default="status")
     parser.add_argument("--panel", help="generate模式必填源格号")
     args = parser.parse_args()
-    path = Path(args.state).resolve()
-    root = Path(args.root).resolve() if args.root else path.parent.parent
+    path = resolve_path(Path(args.state))
+    root = resolve_path(Path(args.root)) if args.root else path.parent.parent
     try:
         report = evaluate(read(path), root, args.check, args.panel)
     except (OSError, ValueError) as exc:

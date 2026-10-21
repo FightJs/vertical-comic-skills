@@ -12,6 +12,8 @@ import copy
 import os
 import tempfile
 from platform_io import file_lock, atomic_json
+from dispatch_publication import require_legacy
+from authority_updates import state_write_lock, authority_scoped
 import io
 import uuid
 from contextlib import redirect_stdout
@@ -54,6 +56,7 @@ def settings(value):
     return value
 
 
+@authority_scoped
 def compile_jobs(state, root, panel_ids=None, *, candidate=False, input_audit=False):
     """Full bulk gates once; export actual paths/prompt, never execute planned jobs."""
     from staged_workflow import preflight_many
@@ -78,8 +81,14 @@ def compile_jobs(state, root, panel_ids=None, *, candidate=False, input_audit=Fa
             if errors or submission is None:
                 raise ValueError(f"{pid}: " + ";".join(errors))
             arguments = submission["arguments"]
-            jobs.append({
+            prepared = {}
+            from input_semantics import PREPARED_POLICY, actual_input, fingerprint
+            if state.get('input_semantics_policy') == PREPARED_POLICY:
+                shot = next(p for p in shots if p['panel_id'] == pid)
+                prepared = {'prepared_input_digest': fingerprint(actual_input(state, root, shot, packet, path.parent))}
+            jobs.append({**prepared,
                 "kind": "repair" if panel.get("operation") == "repair" else "panel",
+                "book_id": state['book_id'], "episode_id": state['episode_id'],
                 "job_id": state.get("parallel_context", {}).get("job_id", state["episode_id"]),
                 "panel_id": pid, "source_panel_id": record.get("source_panel_id"),
                 "batch_id": report["batch_id"], "round_id": record["round_id"],
@@ -189,7 +198,8 @@ def package_signature(packet, package_root):
     return {**({'portability_policy':'approved_relative_inputs_v1','reference_path_basis':'package_root'} if portable else {}),**({"visual_evidence_policy":panel["visual_evidence_policy"],
                 "visual_evidence":panel.get("visual_evidence"),
                 "visual_evidence_context":panel.get("visual_evidence_context"),
-                "repair_source":panel.get("repair_source")} if panel.get("visual_evidence_policy") else {}),
+                "repair_source":panel.get("repair_source"), "repair_method":panel.get("repair_method"),
+                 "production_policy":panel.get("production_policy")} if panel.get("visual_evidence_policy") else {}),
             **({'background_policy': panel['background_policy'], 'framing': copy.deepcopy(panel.get('framing'))}
                if panel.get('background_policy') else {}),
             **({'input_quality_policy': panel['input_quality_policy']} if panel.get('input_quality_policy') else {}),
@@ -470,10 +480,19 @@ def commit_updates(state_path, expected_sha256, updates, *, resolution_ref=None)
     }
     if not isinstance(updates,list) or not updates or len({u.get("panel_id") for u in updates}) != len(updates):
         raise ValueError("updates须明确不重复格号")
-    with file_lock(state_path.with_suffix(".runtime.lock")) as lock:
+    with state_write_lock(state_path):
+        state = read_json(state_path); require_legacy(state)
+        operation = None
+        if 'dispatch_consistency' in state:
+            from dispatch_publication import _bytes, _sha
+            operation = _sha(_bytes([updates, resolution_ref]))
+            old = state.get('runtime_operations', {}).get(operation)
+            if old is not None:
+                return {'status': 'UPDATES_ALREADY_SAVED', 'panel_ids': old['panel_ids'],
+                        'state_sha256': digest(state_path), 'watchdog_progress': [], 'user_approval': 'NOT_GRANTED'}
         if digest(state_path) != expected_sha256:
             raise ValueError("STATE_CHANGED: 读取最新状态后合并，不覆盖其他返回")
-        state = read_json(state_path); new = copy.deepcopy(state)
+        new = copy.deepcopy(state)
         records = {r["panel_id"]:r for r in new["panels"]}
         if resolution_ref is not None:
             from slot_leases import resolution_errors
@@ -534,6 +553,8 @@ def commit_updates(state_path, expected_sha256, updates, *, resolution_ref=None)
         previous=history/(expected_sha256+".json")
         if not previous.exists():previous.write_bytes(state_path.read_bytes())
         if digest(state_path) != expected_sha256:raise ValueError("STATE_CHANGED")
+        if operation is not None:
+            new.setdefault('runtime_operations', {})[operation] = {'panel_ids': [u['panel_id'] for u in updates]}
         atomic_json(state_path, new)
         monitored=[]
         if new.get("runtime",{}).get("watchdog",{}).get("policy") == "worker_watchdog_v1":
@@ -564,9 +585,10 @@ def authorize_episode_repair(state_path, expected_sha256, authorization_ref):
     from batch_round import snapshot, attempt_errors
     from episode_repair import systemic_errors
     state_path=Path(state_path).resolve();root=state_path.parent.parent
-    with file_lock(state_path.with_suffix('.runtime.lock')) as lock:
+    with state_write_lock(state_path):
         if digest(state_path)!=expected_sha256:raise ValueError('STATE_CHANGED')
         state=read_json(state_path)
+        require_legacy(state)
         if state.get('execution_mode')!='episode_async_v1':raise ValueError('滚动返修只用于整话模式')
         ref={'path':authorization_ref,'sha256':digest(root/authorization_ref)}
         auth=read_json(checked_file(root,ref));pid=auth.get('panel_id')
@@ -576,7 +598,7 @@ def authorize_episode_repair(state_path, expected_sha256, authorization_ref):
         errors=attempt_errors(state,root,row)+systemic_errors(state,state['panels'],root)
         if auth.get('policy')!='episode_repair_v1' or auth.get('failed_attempt')!=snapshot(row) or auth.get('route')!='targeted_image_repair' or not auth.get('reviewer') or not auth.get('evidence'):
             errors.append('授权未绑定实际失败与执行层诊断')
-        if state.get('input_quality_policy') == 'execution_quality_v1':
+        if state.get('input_quality_policy') == 'execution_quality_v1' or state.get('production_policy') == 'first_batch_production_v1':
             from input_quality import repair_decision_errors
             errors.extend(repair_decision_errors(auth.get('repair_decision'), row, require_image_call=True, state=state, root=root, new_package=auth.get('new_package_manifest')))
         constraints=auth.get('repair_constraints')
@@ -615,14 +637,15 @@ def record_episode_diagnosis(state_path, expected_sha256, diagnosis_ref):
     from episode_repair import failure_ids
     from batch_round import attempt_errors
     state_path=Path(state_path).resolve();root=state_path.parent.parent
-    with file_lock(state_path.with_suffix('.runtime.lock')) as lock:
+    with state_write_lock(state_path):
         if digest(state_path)!=expected_sha256:raise ValueError('STATE_CHANGED')
         state=read_json(state_path)
+        require_legacy(state)
         if state.get('execution_mode')!='episode_async_v1':raise ValueError('共因诊断只用于整话模式')
         ref={'path':diagnosis_ref,'sha256':digest(root/diagnosis_ref)}
         report=read_json(checked_file(root,ref))
         failures=failure_ids(state['panels'])
-        if len(failures)<=state['review_policy']['systemic_failure_count_gt']:
+        if not failures or (len(failures)<=state['review_policy']['systemic_failure_count_gt'] and state.get('production_policy') != 'first_batch_production_v1'):
             raise ValueError('尚未超过真实视觉失败阈值，不登记共因诊断')
         for row in state['panels']:
             if row['panel_id'] not in failures:continue
@@ -637,6 +660,10 @@ def record_episode_diagnosis(state_path, expected_sha256, diagnosis_ref):
                 not set(failures)<=set(report.get('reviewed_failure_panel_ids',[])) or
                 not isinstance(report.get('common_cause'),str) or not report['common_cause'].strip()):
             raise ValueError('共因诊断须覆盖当前全部真实失败格、具体原因和审查依据')
+        for stopped in report.get('stopped_methods', []):
+            if not isinstance(stopped, dict) or any(not isinstance(stopped.get(k), str) or not stopped[k].strip()
+                    for k in ('method_key', 'cause_key', 'evidence')):
+                raise ValueError('停止方法须有具体共因、方法与真实失败依据')
         new=copy.deepcopy(state)
         new['episode_failure_diagnosis']={**report,'source':ref}
         history=state_path.parent/'runtime_history';history.mkdir(exist_ok=True)
@@ -690,18 +717,20 @@ def prepare_review(state, root, queue):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--state", required=True)
-    parser.add_argument("--action", choices=("readiness", "preflight", "compile", "audit-inputs", "receiver-audit", "review", "checkpoint", "bundle", "commit", "repair-authorize", "diagnosis-record", "watch-progress", "watch-check", "watch-ack", "repair-plan"), required=True)
+    parser.add_argument("--action", choices=("readiness", "preflight", "compile", "audit-inputs", "receiver-audit", "review", "checkpoint", "bundle", "commit", "repair-authorize", "diagnosis-record", "watch-progress", "watch-check", "watch-ack", "repair-plan", "decisions-register", "delivery-review", "production-questions"), required=True)
     parser.add_argument("--panels", nargs="*")
     parser.add_argument("--h001-panels", nargs="+", help="合并接包审计的准确首半话范围")
     parser.add_argument("--progress", action="store_true", help="stderr输出阶段/格号与定时进度；不改变判定")
     parser.add_argument("--batch")
     parser.add_argument("--candidate", action="store_true", help="待审B技术预检；不授予生产或包批准")
+    parser.add_argument("--pending", help="复用原event_id待答记录，避免重复提问")
     parser.add_argument("--processed", help="仅去重观察通知的cursor JSON")
     parser.add_argument("--prepare-qa", action="store_true", help="仅新增/变化图生成未审模板及一次组联系表")
     parser.add_argument("--dependency-plan", help="已冻结依赖补齐方案的本话相对文件路径")
     parser.add_argument("--updates", help="真实返回或实际QA形成的updates JSON")
     parser.add_argument("--resolution", help="解析原未知请求的本话相对真实查证报告；不授予重发")
     parser.add_argument("--repair-authorization", help="整话滚动返修诊断文件的本话相对路径")
+    parser.add_argument("--decisions", help="本话相对路径：已有QA上的生产决定/采用版本登记")
     parser.add_argument("--diagnosis", help="超过五张真实视觉失败的共因诊断文件本话相对路径")
     parser.add_argument("--expected-state-sha256", help="commit的CAS原状态哈希")
     parser.add_argument("--watch-event", help="watch-progress的实际事件JSON")
@@ -714,6 +743,22 @@ def main():
         state = read_json(path)
         if "runtime" in state:
             settings(state["runtime"])
+        if args.action == 'decisions-register':
+            from production_decisions import register
+            if not args.decisions or not args.expected_state_sha256: raise ValueError('缺决定文件或CAS哈希')
+            ref = {'path': args.decisions, 'sha256': digest(root / args.decisions)}
+            print(json.dumps(register(path, args.expected_state_sha256, ref), ensure_ascii=False)); return 0
+        if args.action == 'production-questions':
+            from review_policy import production_questions
+            with file_session(): value = production_questions(state, root, read_json(Path(args.pending)) if args.pending else [])
+            print(json.dumps(value, ensure_ascii=False, indent=2)); return 0
+        if args.action == 'delivery-review':
+            from panel_delivery import build
+            with file_session(): value = build(state, root)
+            if not args.write: raise ValueError('delivery-review须--write保存准确交审版本')
+            dest = Path(args.write).resolve(); dest.relative_to(root)
+            with dest.open('x', encoding='utf-8') as f: json.dump(value, f, ensure_ascii=False, indent=2)
+            print(json.dumps({'status':'DELIVERY_REVIEW_SAVED','path':str(dest),'image_calls':0}, ensure_ascii=False)); return 0
         if args.action.startswith("watch-"):
             if state.get("runtime", {}).get("policy") not in {POLICY,'incremental_runtime_v2'}:
                 raise ValueError("本RV未启用增量runtime；不得静默添加监控")

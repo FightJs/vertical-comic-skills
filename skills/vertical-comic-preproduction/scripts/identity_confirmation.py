@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Check scoped identity/state evidence before visual production; no user approval."""
 from __future__ import annotations
+from codex_reference_contract import is_file, read_json, resolve_path, digest
 
 import argparse
 import hashlib
@@ -23,10 +24,10 @@ def evidence_valid(items: Any, root: Path) -> bool:
         if not isinstance(item, dict) or not text(item.get("path")):
             return False
         rel = Path(item["path"])
-        path = (root / rel).resolve()
-        if rel.is_absolute() or not path.is_relative_to(root.resolve()) or not path.is_file():
+        path = resolve_path(root / rel)
+        if rel.is_absolute() or not path.is_relative_to(resolve_path(root)) or not is_file(path):
             return False
-        if hashlib.sha256(path.read_bytes()).hexdigest() != item.get("sha256"):
+        if digest(path) != item.get("sha256"):
             return False
     return True
 
@@ -193,11 +194,11 @@ def validate_manifest(data: Any, root: Path, *, prompt: bool = False,
             if derived:
                 for message in verify_owner(ref,asset,subject,purpose,reference_root or root):fail(code,message)
             if prompt:
-                base = (reference_root or root).resolve()
+                base = resolve_path(reference_root or root)
                 value = ref.get("path")
-                file = (base / value).resolve() if text(value) else None
-                if (file is None or Path(value).is_absolute() or not file.is_relative_to(base) or not file.is_file()
-                        or hashlib.sha256(file.read_bytes()).hexdigest() != (ref.get('sha256') if derived else asset.get("sha256"))):
+                file = resolve_path(base / value) if text(value) else None
+                if (file is None or Path(value).is_absolute() or not file.is_relative_to(base) or not is_file(file)
+                        or digest(file) != (ref.get('sha256') if derived else asset.get("sha256"))):
                     fail(code, f"{alias}实际参考文件与已确认资产不一致")
         on_screen, states_seen = set(), {}
         for binding in bindings:
@@ -310,10 +311,8 @@ def main() -> int:
     if args.prompt and args.identity_only:
         parser.error("--identity-only不能与--prompt一起使用；生图包必须核验实际资产")
     try:
-        data = json.loads(Path(args.manifest).read_text(encoding="utf-8-sig"))
-        errors = validate_manifest(data, Path(args.root).resolve(), prompt=args.prompt,
-                                   reference_root=Path(args.manifest).resolve().parent,
-                                   require_assets=not args.identity_only)
+        data = read_json(Path(args.manifest))
+        errors = validate_manifest(data, resolve_path(Path(args.root)), prompt=args.prompt, reference_root=resolve_path(Path(args.manifest)).parent, require_assets=not args.identity_only)
     except (OSError, ValueError, TypeError, KeyError) as exc:
         errors = [f"IDENTITY_HOLD: 无法读取身份审计: {exc}"]
     scope = "identity_relationship_state_only_not_production_release" if args.identity_only else "identity_evidence_and_bindings_only"

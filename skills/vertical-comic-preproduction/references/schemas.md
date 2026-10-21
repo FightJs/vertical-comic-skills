@@ -195,3 +195,11 @@ phases使用现有review_policy.PHASES精确枚举，不能填通配符。执行
 ## 最终输入审查扩展
 
 新运行使用`input_semantics_policy=final_input_semantics_v1`；沿用semantic_audit_v1，每格增加execution_review（实图补齐另有dependency_completion_review）。字段、摘要、逐人物semantic_facts/subject_visibility与只读接包复用见[最终执行输入审查](final-input-semantics.md)。新字段进入镜头/实际包一致性核验；模板不填PASS。
+
+## 最终输入收敛v2
+
+新整话input_semantics_policy=final_input_semantics_v2，原execution_review使用相同policy和完整input_digest；新增continuity_and_dependencies、rule_execution_coverage、appearance_anchors三个checks，各含自动派生expected、人工/执行者实审status及evidence。不手填expected绕过绑定。原continuity_contract可含generation_dependency_reasons={"P001":"具体参考用途及必须等待原因"}，键与generation_dependencies完全一致；无依赖为空或省略。依赖计划可带原memory_applications。原projection.visible_count记录本机位可见数量；appearance_observations.actual_count与之核对，checks增加anchor。其余字段与准确使用边界见final-input-semantics.md及appearance-and-single-frame.md。
+
+## 第一批生产决定与采用版本
+
+新运行production_policy=first_batch_production_v1；字段、短记录及命令以[production-decisions.md](production-decisions.md)为正式来源。panels原行增加production_decisions（每attempt的不可变决定文件引用）及adoption（采用attempt、决定引用、原因），不改status/output/attempt_history。根delivery_review绑定全源序交接索引。四种阶段交付结论不替代原QA、用户批准或下游参考资格。

@@ -64,3 +64,5 @@ python <scripts>/production_runtime.py --state <本话生产流程.json> --actio
 批准后实际提交数按真实调用写，缺口继续单列；不要再用“候选准备完成、全话HOLD、正文0”代替各范围状态。bundle的 `preparation_check_elapsed_seconds`与compile的 `preflight_elapsed_seconds`只计检查器耗时；人工等待、生图提交/返回、保存与实际QA用原真实时间戳记录，不将检查耗时冒充前期创作时间或服务耗时。
 
 跨话前序镜头设计未定与实际图片比较待补必须分开。只有真实generation_dependencies等待已验收前格图片；仅待最终比较不得新增图片输入依赖。待比较图可保存本地观察但最终通过前须完成原真实比较；独立就绪格持续生成。
+
+v2最终输入审查明确区分静态准备闭合、等待真实参考、可以提交。prepared_panel_ids本身不证明实际输入已审；正式前期交付须同时检查final_input_semantics覆盖全部源格，pending_real_reference_review_ids只表示已审补齐方案尚待实际图片。生产前继续实时门禁，独立格可并行；详见[最终输入收敛](final-input-semantics.md#前期收敛按包执行v2)。

@@ -1,5 +1,7 @@
 # Shared production invariants
 
+新运行统一按[第一批生产决定](production-decisions.md)衔接审核、返修与交付：真实FAIL不改写，处理动作与交付结论分别记录；旧冻结合同不迁移。下文审核方法、源稿/批准/证据要求仍适用。
+
 ## Absolute script lock
 
 The source script is immutable in content. “完善脚本” in this skill means improving only what can be shown in the image. The skill may clarify or adapt visual presentation, but it must never change:

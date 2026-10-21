@@ -1,5 +1,7 @@
 # Image review and repair
 
+新运行统一按[第一批生产决定](production-decisions.md)衔接审核、返修与交付：真实FAIL不改写，处理动作与交付结论分别记录；旧冻结合同不迁移。下文审核方法、源稿/批准/证据要求仍适用。
+
 当前新RV使用 [整话异步生产](episode-async.md) 和 [异步工具执行](async-generation.md)：每张真实返图立即审六项与适用规则，真实失败格可滚动返修，整话连续性及适用跨话实图比较完成后交D。高风险新状态仍单独确认。下文H001/H002、C与runtime_v1步骤只适用于原冻结旧RV。
 
 > 阶段化五件套执行时，同时遵守 [固定流程](staged-workflow.md) 和 [生图输入输出合同](generation-io.md)。每次生成及返修必须实际传入批准画风样例，单独审查画风；最终交付逐格图片包，旧“进入排版/C阶段”只作历史术语，不启动排版。单格原编号快照由 staged_workflow.py 调用完整门禁校验，不能为通过旧完整话编号检查重编号。
@@ -20,7 +22,7 @@ When B returns generated images, create a separate image-QA record before final 
 - action, expression, occlusion and fixed props;
 - whether the image tool silently returned a repeated default scene view.
 
-For batch5_v1, review the first five source panels (or all panels if fewer) side by side for gate C; legacy single-panel mode retains the first-three requirement. Each production batch also needs per-image QA and a frozen batch continuity report, including the previous batch boundary. See [batch-parallel.md](batch-parallel.md). Judge the returned images against the approved focal subjects, body crops and visible beats. Same-scale shot/reverse-shot is valid; an unintended repeated default view or an unapproved unchanged composition is `IMAGE_CAMERA_HOLD`. Also check that the generator did not expand a half-body/detail into full-body or wide coverage, add offscreen characters, or omit required action/props/text. Do not put failing images in the final panel package. For Codex, record a delivery-specific `ratio_tolerance`. If Phase D selected CREATE/REUSE, compare the returned image against the reviewed composition, especially hands/contact, occlusion and background projection. For NOT_REQUIRED, review against the approved shot/spatial records and relevant assets; only the extra image-to-image comparison is NOT_APPLICABLE, while framing and spatial QA remain required. Use `scripts/make_generation_qa.py` to create the ratio/error report, selected composition/returned-image comparisons, adjacent-pair checklist, and review contact sheet. That script cannot replace human visual judgment; it makes the missing judgment visible and auditable.
+For batch5_v1, review the first five source panels (or all panels if fewer) side by side for gate C; legacy single-panel mode retains the first-three requirement. Each production batch also needs per-image QA and a frozen batch continuity report, including the previous batch boundary. See [batch-parallel.md](batch-parallel.md). Judge the returned images against the approved focal subjects, body crops and visible beats. Same-scale shot/reverse-shot is valid; an unintended repeated default view or an unapproved unchanged composition is `IMAGE_CAMERA_HOLD`. Also check that the generator did not expand a half-body/detail into full-body or wide coverage, add offscreen characters, or omit required action/props/text. 第一批交接按production-decisions.md保留真实FAIL并标明人工后修/人工优先处理；不得将这些图描述为全部审核通过。 For Codex, record a delivery-specific `ratio_tolerance`. If Phase D selected CREATE/REUSE, compare the returned image against the reviewed composition, especially hands/contact, occlusion and background projection. For NOT_REQUIRED, review against the approved shot/spatial records and relevant assets; only the extra image-to-image comparison is NOT_APPLICABLE, while framing and spatial QA remain required. Use `scripts/make_generation_qa.py` to create the ratio/error report, selected composition/returned-image comparisons, adjacent-pair checklist, and review contact sheet. That script cannot replace human visual judgment; it makes the missing judgment visible and auditable.
 
 If a recurring character changes face, hair, fixed marks or wardrobe without a script-supported state change, mark `IMAGE_CONTINUITY_HOLD` and stop. A text prompt cannot guarantee a stable 3D room; recurring-space production requires an approved scene plate or a generation tool with image/structure control. If the B tool is text-only, use it for concept candidates only and do not call the output continuity-safe.
 
@@ -94,3 +96,5 @@ preservation_regions存在时，repair_comparison逐区填写preserved_observati
 
 
 新整话按[服饰与单画面](appearance-and-single-frame.md)填写原visual_evidence_review的frame_observation与appearance_observations。自身左右结合全图朝向判断，原尺寸局部核对归属/部位/手指/数量/款式及附着；任何可见关键项不清楚不得PASS。发现上下/左右分格或漫画内嵌格，原framing维度FAIL；服饰位置错记原costume维度FAIL。真实镜面不是独立漫画格。
+
+审核优先读取当前包派生inspection_plan：原规则的具体执行约束与服饰身体锚点、可见数量均定位到原QA字段。按原图真实观察填写结论；不临时更改标准迁就图片。只有实际输入缺陷才修对应生图包；一般执行偏差沿原范围返修，局部修正同时检查配饰及已正确区域是否保持。

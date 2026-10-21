@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Stage/condition routing for portable comic rules; no image or approval generation."""
 from __future__ import annotations
+from codex_reference_contract import is_dir, path_exists, read_json, read_text, resolve_path, digest
 
 import argparse
 import copy
@@ -50,7 +51,7 @@ def effective_tags(panel, context_tags=()):
 
 
 def read(path):
-    return json.loads(Path(path).read_text(encoding="utf-8-sig"))
+    return read_json(Path(path))
 
 
 def signature(value):
@@ -68,27 +69,27 @@ def source_index(source):
     if "loading_policy" in source and loading != LOADING_POLICY:
         raise ValueError("未知记忆读取合同；旧触发模式应不含loading_policy")
     root = Path(source.get("root", ""))
-    if not root.is_absolute() or not root.is_dir():
+    if not root.is_absolute() or not is_dir(root):
         raise ValueError("规则记忆root须为存在的绝对目录")
-    root = root.resolve()
+    root = resolve_path(root)
     if source.get('runtime_snapshot'):
         from runtime_snapshot import verify
         frozen = verify(source['runtime_snapshot'])
         if source != frozen['memory_source']:
             raise ValueError('SNAPSHOT_HOLD: 不得把冻结规则来源换成安装库或新索引')
     name = Path(source.get("index", "记忆索引.json"))
-    index_path = (root / name).resolve()
+    index_path = resolve_path(root / name)
     if name.is_absolute() or not index_path.is_relative_to(root):
         raise ValueError("记忆索引不得越出规则库")
-    raw=index_path.read_bytes()
-    if source.get("index_sha256") is not None and source["index_sha256"]!=hashlib.sha256(raw).hexdigest():
+    index_sha256=digest(index_path)
+    if source.get("index_sha256") is not None and source["index_sha256"]!=index_sha256:
         raise ValueError("规则索引内容不等于批准的可移植版本")
-    cache_key=(str(index_path),hashlib.sha256(raw).hexdigest(),loading)
+    cache_key=(str(index_path),index_sha256,loading)
     memo=_ROUTING.get()
     if memo is not None and cache_key in memo['indexes']:
         memo['index_hits']+=1
         return root,copy.deepcopy(memo['indexes'][cache_key])
-    data=json.loads(raw.decode('utf-8-sig'))
+    data=read_json(index_path)
     if data.get("policy") != POLICY or not isinstance(data.get("rules"), list):
         raise ValueError("记忆索引版本/规则清单无效")
     if ("loading_policy" in data and data["loading_policy"] != LOADING_POLICY
@@ -128,7 +129,7 @@ def source_index(source):
         if not isinstance(ref.get("path"), str) or not re.fullmatch(r"[0-9a-f]{64}", str(ref.get("sha256", ""))):
             raise ValueError(f"{rid}:正文引用无效")
         path = Path(ref["path"])
-        if path.is_absolute() or not (root / path).resolve().is_relative_to(root):
+        if path.is_absolute() or not resolve_path(root / path).is_relative_to(root):
             raise ValueError(f"{rid}:正文越出规则库")
     if memo is not None:
         memo['indexes'][cache_key]=copy.deepcopy(data);memo['index_parses']+=1
@@ -216,6 +217,16 @@ def trigger_review_errors(source, stage, panel, review, context_tags=()):
     return errors
 
 
+def execution_constraints(panel):
+    lines = []
+    for app in (panel.get('memory_applications') or {}).get('generation', []):
+        if app.get('decision') != 'APPLIED': continue
+        values = app.get('prompt_constraints', [])
+        if not strings(values): raise ValueError('MEMORY_HOLD:逐格执行约束须为非空文字清单')
+        lines.extend(values)
+    return list(dict.fromkeys(lines))
+
+
 def inspection_plan(panel, item, source_manifest_sha256):
     """Group original QA targets for one observation; never merges their verdicts."""
     names={'action_contact':'人体动作与接触','space_props':'场景、道具与遮挡',
@@ -239,18 +250,29 @@ def inspection_plan(panel, item, source_manifest_sha256):
     # These keys only order the display; they do not define or equate criteria.
     check_groups={'character_consistency':'identity_costume','camera_background_validity':'camera_crop',
                   'adjacent_state_continuity':'adjacent','camera_visibility':'camera_crop'}
+    generation_apps={a.get('memory_id'):a for a in (panel.get('memory_applications') or {}).get('generation',[])}
     for app in item.get('memory_review',[]):
         for field in ('checks','alternative_checks'):
             for key in app.get(field,{}):
                 group=check_groups.get(key,rule_groups.get(app['memory_id'],'specific'))
                 groups[group].append({'record':'memory_review','memory_id':app['memory_id'],
-                    'field':field,'check':key,'rule_signature':app['rule_signature']})
+                    'field':field,'check':key,'rule_signature':app['rule_signature'],
+                    'execution_constraints':copy.deepcopy(generation_apps.get(app['memory_id'],{}).get('prompt_constraints',[]))})
     visual_groups={'space':'space_props','presence':'adjacent','contact':'action_contact',
                    'hand':'action_contact','accessory':'identity_costume','clarity':'specific'}
     for check in panel.get('visual_evidence',{}).get('checks',[]):
         groups[visual_groups[check['kind']]].append({'record':'visual_evidence_review',
             'check':check['id'],'expected':check['expected'],
             'original_pixels_required':check['kind'] in {'hand','accessory','contact','clarity'}})
+    from appearance_lock import enabled as appearance_enabled
+    if appearance_enabled(panel):
+        for did,detail in (panel.get('visual_evidence_context') or {}).get('details',{}).items():
+            visibility=panel['visual_evidence']['detail_visibility'][did]
+            groups['identity_costume'].append({'record':'visual_evidence_review',
+                'field':'appearance_observations' if visibility['status']=='visible' else 'detail_visibility_observations',
+                'detail_id':did,'subject_id':detail['subject_id'],'costume_state':detail['costume_state'],
+                'expected':copy.deepcopy(detail),'visibility':copy.deepcopy(visibility),
+                'original_pixels_required':visibility['status']=='visible'})
     return {'policy':'single_observation_v1','status':'UNREVIEWED','panel_id':panel['panel_id'],
             'image_sha256':item.get('image_sha256'),'source_manifest_sha256':source_manifest_sha256,
             'viewing_sequence':['全图：逐人物数可见手/腕/袖口并追溯归属，核对承托、目光和在场实体',
@@ -287,7 +309,7 @@ def load_selected(source, matches, cache, run_id, worker_id, reload=False):
         if not reload and cached["loaded"].get(rule["id"]) == token:
             item["status"] = "CACHED_IN_THIS_RUN"
         else:
-            item.update(status="READ_REQUIRED", body=path.read_text(encoding="utf-8"))
+            item.update(status='READ_REQUIRED', body=read_text(path, encoding='utf-8'))
             cached["loaded"][rule["id"]] = token
         result.append(item)
     return result, cached
@@ -311,7 +333,7 @@ def review_template(source, panel, image_sha256, context_tags=(),artifact_root=N
     return result
 
 
-def application_errors(source, stage, panel, artifact_root, applications=None, image_sha256=None,context_tags=(),scope=None):
+def application_errors(source, stage, panel, artifact_root, applications=None, image_sha256=None,context_tags=(),scope=None,require_pass=True):
     if source is None:
         return []
     try:
@@ -352,12 +374,12 @@ def application_errors(source, stage, panel, artifact_root, applications=None, i
                 if key in waived:
                     if check.get('status')!='USER_EXCEPTION' or check.get('exception')!=exception[0] or not check.get('evidence'):errors.append(f'MEMORY_HOLD:{rid}:{key}未记录原范围例外')
                     continue
-                if check.get("status") != "PASS" or not isinstance(check.get("evidence"), str) or not check["evidence"].strip():
+                if check.get("status") not in ({"PASS", "FAIL"} if stage == "image_review" and not require_pass else {"PASS"}) or not isinstance(check.get("evidence"), str) or not check["evidence"].strip():
                     errors.append(f"MEMORY_HOLD:{rid}:{key}未实际核对")
             if exception:
                 for key in exception[2]:
                     check=app.get('alternative_checks',{}).get(key,{})
-                    if check.get('status')!='PASS' or not check.get('evidence'):errors.append(f'MEMORY_HOLD:{rid}:{key}替代判据未实际核对')
+                    if check.get('status') not in ({'PASS','FAIL'} if stage == 'image_review' and not require_pass else {'PASS'}) or not check.get('evidence'):errors.append(f'MEMORY_HOLD:{rid}:{key}替代判据未实际核对')
             for kind in req["artifacts"]:
                 artifacts = [a for a in app.get("artifacts", []) if a.get("kind") == kind]
                 if not artifacts:
@@ -372,7 +394,8 @@ def application_errors(source, stage, panel, artifact_root, applications=None, i
                                 errors.append(f"MEMORY_HOLD:{rid}:不是SVG站位图")
                         else:
                             from PIL import Image
-                            with Image.open(file) as im:
+                            from codex_reference_contract import physical_file
+                            with Image.open(physical_file(file)) as im:
                                 im.verify()
             if req["prompt_constraints"]:
                 lines = app.get("prompt_constraints")
@@ -420,7 +443,7 @@ def main():
     parser.add_argument("--worker-id")
     parser.add_argument("--reload", action="store_true")
     args = parser.parse_args()
-    source = {"policy": POLICY, "root": str(Path(args.root).resolve()), "index": args.index}
+    source = {"policy": POLICY, "root": str(resolve_path(Path(args.root))), "index": args.index}
     if args.loading_policy:
         source["loading_policy"] = args.loading_policy
     try:
@@ -430,10 +453,10 @@ def main():
             for rule in index["rules"]:
                 file = checked_file(root, rule["file"])
                 indexed.add(file)
-                body = file.read_text(encoding="utf-8")
+                body = read_text(file, encoding='utf-8')
                 if re.search(r"\b[EP]\d{3}\b|第[0-9一二三四五六七八九十]+话|《[^》]+》", body):
                     raise ValueError(f"{rule['id']}:发现疑似作品/话格特定信息，须人工通用性审查")
-            unindexed = [p.relative_to(root).as_posix() for p in (root / "规则").rglob("*.md") if p.resolve() not in indexed]
+            unindexed = [p.relative_to(root).as_posix() for p in (root / "规则").rglob("*.md") if resolve_path(p) not in indexed]
             if unindexed:
                 raise ValueError("规则目录存在未登记正文:" + ",".join(unindexed))
             result = {"status": "PASS", "rules": len(index["rules"]), "loading_policy": index.get("loading_policy"), "semantic_portability": "REQUIRES_HUMAN_REVIEW"}
@@ -456,17 +479,17 @@ def main():
             context_tags=[]
             if manifest is not None and manifest.get('execution_contract')=='comic_execution_v2':
                 from continuity_context import rule_tags
-                context_tags=rule_tags(manifest,Path(args.manifest).resolve().parent,panel)
+                context_tags=rule_tags(manifest, resolve_path(Path(args.manifest)).parent, panel)
             matches = select(source, args.stage, panel,context_tags) if panel is not None else []
             if args.mode in {"load", "load-stage"}:
                 if not args.cache or not args.run_id or not args.worker_id:
                     raise ValueError("load须指定cache/run-id/worker-id")
-                cache_file = Path(args.cache).resolve()
-                if any(cache_file == Path(p).resolve() for p in (args.manifest, args.panel) if p):
+                cache_file = resolve_path(Path(args.cache))
+                if any((cache_file == resolve_path(Path(p)) for p in (args.manifest, args.panel) if p)):
                     raise ValueError("缓存不得覆盖单格输入")
                 if cache_file.is_relative_to(root):
                     raise ValueError("运行缓存不得写入通用规则库")
-                cache = read(cache_file) if cache_file.exists() else {}
+                cache = read(cache_file) if path_exists(cache_file) else {}
                 to_read = loading_selection(source, args.stage, panel, context_tags)
                 bodies, cache = load_selected(source, to_read, cache, args.run_id, args.worker_id, args.reload)
                 cache_file.parent.mkdir(parents=True, exist_ok=True)

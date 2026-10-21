@@ -23,12 +23,14 @@ worker owners. A generation check needs exactly one RESERVED permit. Control
 writes and actual agent/tool orchestration remain coordinator responsibilities.
 """
 from __future__ import annotations
+from codex_reference_contract import is_file, read_bytes, resolve_path
 
 import argparse
 import hashlib
 import json
 from pathlib import Path
 from codex_reference_contract import read_json, digest
+from dispatch_publication import require_legacy
 
 POLICY = "parallel_episodes_v1"
 INPUTS = ("source_script", "source_snapshot", "visual_basis", "shot_manifest")
@@ -47,10 +49,10 @@ def _file(root, ref):
     if not isinstance(ref, dict) or not isinstance(ref.get("path"), str):
         raise ValueError("文件引用必须包含path/sha256")
     name = Path(ref["path"])
-    path = (root / name).resolve()
-    if name.is_absolute() or not path.is_relative_to(root.resolve()):
+    path = resolve_path(root / name)
+    if name.is_absolute() or not path.is_relative_to(resolve_path(root)):
         raise ValueError("冻结引用必须为根目录内相对路径")
-    if not path.is_file():
+    if not is_file(path):
         raise ValueError(f"冻结文件不存在: {name}")
     if digest(path) != ref.get("sha256"):
         raise ValueError(f"冻结文件哈希不符: {name}")
@@ -61,7 +63,7 @@ def _positive(value):
     return type(value) is int and value > 0
 
 
-def context_errors(context, episode_root, book_id, episode_id, panel_id=None):
+def context_errors(context, episode_root, book_id, episode_id, panel_id=None, *, accepting_return=False):
     """Validate a coordinator snapshot and optional one-use generation reservation.
 
     Read episode state from job.state_file (default 00_输入审计/生产流程.json).
@@ -75,8 +77,11 @@ def context_errors(context, episode_root, book_id, episode_id, panel_id=None):
         control_path = Path(context.get("control_file", ""))
         if not control_path.is_absolute():
             return ["control_file必须是绝对路径"]
-        control_path = control_path.resolve()
+        control_path = resolve_path(control_path)
         control = _read(control_path)
+        require_legacy(control)
+        from control_updates import errors as control_errors
+        errors.extend(control_errors(control))
         if control.get("policy") != POLICY or (type(control.get("version")) is not int or control.get("version") != 1):
             errors.append("并行调度合同版本错误")
         if control.get("book_id") != book_id:
@@ -84,9 +89,9 @@ def context_errors(context, episode_root, book_id, episode_id, panel_id=None):
         epoch = control.get("epoch")
         if not _positive(epoch) or not _positive(context.get("epoch")) or context.get("epoch") != epoch:
             errors.append("并行epoch已过期或无效；旧返回不得采用")
-        if control.get("cancelled") is not False:
+        if control.get("cancelled") is not False and not (accepting_return and control.get("cancelled") is True):
             errors.append("批次取消或取消状态缺失；不得发出新请求")
-        if not isinstance(control.get("holds"), list) or control["holds"]:
+        if not isinstance(control.get("holds"), list) or control["holds"] and not accepting_return:
             errors.append("全局HOLD或缺少holds；先处理共用问题")
         for key in ("max_workers", "max_inflight"):
             if not _positive(control.get(key)):
@@ -125,7 +130,7 @@ def context_errors(context, episode_root, book_id, episode_id, panel_id=None):
             job_root = Path(job.get("root", ""))
             if not job_root.is_absolute():
                 errors.append("每话任务root必须为绝对路径")
-            roots.append(job_root.resolve())
+            roots.append(resolve_path(job_root))
             if job.get("status") not in ACTIVE_JOBS | TERMINAL_JOBS | QUEUED_JOBS:
                 errors.append("未知任务状态")
         if len(set(roots)) != len(roots) or any(a != b and (a.is_relative_to(b) or b.is_relative_to(a)) for a in roots for b in roots):
@@ -140,14 +145,14 @@ def context_errors(context, episode_root, book_id, episode_id, panel_id=None):
         if len(matches) != 1:
             return errors + ["上下文job_id不存在或重复"]
         job = matches[0]
-        root = Path(episode_root).resolve()
-        if Path(job.get("root", "")).resolve() != root or job.get("episode_id") != episode_id:
+        root = resolve_path(Path(episode_root))
+        if resolve_path(Path(job.get('root', ''))) != root or job.get("episode_id") != episode_id:
             errors.append("任务话号或根目录不一致")
         if job.get("worker_id") != context.get("worker_id") or not context.get("worker_id"):
             errors.append("当前worker不是任务唯一owner")
-        if job.get("status") not in ACTIVE_JOBS and not (job.get("status") == "COMPLETED" and panel_id is None):
+        if job.get("status") not in ACTIVE_JOBS and not (job.get("status") == "COMPLETED" and panel_id is None) and not (accepting_return and job.get("status") in TERMINAL_JOBS):
             errors.append("任务未被接管或已取消/结束，不能继续采用返回或生成")
-        if job.get("status") == "HOLD" or job.get("holds"):
+        if (job.get("status") == "HOLD" or job.get("holds")) and not accepting_return:
             errors.append("本话HOLD")
         if panel_id is not None and job.get("status") not in {"ASSIGNED", "RUNNING"}:
             errors.append("本话尚待审查，不能发出新请求")
@@ -156,10 +161,12 @@ def context_errors(context, episode_root, book_id, episode_id, panel_id=None):
         if panel_id is not None and job.get("dispatch_pause") is True:
             errors.append("本话已暂停新请求；在途返回及QA仍须收尾")
         state_name = Path(job.get("state_file", "00_输入审计/生产流程.json"))
-        state_path = (root / state_name).resolve()
+        state_path = resolve_path(root / state_name)
         if state_name.is_absolute() or not state_path.is_relative_to(root):
             return errors + ["state_file必须为话根目录内相对路径"]
         state = _read(state_path)
+        from authority_updates import state_errors as authority_errors
+        errors.extend(authority_errors(state))
         from slot_leases import effective_control, enabled as leased
         if state.get('runtime',{}).get('dispatch_policy')=='episode_slot_lease_v1' and not leased(control):
             errors.append('LEASE_HOLD: 当前话要求总控先分配租约')
@@ -184,7 +191,7 @@ def context_errors(context, episode_root, book_id, episode_id, panel_id=None):
                     blocked,_=blocked_panels(generation_holds(state),source["panel_ids"],windows[0],shots.get("panels",[]))
                     has_hold = has_hold or panel_id in blocked
         else: has_hold = bool(state.get("holds"))
-        if state.get("cancelled") is True or has_hold:
+        if (state.get("cancelled") is True or has_hold) and not accepting_return:
             errors.append("本话状态已取消或本请求范围HOLD")
         frozen = job.get("frozen_inputs", {})
         for key in (INPUTS[:2] if scoped and not whole else INPUTS):
@@ -229,12 +236,12 @@ def context_errors(context, episode_root, book_id, episode_id, panel_id=None):
         for owner_job in jobs:
             if owner_job.get("status") not in ACTIVE_JOBS: continue
             if owner_job.get("job_id") != context.get("job_id"): continue
-            owner_root = Path(owner_job["root"]).resolve()
+            owner_root = resolve_path(Path(owner_job['root']))
             owner_name = Path(owner_job.get("state_file", "00_输入审计/生产流程.json"))
-            owner_path = (owner_root / owner_name).resolve()
+            owner_path = resolve_path(owner_root / owner_name)
             if owner_name.is_absolute() or not owner_path.is_relative_to(owner_root):
                 errors.append("任务state_file越界"); continue
-            if not owner_path.is_file():
+            if not is_file(owner_path):
                 if owner_job.get("status") in ACTIVE_JOBS: errors.append("活动话缺少磁盘状态")
                 continue
             owner_state = _read(owner_path)
@@ -322,7 +329,7 @@ def _carry_forward_errors(context, root, control, panel_id, receipt, permit, out
     if report.get("frozen_inputs") != job.get("frozen_inputs"):
         errors.append("历史图复用报告frozen_inputs不是当前冻结版本")
     state_name = Path(job.get("state_file", "00_输入审计/生产流程.json"))
-    state_path = (root / state_name).resolve()
+    state_path = resolve_path(root / state_name)
     if state_name.is_absolute() or not state_path.is_relative_to(root):
         return errors + ["历史图复用state_file越出话根目录"]
     state = _read(state_path)
@@ -338,7 +345,7 @@ def _carry_forward_errors(context, root, control, panel_id, receipt, permit, out
             paths[key] = _file(root, report[key])
     if "package_manifest" in paths and _read(paths["package_manifest"]).get("dispatch_receipt") != receipt:
         errors.append("历史图复用包已更改原始dispatch_receipt")
-    if "output" in paths and hashlib.sha256(paths["output"].read_bytes()).hexdigest() != output_sha256:
+    if "output" in paths and digest(paths['output']) != output_sha256:
         errors.append("历史图复用报告实际图片与原调用输出不符")
     return errors
 
@@ -352,8 +359,22 @@ def receipt_errors(context, episode_root, book_id, episode_id, panel_id, receipt
     upgrades an old packet receipt to the new epoch/owner. Old completed outputs
     require an explicit carry_forward report bound to current inputs and QA.
     """
+    accepting_return = False
+    if output_sha256 is not None:
+        from managed_dispatch import _ACTIVE, permitted
+        if _ACTIVE.get() is not None:
+            try:
+                current_control = _read(Path(context['control_file']))
+                owner = next(j for j in current_control['jobs'] if j['job_id'] == context['job_id'])
+                owner_root = resolve_path(Path(episode_root))
+                owner_name = Path(owner.get('state_file', '00_输入审计/生产流程.json'))
+                owner_path = resolve_path(owner_root / owner_name)
+                if not owner_name.is_absolute() and owner_path.is_relative_to(owner_root):
+                    accepting_return = permitted(_read(owner_path))
+            except (OSError, ValueError, TypeError, KeyError, StopIteration):
+                pass  # The normal contract below reports the invalid owner.
     errors = context_errors(context, episode_root, book_id, episode_id,
-                            panel_id if output_sha256 is None else None)
+                            panel_id if output_sha256 is None else None, accepting_return=accepting_return)
     try:
         if not isinstance(context, dict) or not isinstance(receipt, dict):
             return errors + ["缺少单格dispatch_receipt"]
@@ -370,9 +391,9 @@ def receipt_errors(context, episode_root, book_id, episode_id, panel_id, receipt
             return errors + ["dispatch_receipt控制文件必须为绝对路径"]
         control = _read(control_path)
         state_name = Path(next(j for j in control['jobs'] if j['job_id']==context['job_id']).get('state_file','00_输入审计/生产流程.json'))
-        if state_name.is_absolute() or not (Path(episode_root).resolve()/state_name).resolve().is_relative_to(Path(episode_root).resolve()):
+        if state_name.is_absolute() or not resolve_path(resolve_path(Path(episode_root)) / state_name).is_relative_to(resolve_path(Path(episode_root))):
             raise ValueError('state_file越界')
-        state = _read(Path(episode_root).resolve()/state_name)
+        state = _read(resolve_path(Path(episode_root)) / state_name)
         from slot_leases import effective_control, enabled as leased
         control = effective_control(control,state,context)
         permits = [p for p in control.get("permits", []) if p.get("permit_id") == permit_id]
@@ -387,7 +408,7 @@ def receipt_errors(context, episode_root, book_id, episode_id, panel_id, receipt
         if permit.get("panel_id") != panel_id:
             errors.append("dispatch_receipt对应permit属于其他格")
         state_name = Path(next(j for j in control["jobs"] if j["job_id"] == context["job_id"]).get("state_file", "00_输入审计/生产流程.json"))
-        state = _read(Path(episode_root).resolve() / state_name)
+        state = _read(resolve_path(Path(episode_root)) / state_name)
         if state.get("execution_mode") in {"half_episode_async_v1", "episode_async_v1"}:
             for key in ("batch_id", "round_id", "attempt_id"):
                 if receipt.get(key) != permit.get(key) or receipt.get(key) is None:
@@ -405,8 +426,7 @@ def receipt_errors(context, episode_root, book_id, episode_id, panel_id, receipt
                 if not isinstance(permit.get("carry_forward"), dict):
                     errors.append("旧worker_id/epoch返回缺少carry_forward实际复核报告")
                 else:
-                    errors.extend(_carry_forward_errors(context, Path(episode_root).resolve(), control,
-                                                        panel_id, receipt, permit, output_sha256))
+                    errors.extend(_carry_forward_errors(context, resolve_path(Path(episode_root)), control, panel_id, receipt, permit, output_sha256))
     except (OSError, ValueError, TypeError, KeyError, AttributeError) as exc:
         errors.append(f"dispatch_receipt读取失败: {exc}")
     return errors
@@ -420,8 +440,8 @@ def main():
     parser.add_argument("--handoff-check", action="store_true", help="仅核对本话owner交接前的活动请求和旧执行者停止条件")
     parser.add_argument("--old-writer-stopped", action="store_true", help="总控已实际停止旧执行者并保存检查点")
     args = parser.parse_args()
-    path = Path(args.state).resolve()
-    root = Path(args.root).resolve() if args.root else path.parent.parent
+    path = resolve_path(Path(args.state))
+    root = resolve_path(Path(args.root)) if args.root else path.parent.parent
     try:
         state = _read(path)
         if args.handoff_check:

@@ -128,10 +128,12 @@ def main() -> int:
             extra.update(background_policy=BACKGROUND_POLICY, requested_background=bg)
     if mode == 'episode_async_v1':
         extra['input_quality_policy'] = 'execution_quality_v1'
-        from input_semantics import POLICY as SEMANTICS_POLICY
+        from input_semantics import PREPARED_POLICY as SEMANTICS_POLICY
         extra['input_semantics_policy'] = SEMANTICS_POLICY
         from appearance_lock import APPEARANCE,FRAME
         extra.update(appearance_policy=APPEARANCE,frame_policy=FRAME)
+        from production_decisions import POLICY as PRODUCTION
+        extra['production_policy'] = PRODUCTION
     if memory_source is not None:
         extra["memory_source"] = memory_source
     if config:

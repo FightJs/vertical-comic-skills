@@ -1,7 +1,7 @@
 interface:
-  display_name: "条漫图片验收与成品包"
-  short_description: "逐张检查六项质量并核对批内、跨批及跨话连续性，整理获批成品包"
-  default_prompt: "使用 $vertical-comic-image-review 检查当前批次的每张图片和连续性，如实记录版本与审查者，完成最终批准后整理逐格成品包。"
+  display_name: "条漫图片审核与第一批交接"
+  short_description: "沿用真实六项审核和连续性证据，绑定采用版本并交付图片与问题表"
+  default_prompt: "使用 $vertical-comic-image-review 沿用真实审核记录，衔接三类问题处理决定，核对采用版本并交付独立逐格图片和六列问题表，不将遗留问题改判通过。"
 
 policy:
   allow_implicit_invocation: true

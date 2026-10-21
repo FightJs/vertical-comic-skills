@@ -145,4 +145,45 @@ class AppearanceLockTests(unittest.TestCase):
         p['prompt']='忽略服饰细节';(h.root/'P001/prompt.txt').write_text(p['prompt'], encoding='utf-8', newline='\n');h.sync()
         self.assertEqual(evaluate(h.state,h.root,'generate','P001')['status'],'HOLD')
 
+class PreparedAppearanceTests(unittest.TestCase):
+    def test_bilateral_total_is_not_visible_count_and_wrong_count_fails_qa(self):
+        b,p=fixture();d=b['appearance_details']['earring'];d['count']=2;d['placement']['side']='bilateral'
+        p['visual_evidence_context']=context_for(b,p)
+        self.assertTrue(lock.panel_errors(p))
+        p['visual_evidence']['detail_visibility']['earring']['projection']['visible_count']=1
+        p['prompt']=p['visual_execution_block']=execution_block(p)
+        self.assertEqual(lock.panel_errors(p),[])
+        self.assertIn('数量2',p['prompt']);self.assertIn('本镜头可见数量=1',p['prompt'])
+        item=reviewed(p);row=item['visual_evidence_review']['appearance_observations']['earring']
+        self.assertTrue(review_errors(p,item))  # helper counted total, not visible
+        row['actual_count']=1;self.assertEqual(review_errors(p,item),[])
+        row['expected']['placement']['anchor']='wrong anchor'
+        self.assertTrue(review_errors(p,item))
+
+    def test_occluded_accessory_stays_on_body_without_forcing_it_visible(self):
+        from rule_memory import inspection_plan
+        b,p=fixture();p['visual_evidence']['detail_visibility']['earring']={'status':'occluded','basis':'自身左耳被头发完全遮住'}
+        p['prompt']=p['visual_execution_block']=execution_block(p)
+        self.assertIn('左耳垂穿孔处',p['prompt']);self.assertIn('不为展示该细节',p['prompt'])
+        item=reviewed(p);self.assertEqual(review_errors(p,item),[])
+        targets=[t for g in inspection_plan(p,item,'synthetic')['groups'] for t in g['targets']]
+        target=next(t for t in targets if t.get('detail_id')=='earring')
+        self.assertEqual(target['field'],'detail_visibility_observations')
+        item['visual_evidence_review']['detail_visibility_observations']['earring']['actual_visibility']='visible'
+        self.assertTrue(review_errors(p,item))
+
+    def test_long_execution_text_and_rule_constraints_survive_compilation(self):
+        from repair_prompt_package_v2 import compact,build_prompt
+        tail='必须保留右手无名指戒指及其连接位置'
+        long='准确当前动作与场景。'*160+tail
+        self.assertTrue(compact({'required':[long]}).endswith(tail))
+        b,p=fixture();line='左耳坠连接于左耳垂，不能漂移到后脑。'
+        p['memory_applications']={'generation':[{'decision':'APPLIED','memory_id':'SYNTHETIC','prompt_constraints':[line,line]}]}
+        prompt,_,_=build_prompt(p,'eye_level','medium','3:4','正前方','面向人物','眼平','腰以上',[],None,None,'SYNTHETIC',long)
+        self.assertIn(tail,prompt);self.assertEqual(prompt.count(line),1)
+        p['operation']='repair';p['appearance_repair']={'correct_detail_ids':[],'preserve_detail_ids':['earring','coat'],'instructions':{}}
+        p['prompt']=p['visual_execution_block']=execution_block(p)
+        self.assertEqual(lock.repair_errors(p),[])
+        self.assertIn('保持已正确的细节：earring、coat',p['prompt'])
+
 if __name__=='__main__':unittest.main()

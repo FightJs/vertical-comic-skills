@@ -1,4 +1,5 @@
 """Scoped user exceptions to portable rules; original source and core image QA stay locked."""
+from codex_reference_contract import read_json
 from pathlib import Path
 import json
 from codex_reference_contract import checked_file
@@ -12,7 +13,7 @@ def locked_hash(panel):
 def applicable(panel,root,rule,stage,scope):
     found=[]
     for ref in panel.get('rule_exceptions',[]):
-        value=json.loads(checked_file(Path(root),ref).read_text(encoding='utf-8-sig'))
+        value=read_json(checked_file(Path(root), ref))
         if value.get('rule_id')!=rule['id'] or stage not in value.get('stages',[]):continue
         if scope is None:raise ValueError('规则例外缺少真实书话上下文')
         pid=panel['panel_id'];global_id=scope['episode_id']+'-'+pid if pid.startswith('P') else pid

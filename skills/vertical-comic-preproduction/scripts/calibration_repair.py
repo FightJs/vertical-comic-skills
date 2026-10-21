@@ -1,4 +1,5 @@
 """Scoped state-calibration correction, using the same half's round-2 budget."""
+from codex_reference_contract import read_json, resolve_path
 import argparse,json
 from pathlib import Path
 from codex_reference_contract import checked_file
@@ -17,7 +18,7 @@ def binding_extension_valid(packet,panel,shot,root):
     aliases={r['alias'] for r in panel.get('reference_images',[]) if r.get('sha256')==target.get('sha256')}
     return bool(aliases) and all(b.get('alias') in aliases and b.get('purpose') in {'pose_interaction','scene_view','framing','spatial_layout','prop_state'} for b in current[len(old):])
 
-def read(path):return json.loads(Path(path).read_text(encoding='utf-8-sig'))
+def read(path):return read_json(Path(path))
 
 def validate(state,root,batch,shots,records,pid):
     try:
@@ -67,14 +68,14 @@ def source_basis(state,root,package_path,packet,basis):
 def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--state',required=True);p.add_argument('--panel',required=True);p.add_argument('--write',required=True);a=p.parse_args()
     try:
-        path=Path(a.state).resolve();root=path.parent.parent;state=read(path);pid=a.panel;record=next(r for r in state['panels'] if r['panel_id']==pid)
+        path=resolve_path(Path(a.state));root=path.parent.parent;state=read(path);pid=a.panel;record=next(r for r in state['panels'] if r['panel_id']==pid)
         from scoped_inputs import half_view
         plan=read(checked_file(root,state['batch_plan']));batch=next(b for b in plan['batches'] if pid in b['panel_ids']);view=half_view(state,batch['batch_id'])
         if record.get('status')!='VISUAL_FAIL' or record.get('round_id')!=1 or record.get('attempt_history'):raise ValueError('候选仅从实际首轮FAIL创建')
         errors=attempt_errors(view,root,record)
         if errors:raise ValueError(';'.join(errors))
         value={'policy':POLICY,'book_id':state['book_id'],'episode_id':state['episode_id'],'batch_id':batch['batch_id'],'panel_ids':[pid],'source_snapshot':state['source_snapshot'],'visual_basis':view['visual_basis'],'shot_manifest':view['shot_manifest'],'attempts':[snapshot(record)],'status':'UNREVIEWED','reviewer':'','evidence':'','diagnosis':{}}
-        dest=Path(a.write).resolve();dest.relative_to(root)
+        dest=resolve_path(Path(a.write));dest.relative_to(root)
         with dest.open('x',encoding='utf-8', newline='\n') as f:json.dump(value,f,ensure_ascii=False,indent=2)
         print(json.dumps({'status':'UNREVIEWED_CALIBRATION_REPORT','path':str(dest)},ensure_ascii=False));return 0
     except (OSError,ValueError,TypeError,KeyError,StopIteration) as exc:print(json.dumps({'status':'HOLD','errors':[str(exc)]},ensure_ascii=False));return 1

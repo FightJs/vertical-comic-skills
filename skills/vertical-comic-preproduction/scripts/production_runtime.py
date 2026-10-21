@@ -97,14 +97,14 @@ def compile_jobs(state, root, panel_ids=None, *, candidate=False, input_audit=Fa
                 "package_manifest": record["package_manifest"],
                 "arguments": arguments,
                 "candidate_only": candidate,
-                "input_audit_only": input_audit, "dispatch_authorized": False if input_audit else None,
+                "input_audit_only": input_audit, "dispatch_authorized": False if input_audit or candidate else None,
                 "review_priority": bool(panel.get("calibration_anchor") or panel.get("requires_state_review")
                     or pid in priority_leads or pid in actual_dependencies),
-                "status": "INPUT_AUDITED_NOT_DISPATCHABLE" if input_audit else "NOT_RUN",
+                "status": "INPUT_AUDITED_NOT_DISPATCHABLE" if input_audit else "CANDIDATE_NOT_DISPATCHABLE" if candidate else "NOT_RUN",
             })
         return {"policy": state.get('runtime',{}).get('policy',POLICY), "book_id": state.get("book_id"), "episode_id": state.get("episode_id"),
                 "candidate_only": candidate, "input_audit_only": input_audit,
-                "dispatch_authorized": False if input_audit else None,
+                "dispatch_authorized": False if input_audit or candidate else None,
                 "audit_policy": 'receiver_input_audit_v1' if input_audit else None,
                 "jobs": jobs, "preflight": report,
                 "file_reuse_statistics": {k: memo[k] for k in ("hash_reads", "hash_hits","validation_runs","validation_hits")},
@@ -336,6 +336,12 @@ def review_bundle(state, root, compiled, dependency_plan=None):
 
 
 def episode_bundle(state, root, dependency_plan=None):
+    from panel_readiness import review_context
+    with file_session(), review_context(state, root, True):
+        return _episode_bundle(state, root, dependency_plan)
+
+
+def _episode_bundle(state, root, dependency_plan=None):
     """Freeze one complete episode candidate before either production half starts."""
     from scoped_inputs import full_preparation, validate_shots, approval_for
     from execution_contract import state_errors, semantic_errors
@@ -441,7 +447,7 @@ def episode_bundle(state, root, dependency_plan=None):
             errors.extend(validate_style(panel,path.parent));errors.extend(output_spec_errors(panel))
             if readiness:
                 from batch_workflow import input_errors
-                with review_context(state,root,True):errors.extend(input_errors(state,root,record,by_shot[pid],basis,by_record,candidate=True))
+                with review_context(state,root,True):errors.extend(input_errors(state,root,record,by_shot[pid],basis,by_record,candidate=True,preparation_only=True))
             if errors:raise ValueError(';'.join(errors))
             inputs.append(package_signature(packet,path.parent))
         except (OSError,ValueError,TypeError,KeyError,AttributeError,IndexError) as exc:

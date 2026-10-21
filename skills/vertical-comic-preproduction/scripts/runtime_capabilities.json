@@ -13,5 +13,8 @@
     "legacy_writers": "reject_managed_state"
   },
   "prepared_panel_inputs": "final_input_semantics_v2",
-  "production_decisions": "first_batch_production_v1"
+  "production_decisions": "first_batch_production_v1",
+  "offline_preparation": "preparation_authorization_v1",
+  "batch_candidate_context": "same_task_candidate_context_v1",
+  "precise_body_crop": "precise_body_crop_labels_v1"
 }

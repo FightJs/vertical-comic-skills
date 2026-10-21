@@ -134,3 +134,28 @@ receipts in the actual run template. Asset history is a separate ledger.
                 if not actual[aid].get('qa_report') or attempt.get('qa', {}).get('sha256') != actual[aid]['qa_report'].get('sha256'):
                     errors.append(pid + ':历史QA未绑定本任务真实审查')
     return errors
+
+
+def preparation_errors(state, root, panel_ids):
+    """Validate an existing user request for offline preparation, never dispatch."""
+    from staged_workflow import approval_errors
+    from codex_reference_contract import checked_file, read_json
+    auth = state.get('preparation_authorization')
+    if not isinstance(auth, dict) or auth.get('policy') != 'preparation_authorization_v1':
+        return ['PREPARATION_AUTHORITY_HOLD:缺少前期范围授权记录']
+    errors = approval_errors(auth, root, [state['source_script'], state['source_snapshot']],
+                             state['book_id'], state['episode_id'])
+    if auth.get('phase') != 'preparation' or auth.get('source_kind') != 'user_message':
+        errors.append('PREPARATION_AUTHORITY_HOLD:须绑定真实用户前期请求，不能作为正文授权')
+    ids = auth.get('panel_ids')
+    if not isinstance(ids, list) or any(not isinstance(p, str) for p in ids) or len(set(ids)) != len(ids):
+        return errors + ['PREPARATION_AUTHORITY_HOLD:前期格范围无效']
+    source = read_json(checked_file(root, state['source_snapshot']))
+    allowed = set(source['panel_ids'])
+    normalized = {p.removeprefix(state['episode_id'] + '-') for p in ids}
+    if not normalized <= allowed or not set(panel_ids) <= normalized:
+        errors.append('PREPARATION_AUTHORITY_HOLD:当前格未包含在准确前期范围')
+    evidence = read_json(checked_file(root, auth.get('evidence')))
+    if any(evidence.get(k) != auth.get(k) for k in ('source_kind', 'source_locator', 'quote')):
+        errors.append('PREPARATION_AUTHORITY_HOLD:前期原始请求与记录不一致')
+    return errors

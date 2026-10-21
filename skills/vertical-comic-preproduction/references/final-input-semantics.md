@@ -79,3 +79,36 @@ python -B scripts/input_semantics.py --state <本话根/00_输入审计/生产�
 返图后的inspection_plan引用原规则执行约束、配饰锚点/可见数量与原QA位置，帮助执行者按前期目标观察，不自动填PASS。输入错误修对应包并重新审查；执行偏差按批准方案限定修图；工具未知结果查原请求。修正只影响相应格及真实依赖，原自动返修次数、旧图和失败记录保留。
 
 旧RV使用冻结入口；迁移需新候选、历史及未知请求核对和准确授权。不能只改input_semantics_policy、复制v1的PASS到v2或重签旧输入。交接同时支持v1/v2，保留准确策略；新能力不自动启用短锁。
+
+
+## 批量制作前先走真实入口
+
+新批次在铺开逐格包前，先从本次真实脚本选能覆盖主要接口的代表格：多人/配饰与裁切、连续场景，以及存在时的跨话末格→首格。用同一份 A、镜头、参考与规则完成实际 prompt 编译、原语义审核及完整候选门禁；不要先批量复制尚未走通的字段结构。全话源序先建齐，其他格明确保持未完成，不能为了测试样例填假设计或 PASS。样例通过只是接口验证，不替代其余格的逐格准备。
+
+使用现有真实入口（`--panels` 为准确样例格号）：
+
+```text
+python <本次快照scripts>/production_runtime.py --state <本话生产流程.json> --action compile --candidate --panels P001 P002 --progress
+```
+
+按编译结果中的 `preflight.reports`、实际 `jobs.arguments` 和待补项核对；图片可解码/哈希一致或 `validate_preproduction.py` 局部 PASS 均不能代替完整入口。尚无语义审查时先用原 semantic_template 生成未审模板，执行者实际检查后补记录，不复制通过值。代表格遇到缺字段或接口限制时先修好共同来源，再批量制作；不反复拷贝整套 RV 调试。
+
+正式前期 ZIP 仍须在新位置执行完整 bind/rehearse。只有最终 B/包批准和正式导出证据齐全才可发布；未批准的代表格不伪装正式接包包。跨机路径可先用候选副本搬移验证，再在最终包完整复演。技术诊断只标“局部检查/完整候选编译/冻结接收演练”中的实际范围及数量。
+
+## 前期权限与同批候选上下文
+
+新工具支持 `preparation_authorization_v1`。收到用户明确的前期制作请求后，将**已有原话**一次记录在状态的 `preparation_authorization`：`policy`、`phase=preparation`、`status=APPROVED`、`source_kind=user_message`、真实 `source_locator/quote`、准确书话与 `panel_ids`、绑定 `source_script/source_snapshot` 的 `artifacts`，以及指向原请求记录的 `evidence={path,sha256}`。证据内原话、来源和来源类型须一致。状态表示前期请求范围已确认，不表示 A/B/包或正文获批；不要为已有明确请求再增加用户确认。
+
+此记录只在候选编译/全话候选包/只读接包输入审计中替代正文生产授权检查；其他 A、源序、输入、规则、语义和预算检查照常。`candidate_only` 或 `input_audit_only` 的 job 一律 `dispatch_authorized=false`。正式领取、普通编译及提交仍核验独立 `production_authorization`；内部领取预检使用 candidate 参数不等于前期权限。没有前期记录的旧运行继续原规则，不静默迁移。
+
+同批跨话候选复用原 `continuity_sources` 和 `approved_shot_context_v1`，不另造批准台账。来源使用 `approval_resolution=source_runtime_gates_v1` 与真实 `source_state_file`：
+
+- 两话必须属于同一初始化 task_context、准确话序，且各自已有准确前期范围授权；来源必须在当前状态明确登记，四个源输入引用精确匹配。
+- 只读候选上下文允许来源 B 未批准；来源 A、真实源稿与完整连续性检查仍须通过。普通编译、领取和接包审计不会借此免除 B。
+- 候选审查上下文覆盖公共准备检查和逐格检查，离开入口后立即结束；输入/来源/授权变化使缓存失效。
+- 可移植 `continuity_sources.root` 以本话根为基准，写 `root_mode=context_relative_v1`；context 文件中的来源根以该 context 文件目录为基准。使用 `continuity_context.build` 和 `portable_context`，按解析后的来源及准确证据比较，不能仅靠绝对路径字符串或改哈希伪装同一来源。
+
+版本变化时区分创作内容与引用地址：沿用现有逐格设计签名、原批准覆盖与语义摘要判断受影响格；来源记录、实际 prompt、参考或判据变更的格必须重审。仅更新汇总引用不要求重写无关格，也不能沿用已经不匹配的摘要。补齐共性结构后集中编译一次，按相同错误原因归组解决；不要逐格重复修改同一工具。
+
+
+前期耗时控制沿[减少重复检查与版本返工](runtime-efficiency.md#减少重复检查与版本返工)：使用现有批量入口，在准确依赖范围修输入、重建未审模板和复核，不为进度汇报重做同版技术检查。

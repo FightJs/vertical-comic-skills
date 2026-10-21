@@ -25,7 +25,8 @@ ALIAS_IN_TEXT_RE = re.compile(r"@[A-Za-z0-9_\-\u4e00-\u9fff]+")
 SCREEN_WORDS = ("画面左", "画面中央", "画面右", "画左", "画右")
 FORBIDDEN = ("自由机位", "任意角度", "自行发挥", "随意机位", "随便角度")
 FRAMING_POLICY = "information_first_v1"
-BODY_CROPS = {"waist_up", "chest_up", "shoulders_up", "face_detail", "hands_detail", "object_detail", "full_body", "mixed", "environment"}
+from visual_evidence import BODY_CROP_LABELS
+BODY_CROPS = set(BODY_CROP_LABELS)
 BACKGROUND_LEVELS = {"establishing", "anchor_only", "minimal"}
 WIDE_SCALES = {"wide", "wide_shot", "long", "long_shot", "extreme_long", "extreme_long_shot", "medium_wide", "full", "full_shot", "full_body", "全景", "远景", "大全景", "全身", "中全景"}
 SPATIAL_HOLD_MARKERS = (

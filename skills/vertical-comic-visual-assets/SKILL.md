@@ -5,6 +5,8 @@ description: Lock episode-specific character identities, costume states, scenes 
 
 # 条漫视觉基准与资产
 
+用户已明确委托前期“仅在无法消解的剧本与资产冲突时询问”时，优先执行[前期最少询问规则](../vertical-comic-preproduction/references/grouped-review.md#前期仅询问无法消解的剧本资产冲突)：A、B、生图包与导出由执行者审核并记录决定，不再请求逐项确认；该委托不自动扩大到正文生产。
+
 新整话按[服装配饰定位](../vertical-comic-preproduction/references/appearance-and-single-frame.md)在原appearance_details一次冻结衣装核心、首饰款式/总数量、角色自身左右及身体附着位置、清晰原板裁区；遮挡不推导不存在，未知不默认对称。具体穿戴属于本书生产记录，不写入通用记忆。
 
 维护本话唯一visual_basis：人物身份、衣装状态、适用格、场景及批准画风，只制作必要缺失资产；不设计正文镜头或直接开始逐格生图。

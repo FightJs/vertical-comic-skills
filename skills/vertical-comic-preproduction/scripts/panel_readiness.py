@@ -17,11 +17,44 @@ def review_context(state,root,candidate=False):
     try:yield
     finally:_REVIEW.reset(token)
 
+def review_scope():
+    active = _REVIEW.get()
+    if active is None:return None
+    state, root = active
+    return [str(root), {k:state.get(k) for k in (
+        'episode_id','source_script','source_snapshot','visual_basis','shot_manifest',
+        'task_context','continuity_sources','episode_order','preparation_authorization','parallel_context')}]
+
+
 def candidate_source(source):
     active=_REVIEW.get()
     if active is None:return False
     state,root=active
-    return resolve_path(Path(source.get('root', '')))==root and source.get('episode_id')==state['episode_id'] and all(source.get(k)==state.get(k) for k in ('source_script','source_snapshot','visual_basis','shot_manifest'))
+    if resolve_path(Path(source.get('root', '')))==root and source.get('episode_id')==state['episode_id']:
+        return all(source.get(k)==state.get(k) for k in ('source_script','source_snapshot','visual_basis','shot_manifest'))
+    # Only B may be pending, and only inside offline review of the same task.
+    # Source hashes, A, source order and continuity checks still run normally.
+    from continuity_context import runtime_source_state, registered_source
+    from task_context import state_errors, preparation_errors
+    normalized = {k:v for k,v in source.items() if k != 'root_mode'}
+    registered = registered_source(state, root, normalized, root)
+    if not registered or source.get('approval_resolution') != 'source_runtime_gates_v1':
+        return False
+    if state.get('parallel_context') or not state.get('task_context') or state_errors(state, root):
+        return False
+    other_root = Path(source['root'])
+    other = runtime_source_state(source, other_root, state['book_id'])
+    if (other.get('parallel_context') or not enabled(other) or
+            other.get('task_context') != state['task_context'] or state_errors(other, other_root)):
+        return False
+    order = state.get('episode_order', [])
+    if (other.get('episode_order') != order or source['episode_id'] not in order or
+            state['episode_id'] not in order or order.index(source['episode_id']) >= order.index(state['episode_id'])):
+        return False
+    for owner, base in ((state, root), (other, other_root)):
+        ids = read_json_readonly(checked_file(base, owner['source_snapshot']))['panel_ids']
+        if preparation_errors(owner, base, ids):return False
+    return True
 
 def enabled(state):return state.get('readiness_policy')==POLICY
 
@@ -87,6 +120,7 @@ def _artifacts_covered(state,root,proof,artifacts,ids,phase=None):
     except (OSError,ValueError,TypeError,KeyError,RecursionError):return False
 
 def approval_errors_for(state,root,phase,artifacts,ids,direct=None,*,proofs=()):
+    ids=tuple(ids)  # Preserve one-shot iterables for eligibility and missing-scope reporting.
     def indexed_candidates():
         candidates=[p for p in proofs if isinstance(p,dict)]
         if isinstance(direct,dict):candidates.append(direct)
@@ -111,9 +145,12 @@ def approval_errors_for(state,root,phase,artifacts,ids,direct=None,*,proofs=()):
     key=content_key([str(resolve_path(Path(root))), state['book_id'], state['episode_id'], phase, state.get('approval_index'), direct, proofs])
     index=derived('approval_index',key,indexed_candidates)
     if index is None:return ['批准索引版本错误']
-    missing=[]
-    for pid in ids:
-        names={pid,state['episode_id']+'-'+pid};found=False
+    # A proof usually covers many panels. Verify that proof's eligible scope
+    # together instead of replaying the same file dependencies once per panel.
+    # Both the original proof and the lookup entry still restrict the scope.
+    eligible={}
+    for pid in dict.fromkeys(ids):
+        names={pid,state['episode_id']+'-'+pid}
         selected=set(index['unscoped'])
         for name in names:selected.update(index['scoped'].get(name,[]))
         for i in sorted(selected):
@@ -123,8 +160,21 @@ def approval_errors_for(state,root,phase,artifacts,ids,direct=None,*,proofs=()):
             if phase!='visual_basis' and (not isinstance(scope,list) or not names.intersection(scope)):continue
             if phase=='visual_basis' and scope is not None and not names.intersection(scope):continue
             if '_lookup_panel_ids' in proof and not names.intersection(proof['_lookup_panel_ids']):continue
-            if artifacts_covered(state,root,proof,artifacts,[pid],phase):found=True;break
-        if not found:missing.append(pid)
+            eligible.setdefault(i,[]).append(pid)
+    covered=set()
+    for i, scope in sorted(eligible.items()):
+        pending=[pid for pid in scope if pid not in covered]
+        if not pending:continue
+        proof=index['proofs'][i]
+        if artifacts_covered(state,root,proof,artifacts,pending,phase):
+            covered.update(pending)
+        elif len(pending)>1:
+            # A revised collection can invalidate just one row, or different
+            # preserved versions can cover different rows. Retain the original
+            # per-panel fallback and never let one bad row block its siblings.
+            for pid in pending:
+                if artifacts_covered(state,root,proof,artifacts,[pid],phase):covered.add(pid)
+    missing=[pid for pid in ids if pid not in covered]
     return ['缺少原范围、原版本或未变条目适用的真实批准:'+','.join(missing)] if missing else []
 
 def local_tags_manifest(manifest,panel):

@@ -96,3 +96,5 @@ shot 与执行 panel.rule_exceptions 登记该文件 path/sha256。执行记录�
 ## 本批运行版本
 
 新配置的batch_snapshot_v1按[批次运行](batch-runtime.md)冻结五件套和实际规则正文；只校验实际执行快照，不因安装目录更新要求本批迁移。旧RV继续原toolchain合同。
+
+新交接中的规则例外可用 `evidence_root_mode=exception_relative_v1`，`evidence_root` 为例外 JSON 所在目录内的相对目录（同目录填 `.`），`artifacts` 相对该目录。先完整保留原批准依据再创建候选，不修改已批准例外。移动后仍按原哈希核验；不允许 `..`、绝对路径或符号链接逃逸。旧绝对 evidence_root 保持原行为，不能宣称已可移植；包外迁移候选须重验。

@@ -44,6 +44,15 @@ def source_base(source,context_dir):
     if mode is not None or not value.is_absolute():raise ValueError('来源根模式或绝对路径无效')
     return resolve_path(value)
 
+def registered_source(state, root, source, context_dir):
+    """Compare exact evidence and resolved roots, not relocation spellings."""
+    base = source_base(source, context_dir)
+    identity = {k:v for k,v in source.items() if k not in {'root','root_mode'}}
+    return any(source_base(s, root) == base and
+               {k:v for k,v in s.items() if k not in {'root','root_mode'}} == identity
+               for s in state.get('continuity_sources', []))
+
+
 def portable_context(context,context_dir):
     """Call BEFORE approval; relocation never rewrites approved context bytes."""
     return {**context,'sources':[{**s,'root':Path(os.path.relpath(source_base(s, context_dir), resolve_path(Path(context_dir)))).as_posix(),'root_mode':'context_relative_v1'} for s in context['sources']]}
@@ -61,13 +70,11 @@ def load_context(manifest,root,*,readonly=False):
     Legacy callers retain mutable nested copies. Validators opt into immutable
     rows; adding a current row never modifies the cached predecessor map.
     """
-    from panel_readiness import _REVIEW
+    from panel_readiness import review_scope
     episode=manifest.get('episode_id')
     previous=PriorShots(episode) if isinstance(episode,str) else {}
     if not manifest.get('continuity_context'):return previous,[]
-    active=_REVIEW.get()
-    review=None if active is None else [str(active[1]),{k:active[0].get(k) for k in
-        ('episode_id','source_script','source_snapshot','visual_basis','shot_manifest')}]
+    review=review_scope()
     try:
         panels=manifest.get('panels',[])
         key=content_key([str(resolve_path(Path(root))) if root is not None else None, manifest.get('book_id'), episode, manifest['continuity_context'], panels[0].get('panel_id') if panels else None, review])
@@ -158,7 +165,7 @@ def binding_errors(state,root,packet,package_root):
                 context_ids=[e['panel_id'] for e in data['entries'] if data['sources'][e['source']]==source]
                 matches=any(source['visual_basis']==s.get('visual_basis') and (source['shot_manifest']==s.get('shot_manifest') or enabled(state) and compatible_collection(root,source['shot_manifest'],s['shot_manifest'],context_ids,state['book_id'],state['episode_id'])) for s in inputs)
                 if not same or not matches:return ['上下文使用了非本次冻结镜头/基准']
-            elif source not in state.get('continuity_sources',[]):return ['跨话上下文未由总控冻结登记']
+            elif not registered_source(state,root,source,context_path.parent):return ['跨话上下文未由总控冻结登记']
         last=data.get('entries',[])[-1];source=data['sources'][last['source']]
         if index>0:
             if source['episode_id']!=state['episode_id'] or last['panel_id']!=order[index-1]:return ['上下文未覆盖准确相邻前格，不能跳格规避规则']
@@ -202,7 +209,8 @@ def rule_tags(manifest,root,panel):
 def build(state,root,pid,candidate=False):
     """Build pointers to already approved prior designs, without copying images."""
     root=resolve_path(Path(root));order=read(checked_file(root,state['source_snapshot']))['panel_ids'];index=order.index(pid)
-    sources=list(state.get('continuity_sources',[]));episode=state['episode_id']
+    sources=[{**{k:v for k,v in s.items() if k!='root_mode'},'root':str(source_base(s,root))}
+             for s in state.get('continuity_sources',[])];episode=state['episode_id']
     from scoped_inputs import approval_for
     from scoped_inputs import full_preparation
     prepared=[('EPISODE',state)] if full_preparation(state) else list(state.get('half_inputs',{}).items())

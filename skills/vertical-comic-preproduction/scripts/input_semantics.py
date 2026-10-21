@@ -164,7 +164,8 @@ def actual_input(state, root, shot, packet, package_root):
     from audit_cache import derived, content_key
     authority = {k: state.get(k) for k in ('book_id', 'episode_id', 'source_snapshot',
                  'visual_basis', 'shot_manifest', 'toolchain', 'memory_source', 'input_semantics_policy')}
-    return derived('final_semantic_input', content_key([str(root), str(package_root), authority, shot, packet]),
+    from panel_readiness import review_scope
+    return derived('final_semantic_input', content_key([str(root), str(package_root), authority, shot, packet, review_scope()]),
                    lambda: _actual_input(state, root, shot, packet, package_root))
 
 
@@ -376,8 +377,12 @@ def coverage(state, root, dependency_plan=None):
     if not enabled(state):
         return {'policy': None, 'status': 'LEGACY_FROZEN_CONTRACT'}
     from audit_cache import derived, content_key
-    return derived('final_semantic_coverage', content_key([str(root), state, dependency_plan]),
-                   lambda: _coverage(state, root, dependency_plan))
+    from codex_reference_contract import file_session
+    # This is also a public read-only entry, used without production_runtime.
+    # Keep all panels in one transaction; nested runtime callers reuse theirs.
+    with file_session():
+        return derived('final_semantic_coverage', content_key([str(root), state, dependency_plan]),
+                       lambda: _coverage(state, root, dependency_plan))
 
 
 def _coverage(state, root, dependency_plan=None):
@@ -416,26 +421,36 @@ def main():
         if not enabled(state): raise ValueError('旧冻结运行不自动启用新审查')
         plan_ref = {'path': args.dependency_plan, 'sha256': digest(root / args.dependency_plan)} if args.dependency_plan else None
         if not args.output:
-            report = coverage(state, root, plan_ref); print(json.dumps(report, ensure_ascii=False))
+            from codex_reference_contract import file_session
+            with file_session():
+                if read_json(path) != state:
+                    raise ValueError('CHECK_SNAPSHOT_CHANGED: 生产状态在审计开始前变化')
+                report = coverage(state, root, plan_ref)
+            print(json.dumps(report, ensure_ascii=False))
             return 0 if report['status'] != 'HOLD' else 1
-        audit = copy.deepcopy(read_json(checked_file(root, state['semantic_audit'])))
-        shots = {r['panel_id']: r for r in read_json(checked_file(root, state['shot_manifest']))['panels']}
-        records = {r['panel_id']: r for r in state['panels']}
-        plans = {r['panel_id']: r for r in read_json(checked_file(root, plan_ref))['inputs']} if plan_ref else {}
-        selected = args.panels or audit['panel_ids']
-        if not set(selected) <= set(audit['panel_ids']): raise ValueError('选集不属于全话源格')
-        for row in audit['panels']:
-            pid = row['panel_id']
-            if pid not in selected: continue
-            _audit_row(state, root, pid)
-            if shots[pid].get('generation_dependencies') and not args.completion:
-                inputs = planned_input(state, root, shots[pid], plans[pid])
-            else:
-                packet_path = checked_file(root, records[pid]['package_manifest'])
-                inputs = actual_input(state, root, shots[pid], read_json(packet_path), packet_path.parent)
-            field = 'dependency_completion_review' if args.completion else 'execution_review'
-            row[field] = review_template(inputs)
-            row[field]['detected_conflicts'] = conflict_errors(shots[pid], inputs['prompt'])
+        from panel_readiness import review_context
+        from codex_reference_contract import file_session
+        with file_session(), review_context(state, root, not args.completion):
+            if read_json(path) != state:
+                raise ValueError('CHECK_SNAPSHOT_CHANGED: 生产状态在审计开始前变化')
+            audit = copy.deepcopy(read_json(checked_file(root, state['semantic_audit'])))
+            shots = {r['panel_id']: r for r in read_json(checked_file(root, state['shot_manifest']))['panels']}
+            records = {r['panel_id']: r for r in state['panels']}
+            plans = {r['panel_id']: r for r in read_json(checked_file(root, plan_ref))['inputs']} if plan_ref else {}
+            selected = args.panels or audit['panel_ids']
+            if not set(selected) <= set(audit['panel_ids']): raise ValueError('选集不属于全话源格')
+            for row in audit['panels']:
+                pid = row['panel_id']
+                if pid not in selected: continue
+                _audit_row(state, root, pid)
+                if shots[pid].get('generation_dependencies') and not args.completion:
+                    inputs = planned_input(state, root, shots[pid], plans[pid])
+                else:
+                    packet_path = checked_file(root, records[pid]['package_manifest'])
+                    inputs = actual_input(state, root, shots[pid], read_json(packet_path), packet_path.parent)
+                field = 'dependency_completion_review' if args.completion else 'execution_review'
+                row[field] = review_template(inputs)
+                row[field]['detected_conflicts'] = conflict_errors(shots[pid], inputs['prompt'])
         output = resolve_path(Path(args.output)); output.relative_to(root)
         with output.open('x', encoding='utf-8') as f: json.dump(audit, f, ensure_ascii=False, indent=2)
         print(json.dumps({'status': 'UNREVIEWED_TEMPLATE', 'output': str(output), 'image_calls': 0, 'dispatch_authorized': False}))
@@ -445,4 +460,6 @@ def main():
 
 
 if __name__ == '__main__':
+    from platform_io import configure_stdio
+    configure_stdio()
     raise SystemExit(main())

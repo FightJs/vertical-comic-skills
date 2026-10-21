@@ -226,7 +226,7 @@ def evaluate_scoped(state, root, check='status', requested=None):
                         return result('ROUND_HOLD', ['新请求须有准确轮次与唯一attempt_id'], batch, eligible, round_id)
                     from panel_readiness import review_context
                     with review_context(state,root,check=='candidate_batch'):
-                        errors = input_errors(state, root, record, shot_by_id[pid], basis, by_id, candidate=check=='candidate_batch')
+                        errors = input_errors(state, root, record, shot_by_id[pid], basis, by_id, candidate=check=='candidate_batch', preparation_only=check=='candidate_batch')
                     if check != 'candidate_batch':
                         from production_runtime import package_review_errors
                         errors.extend(package_review_errors(original, root, batch, record))

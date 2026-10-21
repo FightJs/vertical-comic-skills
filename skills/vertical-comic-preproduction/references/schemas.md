@@ -113,7 +113,7 @@
 
 使用当前工作区的 `vertical-comic-prompt-package-v1` 时，每格至少需要 `panel_id`、`script_shot_id`、`station_id`、`camera_view_id`、`camera_view_signature`、`visible_region`、`view_check`、`prompt`、`negative_prompt`、`reference_images`。参考图条目必须有 `alias`、`path`、`role`、`version`、`sha256`。
 
-新包的每格 `framing` 必须与镜头候选批准版一致。`body_crop` 采用 `waist_up/chest_up/shoulders_up/face_detail/hands_detail/object_detail/full_body/mixed/environment`；`mixed` 时逐人物另写准确裁切。`background_level` 采用 `establishing/anchor_only/minimal`。全身或宽景填写 `wide_or_full_reason`；这些字段的可见结果也要写进实际 prompt.txt，不能只存在于 JSON。
+新包的每格 `framing` 必须与镜头候选批准版一致。`body_crop` 采用 `upper_thigh_up/knees_up/waist_up/chest_up/shoulders_up/face_detail/hands_detail/object_detail/full_body/mixed/environment`；`mixed` 时逐人物另写准确裁切。`background_level` 采用 `establishing/anchor_only/minimal`。全身或宽景填写 `wide_or_full_reason`；这些字段的可见结果也要写进实际 prompt.txt，不能只存在于 JSON。
 
 ## 第一轮连续性扩展
 

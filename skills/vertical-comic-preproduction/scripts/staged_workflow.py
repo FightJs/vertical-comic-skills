@@ -289,6 +289,8 @@ def _evaluate_impl(state, root, check="status", requested=None):
         if requested != pid:
             return result("SOURCE_ORDER_HOLD", [f"只能生成当前格{pid}，不能跳到{requested}"], pid)
         authorization = state.get("production_authorization")
+        if isinstance(authorization, dict) and (authorization.get('policy') == 'preparation_authorization_v1' or authorization.get('phase') == 'preparation'):
+            return result('INPUT_HOLD', ['前期记录不能用作正文生产授权'])
         errors = approval_errors(authorization, root, [state["source_script"]], book, episode)
         if pid not in (authorization or {}).get("panel_ids", []):
             errors.append("当前格不在已授权生产范围")

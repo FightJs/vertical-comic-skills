@@ -27,6 +27,13 @@
   if (options.onInputHeadRefresh !== undefined && typeof options.onInputHeadRefresh !== "function") throw new Error("onInputHeadRefresh must be a function");
   if (options.onInputHeadRefresh && jobs.some(j => j.kind !== 'asset' && (!j.book_id || !j.episode_id)))
     throw new Error("INPUT_HEAD_SCOPE_HOLD: exact book/episode required before invoking");
+  if (options.onProgress !== undefined && typeof options.onProgress !== 'function') throw new Error('onProgress must be a function');
+  const progressIntervalMs = options.progressIntervalMs ?? 120000;
+  const serviceProgressIntervalMs = options.serviceProgressIntervalMs ?? 300000;
+  const progressPollMs = options.progressPollMs ?? 30000;
+  if (![progressIntervalMs, serviceProgressIntervalMs, progressPollMs].every(v => Number.isInteger(v) && v > 0) ||
+      progressPollMs > 60000 || serviceProgressIntervalMs < progressIntervalMs)
+    throw new Error('progress intervals must be positive, service >= active, poll <= 60000ms');
   const requestWarningMs = options.requestWarningMs ?? 900000;
   const requestEscalationMs = options.requestEscalationMs ?? 1800000;
   if (!Number.isInteger(requestWarningMs) || !Number.isInteger(requestEscalationMs) ||
@@ -88,6 +95,30 @@
   }
   const results = Array(jobs.length);
   let cursor = 0, stop = false, serviceErrors = 0, persistence = Promise.resolve();
+  // A timer observes counters only. It never races/cancels invoke, releases a
+  // permit, writes watchdog progress or invokes an image API a second time.
+  let inFlight = 0, submittedCount = 0, returned = 0, persisted = 0, notificationBusy = false;
+  let progressTimer, lastProgressAt = 0, lastProgressKey, lastProgressSignal = Promise.resolve();
+  const progressErrors = [];
+  function signalProgress(force = false, finished = false) {
+    if (!options.onProgress || notificationBusy) return;
+    const waitKind = inFlight > 0 && returned === persisted && pendingReview.length === 0 ? 'SERVICE' : 'NONE';
+    const interval = waitKind === 'SERVICE' ? serviceProgressIntervalMs : progressIntervalMs;
+    const key = `${stop}:${finished}`;
+    if (!force && key === lastProgressKey && Date.now() - lastProgressAt < interval) return;
+    lastProgressKey = key; lastProgressAt = Date.now(); notificationBusy = true;
+    const event = {source: 'async_generation', kind: 'display_only', total_jobs: jobs.length,
+      submitted: submittedCount, in_flight: inFlight, returned, persisted, wait_kind: waitKind,
+      stopped: stop, finished, not_watchdog_progress: true};
+    lastProgressSignal = Promise.resolve().then(() => options.onProgress(event)).catch(err => {
+      progressErrors.push(errorData(err));
+    }).finally(() => { notificationBusy = false; });
+  }
+  if (options.onProgress) {
+    signalProgress(true);
+    const poll = () => { signalProgress(); progressTimer = setTimeout(poll, progressPollMs); };
+    progressTimer = setTimeout(poll, progressPollMs);
+  }
   async function worker() {
     while (!stop && cursor < jobs.length) {
       const index = cursor++, job = jobs[index];
@@ -106,6 +137,7 @@
         }
       }
       item.submitted_at = new Date().toISOString();
+      inFlight++; submittedCount++;
       const longRequestTimers = [];
       if (options.onLongRequest) {
         for (const [level, delay] of [['T1', requestWarningMs], ['T2', requestEscalationMs]]) {
@@ -128,6 +160,7 @@
         }
       }
       catch (err) { item.transport_status = 'REJECTED'; item.status = 'REJECTED'; classify(item, err); }
+      inFlight--; returned++;
       for (const timer of longRequestTimers) clearTimeout(timer);
       if (item.service_error) { serviceErrors++; if (serviceErrors >= serviceLimit) { stop = true; item.dispatch_stop_reason = 'SERVICE_ERROR_CIRCUIT'; } }
       else if (item.status === 'FULFILLED' && item.result !== undefined) serviceErrors = 0;
@@ -139,6 +172,7 @@
       try {
         await save;
         item.saved_at = new Date().toISOString();
+        persisted++;
         if (options.onPersisted) {
           // Persist final save timing in the same single-writer lane. This hook
           // records metadata only; no retry and no visual verdict is implied.
@@ -180,5 +214,10 @@
   await persistence;
   flushReview();
   await Promise.allSettled(reviewSignals);
+  if (progressTimer !== undefined) clearTimeout(progressTimer);
+  await lastProgressSignal;
+  signalProgress(true, true);
+  await lastProgressSignal;
+  if (progressErrors.length) for (const item of results) if (item) item.progress_signal_errors = progressErrors;
   return jobs.map((job, i) => results[i] || {job_id: job.job_id, kind: job.kind ?? 'panel', panel_id: job.panel_id, asset_id: job.asset_id, attempt_id: job.attempt_id, batch_id: job.batch_id, round_id: job.round_id, status: 'NOT_DISPATCHED', ...(workerErrors.length ? {worker_errors: workerErrors, outcome_hint: 'CHECK_UNTRACKED_WORKER'} : {})});
 })

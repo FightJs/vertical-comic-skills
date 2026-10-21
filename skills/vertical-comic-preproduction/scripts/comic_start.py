@@ -13,6 +13,17 @@ from task_context import fresh, validate as validate_task
 
 BASE=Path(__file__).resolve().parents[1]
 
+def start_display(directory,role,states,*,config=None,rehearsal=None):
+    try:
+        from production_progress import initialize,observe_runtime,refresh
+        initialize(directory,role,states,config=config)
+        if rehearsal is not None:
+            for path in states: observe_runtime(directory,path,'rehearsal',rehearsal)
+            refresh(directory,activity='接包校验与本地运行已建立',next_action='处理准确HOLD或开始获批生产')
+        return {'progress_directory':str(directory)}
+    except (OSError,ValueError,KeyError,TypeError) as exc:
+        return {'progress_warning':str(exc),'progress_recovery':'重建派生显示目录；原生产判定未改变'}
+
 def episodes(values):
     import re
     out=[]
@@ -64,6 +75,7 @@ def prepare(project,book,ids,*,script=None,assets=None,output=None,workers=None,
     if old is None:
         profile_dir.mkdir(parents=True,exist_ok=True);write(profile,{'policy':'comic_book_profile_v1','book':book,**inputs})
     result={'status':'INITIALIZED_NOT_PRODUCTION_APPROVAL','book':book,'episode_ids':ids,'task_context':task,'run_root':str(run),'config':str(cfg),'profile':str(profile),'image_calls':0,'next':'仅审本次脚本与资产需求；不查无关旧生产账。核对实际格数/格序并按A及B/包审查；模板没有批准'}
+    result.update(start_display(run/'00_显示进度','preparation',[run/e/'00_输入审计/生产流程.json' for e in ids],config=config.get('progress')))
     write(run/'启动摘要.json',result);return result
 
 def receive(zip_path=None,*,package_root=None,output=None):
@@ -84,7 +96,9 @@ def receive(zip_path=None,*,package_root=None,output=None):
     write(target/'接收校验.json',checked)
     bound=bind(originals,target/'本地运行')
     result=rehearse(archive,originals,bound['run_root'],bound['run_index'],target/'接包预检')
-    return {'status':'READY_FOR_PRODUCTION_ROUTING' if result['status']=='RELEASE_CANDIDATE' else 'HOLD','run_root':str(target),'originals_root':str(originals),'reception':checked,'episode_results':result['results'],'image_calls':0,'next':'复用内容一致的前期最终输入审查；只补查变化和新增实图。通过后仍按H001/高风险/D审核节点及真实许可生产'}
+    local_index = read(bound['run_index'])
+    progress = start_display(target/'00_显示进度','production',[Path(bound['run_root'])/e['state'] for e in local_index['episodes']],rehearsal=result)
+    return {**progress,'status':'READY_FOR_PRODUCTION_ROUTING' if result['status']=='RELEASE_CANDIDATE' else 'HOLD','run_root':str(target),'originals_root':str(originals),'reception':checked,'episode_results':result['results'],'image_calls':0,'next':'复用内容一致的前期最终输入审查；只补查变化和新增实图。通过后仍按H001/高风险/D审核节点及真实许可生产'}
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__);sub=parser.add_subparsers(dest='action',required=True)

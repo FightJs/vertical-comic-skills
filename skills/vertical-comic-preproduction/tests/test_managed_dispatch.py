@@ -108,7 +108,7 @@ class ManagedDispatchTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'IMMUTABLE_INPUT_CHANGED'):self.reserve()
         source.write_bytes(old)
         from task_context import ORIGIN_FILE
-        (self.f.root/ORIGIN_FILE).write_text('{}')
+        (self.f.root/ORIGIN_FILE).write_text('{}', encoding='utf-8')
         with self.assertRaisesRegex(ValueError,'CHECK_SNAPSHOT_CHANGED'):self.reserve()
         self.assertEqual(read_json(self.f.state_path).get('dispatch_ledger',[]),[])
 
@@ -159,21 +159,21 @@ class ManagedDispatchTests(unittest.TestCase):
     def test_real_cli_admit_and_reserve(self):
         script=Path(managed.__file__); args=self.f.root/'managed-arguments.json'
         args.write_text(json.dumps({'expected_state':digest(self.f.state_path),'expected_control':digest(self.f.control_path),
-            'old_writers_stopped':True,'immutable_inputs':True,'saver_protocol':'exclusive_evidence_v1','reason':'SYNTHETIC CLI'}))
+            'old_writers_stopped':True,'immutable_inputs':True,'saver_protocol':'exclusive_evidence_v1','reason':'SYNTHETIC CLI'}), encoding='utf-8')
         def run(action,ok=True):
             p=subprocess.run([sys.executable,'-B',str(script),'--state',str(self.f.state_path),'--action',action,
-                '--arguments',str(args)],capture_output=True,text=True,timeout=30)
+                '--arguments',str(args)],capture_output=True,text=True,timeout=30, encoding='utf-8')
             self.assertEqual(p.returncode,0 if ok else 1,p.stdout+p.stderr);return json.loads(p.stdout)
         self.assertEqual(run('admit')['status'],'ADMITTED')
         args.write_text(json.dumps({'expected_state':digest(self.f.state_path),'expected_control':digest(self.f.control_path),
-                                   'max_count':1,'request_id':'cli-request'}))
+                                   'max_count':1,'request_id':'cli-request'}), encoding='utf-8')
         self.assertEqual(run('reserve')['status'],'RESERVED')
         proof=self.f.root/'cli-revoked-proof.json';atomic_json(proof,self.f.state['gates']['shot_design'])
         managed.call(self.f.state_path,'approvals',expected_state_sha256=digest(self.f.state_path),revoke=[{
             'approval':{'path':proof.name,'sha256':digest(proof)},'message':{'source_kind':'user_message',
             'source_locator':'SYNTHETIC_CLI','quote':'SYNTHETIC withdraw exact approval'}}])
         args.write_text(json.dumps({'expected_state':digest(self.f.state_path),'expected_control':digest(self.f.control_path),
-                                   'max_count':1,'request_id':'cli-held-request'}))
+                                   'max_count':1,'request_id':'cli-held-request'}), encoding='utf-8')
         held=run('reserve',ok=False);self.assertEqual(held['reserved'],[])
 
 if __name__=='__main__':unittest.main()

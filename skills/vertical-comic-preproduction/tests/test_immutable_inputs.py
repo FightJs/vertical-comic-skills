@@ -59,8 +59,8 @@ class ImmutableInputsTests(unittest.TestCase):
         from task_context import ORIGIN_FILE
         ref = self.capture(); index_path = self.f.root/self.f.state['approval_index']['path']
         old = contract.read_json(index_path)
-        index_path.write_text(json.dumps({'policy': 'approval_index_v1', 'entries': []}))
-        (self.f.root/ORIGIN_FILE).write_text('{}')
+        index_path.write_text(json.dumps({'policy': 'approval_index_v1', 'entries': []}), encoding='utf-8')
+        (self.f.root/ORIGIN_FILE).write_text('{}', encoding='utf-8')
         with immutable.session(ref):
             self.assertFalse(contract.path_exists(self.f.root/ORIGIN_FILE))
             self.assertEqual(contract.read_json(index_path), old)
@@ -72,7 +72,7 @@ class ImmutableInputsTests(unittest.TestCase):
             contract.scan_directory(empty, recursive=True, suffixes=('.json',))
             return actual(*args)
         with patch.object(immutable, '_run', side_effect=observed): ref = self.capture()
-        (empty/'new.json').write_text('{}')
+        (empty/'new.json').write_text('{}', encoding='utf-8')
         with immutable.session(ref): self.assertEqual(contract.scan_directory(empty, recursive=True, suffixes=('.json',)), [])
         with self.assertRaisesRegex(ValueError, 'unrecorded directory'):
             with immutable.session(ref): contract.scan_directory(empty, recursive=True, suffixes=('.py',))
@@ -89,7 +89,7 @@ class ImmutableInputsTests(unittest.TestCase):
     def test_raw_live_reads_directory_scans_and_writes_are_rejected(self):
         ref = self.capture()
         operations = [lambda: self.f.state_path.read_bytes(), lambda: list(self.f.root.iterdir()),
-                      lambda: (self.f.root/'not-written.json').write_text('{}')]
+                      lambda: (self.f.root/'not-written.json').write_text('{}', encoding='utf-8')]
         for operation in operations:
             with self.subTest(operation=operation), self.assertRaisesRegex(ValueError, 'READ_SET_HOLD'):
                 with immutable.session(ref): operation()
@@ -151,7 +151,7 @@ class ImmutableInputsTests(unittest.TestCase):
         make = subprocess.run([sys.executable, '-B', str(script), 'capture', '--state', str(self.f.state_path),
             '--store', str(self.store)], capture_output=True, text=True, encoding='utf-8', timeout=30)
         self.assertEqual(make.returncode, 0, make.stdout+make.stderr)
-        ref = json.loads(make.stdout); path = self.base/'reference.json'; path.write_text(json.dumps(ref))
+        ref = json.loads(make.stdout); path = self.base/'reference.json'; path.write_text(json.dumps(ref), encoding='utf-8')
         original = self.f.source.base.resolve(); original.rename(original.with_name(original.name+'-offline'))
         self.addCleanup(lambda: original.with_name(original.name+'-offline').rename(original))
         replay = subprocess.run([sys.executable, '-B', str(script), 'replay', '--reference', str(path)],
@@ -226,7 +226,7 @@ class ImmutableInputsTests(unittest.TestCase):
             self.bind(ref)
 
     def test_real_cli_bind(self):
-        ref = self.capture(); path = self.base/'reference.json'; path.write_text(json.dumps(ref))
+        ref = self.capture(); path = self.base/'reference.json'; path.write_text(json.dumps(ref), encoding='utf-8')
         result = subprocess.run([sys.executable, '-B', str(Path(immutable.__file__)), 'bind',
             '--reference', str(path), '--expected-state-sha256', contract.digest(self.f.state_path),
             '--expected-control-sha256', contract.digest(self.f.control_path)],

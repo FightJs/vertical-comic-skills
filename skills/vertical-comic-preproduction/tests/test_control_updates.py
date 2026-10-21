@@ -61,8 +61,8 @@ class ControlUpdatesTests(unittest.TestCase):
         self.assertEqual(self.f.control_path.read_bytes(), before)
 
     def test_real_cli_uses_exact_owner_hashes(self):
-        changes = self.f.root/'changes.json'; changes.write_text(json.dumps({'jobs': {'synthetic-job': {'dispatch_pause': True}}}))
-        states = self.f.root/'states.json'; states.write_text(json.dumps({'synthetic-job': digest(self.f.state_path)}))
+        changes = self.f.root/'changes.json'; changes.write_text(json.dumps({'jobs': {'synthetic-job': {'dispatch_pause': True}}}), encoding='utf-8')
+        states = self.f.root/'states.json'; states.write_text(json.dumps({'synthetic-job': digest(self.f.state_path)}), encoding='utf-8')
         result = subprocess.run([sys.executable, '-B', str(Path(control_updates.__file__)), '--control', str(self.f.control_path),
             '--expected-control-sha256', digest(self.f.control_path), '--expected-states', str(states), '--changes', str(changes),
             '--reason', 'SYNTHETIC pause'], capture_output=True, text=True, encoding='utf-8', timeout=30)

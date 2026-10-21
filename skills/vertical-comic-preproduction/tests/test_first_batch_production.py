@@ -96,7 +96,7 @@ class FirstBatchTests(unittest.TestCase):
         panel.update(operation='repair',generation_execution={'status':'NOT_RUN'},
             prompt=panel['prompt']+'\n'+constraint+'\n'+d['preserve_constraints'][0],
             prompt_file='P001/repair-prompt.txt',panel_json_file='P001/repair-panel.json')
-        (h.root/panel['prompt_file']).write_text(panel['prompt'])
+        (h.root/panel['prompt_file']).write_text(panel['prompt'], encoding='utf-8')
         h.h.f.write(panel['panel_json_file'],panel)
         packet_ref=h.h.f.write('second-packet.json',packet)
         auth={'policy':'episode_repair_v1','panel_id':'P001','failed_attempt':snapshot(row),
@@ -104,9 +104,9 @@ class FirstBatchTests(unittest.TestCase):
             'repair_decision':d,'repair_constraints':[constraint], 'new_attempt_id':'P001-r2',
             'new_package_manifest':packet_ref,'new_shot_subset':row['shot_subset']}
         h.h.f.write('repair-auth.json',auth)
-        state_path=h.root/'00_输入审计/生产流程.json';state_path.write_text(json.dumps(s))
+        state_path=h.root/'00_输入审计/生产流程.json';state_path.write_text(json.dumps(s), encoding='utf-8')
         authorize_episode_repair(state_path,digest(state_path),'repair-auth.json')
-        updated=json.loads(state_path.read_text());s.clear();s.update(updated);row=s['panels'][0]
+        updated=json.loads(state_path.read_text(encoding='utf-8-sig'));s.clear();s.update(updated);row=s['panels'][0]
         if call_failed: row.update(status='CALL_FAILED',call_evidence=h.h.f.write('second-call-failed.json',
             {'attempt_id':row['attempt_id'],'status':'CALL_FAILED','source_locator':'synthetic://service',
              'evidence':'SYNTHETIC failed execution, no output'}))
@@ -129,7 +129,7 @@ class FirstBatchTests(unittest.TestCase):
         result=export(s,h.root,ref,h.root/'delivery',allow_partial=True)
         self.assertFalse(result['handoff_complete']);self.assertEqual(result['next_action'],'READY_FOR_PARTIAL_HANDOFF')
         self.assertEqual(result['status'],'PASS'); self.assertEqual(row['status'],'VISUAL_FAIL')
-        table=(h.root/'delivery/问题表.md').read_text()
+        table=(h.root/'delivery/问题表.md').read_text(encoding='utf-8-sig')
         self.assertIn('局部手指粘连',table); self.assertIn('P001_P001-r1.png',table)
         self.assertEqual(digest(h.root/'delivery/图片/P001_P001-r1.png'),row['output']['sha256'])
         self.assertEqual(result['image_calls'],0)
@@ -215,12 +215,12 @@ class FirstBatchTests(unittest.TestCase):
     def test_cas_registration_preserves_status_history_and_budget(self):
         h,s,r,it,d=self.fixture();s['panels'][0].pop('production_decisions');s['panels'][0].pop('adoption')
         (h.root/'00_输入审计').mkdir(exist_ok=True)
-        path=h.root/'00_输入审计/生产流程.json';path.write_text(json.dumps(s))
+        path=h.root/'00_输入审计/生产流程.json';path.write_text(json.dumps(s), encoding='utf-8')
         proposal=h.h.f.write('proposal.json',{'panels':[{'panel_id':'P001',
             'decision':h.h.f.write('bound-decision.json',d),'adopt':True,'adoption_reason':'主体稳定'}]})
         before=copy.deepcopy(s)
         self.assertEqual(register(path,digest(path),proposal)['status'],'DECISIONS_RECORDED')
-        after=json.loads(path.read_text());after['panels'][0].pop('adoption');after['panels'][0].pop('production_decisions')
+        after=json.loads(path.read_text(encoding='utf-8-sig'));after['panels'][0].pop('adoption');after['panels'][0].pop('production_decisions')
         self.assertEqual(after,before)
         with self.assertRaises(ValueError):register(path,'stale',proposal)
 
@@ -259,7 +259,7 @@ class FirstBatchTests(unittest.TestCase):
         self.assertEqual(q['items'],[])
         d['issues'][0]['handling']='新决定另存'
         # A changed file under an old hash is invalid evidence, not a reusable decision.
-        (h.root/r['production_decisions'][r['attempt_id']]['path']).write_text(json.dumps(d))
+        (h.root/r['production_decisions'][r['attempt_id']]['path']).write_text(json.dumps(d), encoding='utf-8')
         q=build_queue(s,h.root,{'batch_id':'EPISODE','panel_ids':['P001']},incremental=True)
         self.assertEqual(len(q['items']),1)
 

@@ -136,7 +136,7 @@ class UnsupportedProtocolTests(unittest.TestCase):
         from episode_dispatch_queue import reserve_ready
         reserved = reserve_ready(self.f.state_path, digest(self.f.state_path), digest(self.f.control_path), 2)
         self.assertEqual(len(reserved['reserved']), 2)
-        self.f.state = json.loads(self.f.state_path.read_text())
+        self.f.state = json.loads(self.f.state_path.read_text(encoding='utf-8-sig'))
         packets = set(self.f.root.rglob('*.dispatch-*.json'))
         self.mark({'policy': pub.POLICY})
         before = self.f.state_path.read_bytes()
@@ -155,14 +155,14 @@ class UnsupportedProtocolTests(unittest.TestCase):
 
     def test_configuration_cannot_silently_drop_protocol_marker(self):
         from usage_config import read_config
-        path = self.f.root/'candidate-config.json'; path.write_text(json.dumps({'dispatch_consistency': None}))
+        path = self.f.root/'candidate-config.json'; path.write_text(json.dumps({'dispatch_consistency': None}), encoding='utf-8')
         with self.assertRaisesRegex(ValueError, 'DISPATCH_PROTOCOL_UNSUPPORTED'): read_config(path)
 
     def test_marked_control_cannot_silently_use_old_lease_or_reserve(self):
         from episode_dispatch_queue import reserve_ready
         from slot_leases import allocate
-        control = json.loads(self.f.control_path.read_text()); control['dispatch_consistency'] = None
-        self.f.control_path.write_text(json.dumps(control))
+        control = json.loads(self.f.control_path.read_text(encoding='utf-8-sig')); control['dispatch_consistency'] = None
+        self.f.control_path.write_text(json.dumps(control), encoding='utf-8')
         token = digest(self.f.control_path); before = self.f.control_path.read_bytes()
         with self.assertRaisesRegex(ValueError, 'DISPATCH_PROTOCOL_UNSUPPORTED'):
             reserve_ready(self.f.state_path, digest(self.f.state_path), token)

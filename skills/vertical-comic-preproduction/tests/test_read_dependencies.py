@@ -64,14 +64,14 @@ class ReadDependencyTests(unittest.TestCase):
                 self.assertFalse(is_file(path))
                 self.assertTrue(is_dir(path))
                 path.rmdir()
-                path.write_text('now a file')
+                path.write_text('now a file', encoding='utf-8')
 
     def test_empty_scan_is_a_dependency_of_a_cached_validator(self):
         with self.assertRaisesRegex(ValueError, 'CHECK_SNAPSHOT_CHANGED'):
             with file_session():
                 compute = lambda: [] if not scan_directory(self.root, suffixes=('.py',)) else ['new tool']
                 self.assertEqual(memoized_validation('tools', 'key', compute), [])
-                (self.root / 'added.py').write_text('# new tool')
+                (self.root / 'added.py').write_text('# new tool', encoding='utf-8')
                 memoized_validation('tools', 'key', compute)
 
     def test_missing_recursive_directory_is_observed(self):
@@ -87,17 +87,17 @@ class ReadDependencyTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'CHECK_SNAPSHOT_CHANGED'):
             with file_session():
                 scan_directory(self.root, recursive=True)
-                (directory / 'added.json').write_text('{}')
+                (directory / 'added.json').write_text('{}', encoding='utf-8')
 
     def test_scan_filters_are_part_of_the_dependency_and_ignore_bytecode(self):
-        (self.root / 'tool.py').write_text('# stable')
+        (self.root / 'tool.py').write_text('# stable', encoding='utf-8')
         with file_session():
             rows = scan_directory(self.root, recursive=True, suffixes=('.py',), excluded_parts=('__pycache__',))
             self.assertEqual([p.name for p in rows], ['tool.py'])
             cache = self.root / '__pycache__'
             cache.mkdir()
-            (cache / 'generated.py').write_text('# ignored')
-            (self.root / 'notes.txt').write_text('irrelevant')
+            (cache / 'generated.py').write_text('# ignored', encoding='utf-8')
+            (self.root / 'notes.txt').write_text('irrelevant', encoding='utf-8')
 
     def test_retargeted_symlink_is_detected_before_first_content_read(self):
         a, b, link = self.root / 'a.json', self.root / 'b.json', self.root / 'link.json'
@@ -125,11 +125,11 @@ class ReadDependencyTests(unittest.TestCase):
                 link.unlink(); link.symlink_to(b, target_is_directory=True)
 
     def test_raw_prompt_read_is_bound_even_if_a_parent_hits_the_cache(self):
-        path = self.root / 'prompt.txt'; path.write_text('approved prompt')
+        path = self.root / 'prompt.txt'; path.write_text('approved prompt', encoding='utf-8')
         with self.assertRaisesRegex(ValueError, 'CHECK_SNAPSHOT_CHANGED'):
             with file_session():
                 self.assertEqual(derived('prompt', 'key', lambda: read_text(path)), 'approved prompt')
-                path.write_text('changed prompt')
+                path.write_text('changed prompt', encoding='utf-8')
                 derived('prompt', 'key', lambda: 'must not run')
 
     def test_negative_dependencies_transfer_through_both_cache_layers(self):
@@ -139,7 +139,7 @@ class ReadDependencyTests(unittest.TestCase):
                 compute = lambda: [] if not path_exists(path) else ['unexpected']
                 self.assertEqual(memoized_validation('inner', 'key', compute), [])
                 self.assertEqual(derived('outer', 'key', lambda: memoized_validation('inner', 'key', compute)), [])
-                path.write_text('created')
+                path.write_text('created', encoding='utf-8')
                 derived('outer', 'key', lambda: [])
 
     def test_options_are_content_bound_and_cached_results_are_immutable(self):
@@ -173,19 +173,19 @@ class ReadDependencyTests(unittest.TestCase):
         skills = self.root / 'skills'
         for name in SKILLS:
             entry = skills / name / 'SKILL.md'; entry.parent.mkdir(parents=True)
-            entry.write_text('SYNTHETIC tool entry')
+            entry.write_text('SYNTHETIC tool entry', encoding='utf-8')
         scripts = skills / SKILLS[0] / 'scripts'; scripts.mkdir()
-        (scripts / 'old.py').write_text('# stable checker')
+        (scripts / 'old.py').write_text('# stable checker', encoding='utf-8')
         with self.assertRaisesRegex(ValueError, 'CHECK_SNAPSHOT_CHANGED'):
             with file_session():
                 self.assertEqual(len(derived('toolchain', 'key', lambda: toolchain(scripts))['files']), 1)
-                (scripts / 'new.js').write_text('// added checker')
+                (scripts / 'new.js').write_text('// added checker', encoding='utf-8')
                 derived('toolchain', 'key', lambda: None)
 
     def test_runtime_snapshot_scan_tracks_nested_manifest_name(self):
         from runtime_snapshot import verify
         nested = self.root / 'nested'; nested.mkdir()
-        checker = nested / 'tool.py'; checker.write_text('# frozen')
+        checker = nested / 'tool.py'; checker.write_text('# frozen', encoding='utf-8')
         manifest = self.root / 'manifest.json'
         atomic_json(manifest, {'policy': 'batch_snapshot_v1', 'files': [
             {'path': checker.relative_to(self.root).as_posix(), 'sha256': digest(checker)}]})
@@ -205,7 +205,7 @@ class ReadDependencyTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'CHECK_SNAPSHOT_CHANGED'):
             with file_session(), routing_session():
                 derived('rule', 'key', matched_body)
-                (Path(source['root']) / 'rule.md').write_text('# different rule')
+                (Path(source['root']) / 'rule.md').write_text('# different rule', encoding='utf-8')
                 derived('rule', 'key', matched_body)
 
     def test_rule_no_match_is_invalidated_by_new_index_entry(self):

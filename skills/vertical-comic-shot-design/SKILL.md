@@ -5,6 +5,12 @@ description: Design approved-script-driven per-panel shots, crop and physical co
 
 # 条漫镜头与空间设计
 
+所有阶段启动与恢复即执行[阶段与交付进度](../vertical-comic-preproduction/references/review-progress.md)：总控汇报阶段、到本职责ZIP的百分比、进行事项、阻塞与下一步；正常制作每10分钟、仅服务等待每15分钟，重要变化立即报。显示独立于人工停点和少询问委托，子agent上报事实由总控合并；不为通知重跑检查、取消在途请求或改预算。阶段进度只能中途汇报；任务未完成且仍有可执行工作或子agent运行时，总控继续推进/等待并收敛产物，不能发送最终答复结束轮次，详见上述进度规则的“总控持续执行与子任务收敛”。
+
+用户后续明确取消当前人工停点时，按[最新委托更新规则](../vertical-comic-preproduction/references/grouped-review.md#后续指令取消人工停点)更新当前运行授权；整体A也可由执行者内部审查，通过即继续，不因最初保留亲审而再次等待。
+
+用户要求冲突按脚本处理或已选择脚本时，优先执行[脚本优先与补充状态免重复亲审](../vertical-comic-preproduction/references/grouped-review.md#脚本优先与补充状态免重复亲审)：自动补必要状态、内部审图并继续，不再次裁决或提交补充候选亲审。
+
 用户已明确委托前期“仅在无法消解的剧本与资产冲突时询问”时，优先执行[前期最少询问规则](../vertical-comic-preproduction/references/grouped-review.md#前期仅询问无法消解的剧本资产冲突)：A、B、生图包与导出由执行者审核并记录决定，不再请求逐项确认；该委托不自动扩大到正文生产。
 
 新整话按[服饰与单画面](../vertical-comic-preproduction/references/appearance-and-single-frame.md)逐细节区分自身佩戴侧、本机位投影和遮挡；镜面另给反射依据。每格只选一个连续画面，脚本双格择关键一幅、另一幅忽略，原稿不改，B的动作/人物/裁切同步选定范围。

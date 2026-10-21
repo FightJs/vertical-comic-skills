@@ -1,7 +1,9 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const run = eval(fs.readFileSync(path.join(__dirname, '../scripts/async_generation.js'), 'utf8'));
+const source = fs.readFileSync(path.join(__dirname, '../scripts/async_generation.js'), 'utf8');
+// functions.exec exposes timeout timers, not interval timers.
+const run = require('node:vm').runInNewContext(source, {setTimeout,clearTimeout,Date,Error});
 const jobs = n => Array.from({length:n},(_,i)=>({job_id:'TEST',panel_id:`P${i+1}`,batch_id:'H001',round_id:1,attempt_id:`A${i+1}`}));
 const sleep = ms=>new Promise(r=>setTimeout(r,ms));
 (async()=>{
@@ -150,5 +152,25 @@ const sleep = ms=>new Promise(r=>setTimeout(r,ms));
    assert.equal(calls,0);assert.equal(saves,0);assert.equal(blocked[0].outcome_hint,'CHECK_SUBMISSION_REGISTRATION');
    assert(blocked.every(r=>r.status==='NOT_DISPATCHED'));
  }
+ // Progress timers yield observations while original image promises remain alive.
+ let progressCalls=0, originalInvokes=0, originalSaves=0, notifications=0;
+ const ticks=[];
+ const progressResults=await run(jobs(3),3,async j=>{
+   originalInvokes++;await sleep(45);return j.attempt_id;
+ },async()=>{originalSaves++}, {progressIntervalMs:8,serviceProgressIntervalMs:12,progressPollMs:2,
+   onProgress:async event=>{notifications++;ticks.push(event);await sleep(1);progressCalls++}});
+ assert(notifications>=3);assert.equal(originalInvokes,3);assert.equal(originalSaves,3);
+ assert(ticks.some(e=>e.in_flight===3 && e.returned===0 && e.wait_kind==='SERVICE'));
+ assert(ticks.every(e=>e.not_watchdog_progress===true));
+ assert(ticks.at(-1).finished);assert.equal(ticks.at(-1).persisted,3);
+ assert(progressResults.every(r=>r.status==='FULFILLED'));
+ const after=notifications;await sleep(20);assert.equal(notifications,after); // Timer disposed.
+ const failedDisplay=await run(jobs(2),2,async()=>({}),async()=>{},
+   {onProgress:()=>{throw Error('display unavailable')}});
+ assert(failedDisplay.every(r=>r.status==='FULFILLED' && r.saved_at && r.progress_signal_errors.length));
+ let invalidProgressCalls=0;
+ await assert.rejects(()=>run(jobs(1),1,async()=>{invalidProgressCalls++},async()=>{},
+   {progressPollMs:60001}),/progress intervals/);
+ assert.equal(invalidProgressCalls,0);
  console.log('Async generation concurrency, durable timing, asset/repair routing, full error preservation, unknown outcome, service circuit and review notification tests PASS; fake backend only.');
 })().catch(e=>{console.error(e);process.exitCode=1});

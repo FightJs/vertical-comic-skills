@@ -55,3 +55,6 @@ python <scripts>/slot_leases.py --state <生产流程.json> --expected-sha256 <�
 ## 同一范围的权威上下文
 
 新运行在production_runtime与整话门禁中共用scoped_inputs.resolve_context：核对源序/计划后读取准确范围的基准、镜头和进度。它只读，不从当前镜头重写历史attempt的package_manifest、实际输入、输出或QA。恢复、预检和交付均从冻结入口执行；安装目录修改不进入既有快照。上下文或版本错误先修技术依据，不按视觉失败触发生图。
+
+
+总控任务记录、真实等待、收尾检查与中断恢复统一见[任务协调与恢复](task-recovery.md)。新运行最终交付使用task_coordination.py finish-check，不能以进度摘要、子任务口头完成或等待超时结束轮次。

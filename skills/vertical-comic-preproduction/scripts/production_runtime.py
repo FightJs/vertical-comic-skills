@@ -726,6 +726,7 @@ def main():
     parser.add_argument("--action", choices=("readiness", "preflight", "compile", "audit-inputs", "receiver-audit", "review", "checkpoint", "bundle", "commit", "repair-authorize", "diagnosis-record", "watch-progress", "watch-check", "watch-ack", "repair-plan", "decisions-register", "delivery-review", "production-questions"), required=True)
     parser.add_argument("--panels", nargs="*")
     parser.add_argument("--h001-panels", nargs="+", help="合并接包审计的准确首半话范围")
+    parser.add_argument("--display-progress-dir", help="派生显示目录；仅保存现有检查结果，不新增门禁")
     parser.add_argument("--progress", action="store_true", help="stderr输出阶段/格号与定时进度；不改变判定")
     parser.add_argument("--batch")
     parser.add_argument("--candidate", action="store_true", help="待审B技术预检；不授予生产或包批准")
@@ -842,6 +843,11 @@ def main():
             dest.parent.mkdir(parents=True, exist_ok=True)
             with dest.open("x", encoding="utf-8", newline='\n') as f:
                 json.dump(value, f, ensure_ascii=False, indent=2); f.write("\n")
+        if args.display_progress_dir:
+            from production_progress import observe_runtime
+            try: observe_runtime(args.display_progress_dir,path,args.action,value,expected_state=state)
+            except (OSError,ValueError,KeyError,TypeError) as exc:
+                print("DISPLAY_PROGRESS_WARNING: "+str(exc),file=__import__("sys").stderr)
         print(json.dumps(value, ensure_ascii=False))
         if args.action=='receiver-audit':
             return 1 if (value['preparation'].get('global_errors') or value['preparation'].get('errors') or

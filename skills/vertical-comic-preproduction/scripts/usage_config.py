@@ -100,6 +100,9 @@ def read_config(path, *, frozen_memory_source=None):
         issues = background_config_errors(config['background'])
         if not episode_mode or issues:
             raise ValueError('背景策略仅用于新整话RV；' + ';'.join(issues))
+    if "progress" in config:
+        from production_progress import settings as progress_settings
+        progress_settings(config["progress"])
     memory = config.get("memory", {})
     framing=config.get('framing')
     if framing is not None:

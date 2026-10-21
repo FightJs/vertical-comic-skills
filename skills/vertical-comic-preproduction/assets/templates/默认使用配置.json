@@ -70,5 +70,11 @@
   },
   "execution_quality": {
     "policy": "execution_quality_v1"
+  },
+  "progress": {
+    "policy": "task_progress_v1",
+    "active_seconds": 600,
+    "service_wait_seconds": 900,
+    "yield_seconds": 30
   }
 }

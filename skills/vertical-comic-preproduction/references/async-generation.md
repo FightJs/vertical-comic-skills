@@ -22,3 +22,26 @@ scripts/async_generation.js的单元测试使用假invoke验证请求重叠、�
 新runtime执行器优先使用 onReviewBatchReady(entries)，options.reviewGroupSize来自runtime.review_group_size，reviewMaxWaitMs为runtime.review_max_wait_seconds乘1000；回调通知并yield，不等待人工批准。每个job由production_runtime compile导出实际参数，依赖/校准格review_priority优先即时通知。结果单写保存后，真实QA用commit集中更新；总控根据本话checkpoint完成即交审，不等待其他话。
 
 长请求传 `onLongRequest(job,item,level,{event_id})` 并从runtime.watchdog设置requestWarningMs/requestEscalationMs；见 [执行者两级监控](worker-watchdog.md)。通知回调与原调用独立，不能释放槽位、取消Promise、重复派单或把超时计作视觉FAIL。总控用实际event_id去重；有在途请求时继续提交其他合格独立请求。
+
+
+## 低开销显示与让出控制
+
+新运行必须接入`onProgress(event)`显示回调；参数在程序接口中保留可选，以兼容原调用方。正常间隔`progressIntervalMs=600000`，仅服务等待`serviceProgressIntervalMs=900000`，本地轻检查`progressPollMs=30000`。回调仅汇报内存中的提交/在途/返回/保存数量及变化信号，不重读全部输入。它不是图片QA，不记录watchdog真实进展。未接回调的旧执行器保持原行为。
+
+在现有异步exec中接入如下回调（与onReviewBatchReady并存）：
+
+```javascript
+onProgress: async event => {
+  notify({type: 'comic_display_tick', ...event});
+  await yield_control();
+}
+```
+
+`notify`是向当前任务交回显示事件，子agent不直接发五份用户总摘要；总控按review-progress的due规则决定是否发言。收到事件后结合最新持久化事实刷新/显示，不能把计数信号当成图片已落盘证据。exec必须持续await执行器；让出后用wait恢复**同一个cell**，不要结束原exec、重建Promise或重复提交。首次yield后wait窗口设为工具支持的短窗口（建议30秒），不运行额外sleep轮询。启动/收尾及派发停止也会发观察信号，通知异常只记录progress_signal_errors，不改变已保存结果或补发生图。回调须及时返回，不在其中等待人工答复。
+
+采用自定义通知配置时，将progress.active_seconds、service_wait_seconds、yield_seconds分别乘1000传入progressIntervalMs、serviceProgressIntervalMs、progressPollMs；省略时使用内置默认。
+
+30秒检查不等于每30秒调用模型或发消息；有due事件时才notify/yield。工具不支持中途让出时，在恢复控制后补发当前摘要，不能声称严格定时。原始服务请求、保存单写、QA队列、许可及UNKNOWN处理保持原合同。
+
+
+总控任务记录、真实等待、收尾检查与中断恢复统一见[任务协调与恢复](task-recovery.md)。新运行最终交付使用task_coordination.py finish-check，不能以进度摘要、子任务口头完成或等待超时结束轮次。

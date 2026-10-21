@@ -20,7 +20,10 @@ def start_display(directory,role,states,*,config=None,rehearsal=None):
         if rehearsal is not None:
             for path in states: observe_runtime(directory,path,'rehearsal',rehearsal)
             refresh(directory,activity='接包校验与本地运行已建立',next_action='处理准确HOLD或开始获批生产')
-        return {'progress_directory':str(directory)}
+        from task_coordination import initialize as initialize_coordination
+        coordination = Path(directory).parent/'00_任务协调'
+        initialize_coordination(coordination, directory)
+        return {'progress_directory':str(directory), 'coordination_directory':str(coordination)}
     except (OSError,ValueError,KeyError,TypeError) as exc:
         return {'progress_warning':str(exc),'progress_recovery':'重建派生显示目录；原生产判定未改变'}
 

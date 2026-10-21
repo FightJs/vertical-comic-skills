@@ -83,3 +83,6 @@ production_runtime.py编译现有逐格包，负责完整预检、审查队列�
 `dispatch_cli_probe.py --managed`通过真实managed CLI运行隔离夹具；稳定request_id幂等、回执唯一性、原批准输入和账本绑定继续单独检查。对照探针的普通模式，不能把合成小夹具锁缩短比例外推为实际整批速度。显式准入开销不计入每次领取；核验及观测包装的开销计入。
 
 第一批1A–1D按本节的完整CLI探针与观测口径验证；第二批按dispatch-consistency.md及managed探针验证。两批收益分开报告，未随本版本提供的历史基准报告不作为已发布证据，本地结果不替代三平台CI或正式Release。活动RV仍使用原冻结代码，不热更新。
+
+
+总控任务记录、真实等待、收尾检查与中断恢复统一见[任务协调与恢复](task-recovery.md)。新运行最终交付使用task_coordination.py finish-check，不能以进度摘要、子任务口头完成或等待超时结束轮次。

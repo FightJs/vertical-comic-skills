@@ -334,10 +334,13 @@ def show(directory, *, now=None, acknowledge=False, force=False):
     return {'status':'REPORT_DUE','message':format_summary(snapshot),'percent':snapshot['percent']}
 
 
-def complete(directory, archive):
+def complete(directory, archive, *, _coordination_checked=False):
     """Explicit final check once, never from a heartbeat. No permission is granted."""
     import zipfile
-    directory = Path(directory); task = read(directory/'task.json'); archive = Path(archive).resolve()
+    directory = Path(directory)
+    if (directory.parent/'00_任务协调/coordination.json').exists() and not _coordination_checked:
+        raise ValueError('请使用task_coordination.py finish-check收敛子任务后交付')
+    task = read(directory/'task.json'); archive = Path(archive).resolve()
     if archive.suffix.lower() != '.zip': raise ValueError('完整目标须为正式ZIP')
     if task['role'] == 'preparation':
         from handoff_zip import check_delivery_archive, read_zip_json, zip_inventory, INDEX

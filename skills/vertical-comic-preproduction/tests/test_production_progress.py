@@ -174,6 +174,13 @@ class ProgressHandoffIntegration(unittest.TestCase):
         helper.test_direct_bound_run_real_full_episode_gates_and_conditional_release()
         done=p.complete(display,helper.base/'正式交接包.zip')
         self.assertEqual(done['percent'],100,done)
+        # Real handoff ZIP must pass the coordinated finish path too.
+        import task_coordination as tc
+        coordination=display.parent/'00_任务协调'
+        tc.initialize(coordination,display)
+        finished=tc.finish(coordination,0,helper.base/'正式交接包.zip')
+        self.assertEqual(finished['status'],'READY_TO_DELIVER')
+        self.assertEqual(finished['archive'],tc.reference(helper.base/'正式交接包.zip'))
         self.assertEqual(sp.read_bytes(),before)
         # Changing a dependency invalidates 100 even if the state file stayed unchanged.
         source=p.read(sp)['shot_manifest'];Path(helper.template/source['path']).write_text('{}',encoding='utf-8')

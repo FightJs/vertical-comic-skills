@@ -42,3 +42,6 @@ onProgress: async event => {
 采用自定义通知配置时，将progress.active_seconds、service_wait_seconds、yield_seconds分别乘1000传入progressIntervalMs、serviceProgressIntervalMs、progressPollMs；省略时使用内置默认。
 
 30秒检查不等于每30秒调用模型或发消息；有due事件时才notify/yield。工具不支持中途让出时，在恢复控制后补发当前摘要，不能声称严格定时。原始服务请求、保存单写、QA队列、许可及UNKNOWN处理保持原合同。
+
+
+总控任务记录、真实等待、收尾检查与中断恢复统一见[任务协调与恢复](task-recovery.md)。新运行最终交付使用task_coordination.py finish-check，不能以进度摘要、子任务口头完成或等待超时结束轮次。

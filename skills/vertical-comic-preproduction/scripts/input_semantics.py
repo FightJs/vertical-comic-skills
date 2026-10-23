@@ -69,9 +69,57 @@ def _asserted(text):
         yield clause
 
 
+def scoped_input_signals(panel, prompt, context=None):
+    """Narrow review hints from final input; not verdicts or an extra model pass."""
+    signals = []
+    checks = (panel.get('visual_evidence') or {}).get('checks', [])
+    hand_checks = [c for c in checks if isinstance(c, dict) and c.get('actor_limb') in {'left_hand','right_hand','both_hands'}]
+    for line in prompt.splitlines():
+        if not any(mark in line for mark in ('世界固定依据：','场景仅选参考','_STATE：')):
+            continue
+        for clause in _asserted(line):
+            if re.search(r'(?:窗台|桌面|台面|床沿)承托双手', clause) and hand_checks:
+                signals.append({'kind':'scene_action_leak', 'source_text':clause.strip(),
+                    'related_actions':[{k:c.get(k) for k in ('actor','actor_limb','target','target_part','visible_path')} for c in hand_checks],
+                    'question':'场景固定描述是否错误分配双手？仅核对当前人物任务，不从关键词直接判冲突。'})
+    details = (context or panel.get('visual_evidence_context') or {}).get('details', {})
+    for ident,d in details.items():
+        if not isinstance(d,dict): continue
+        attachment = (d.get('placement') or {}).get('attachment','')
+        expected = d.get('expected','')
+        if ('领口、肩袖与身体连续连接' in attachment and
+                (d.get('subject_kind') == 'animal' or re.search(r'鳞|皮毛|羽毛|爪', expected))):
+            signals.append({'kind':'subject_template_mismatch','detail_id':ident,
+                'source_text':attachment,'expected':expected,
+                'question':'核对批准主体是否实际穿衣；自然体表不能套用人类领口肩袖模板。'})
+    # Location prose inside appearance projections is only a review hint.
+    # Do not infer a semantic contradiction or strip author text with a regex.
+    ev = panel.get('visual_evidence') or {}
+    for ident, row in (ev.get('detail_visibility') or {}).items():
+        if not isinstance(row, dict): continue
+        projection = row.get('projection') or {}
+        if not isinstance(projection, dict): continue
+        position = projection.get('screen_position', '')
+        if isinstance(position, str) and re.search(r'门外|门内|楼梯|楼道|走廊|退路|站在|坐在|躺在|前往|到达', position):
+            signals.append({'kind':'appearance_location_leak', 'detail_id':ident,
+                'source_text':position, 'current_blocking':ev.get('blocking', {}),
+                'question':'核对细节投影是否夹带旧人物站位；世界位置以当前镜头为准，允许必要的环境遮挡描述。'})
+    for line in prompt.splitlines():
+        for clause in _asserted(line):
+            match = re.search(r'本(?:镜头|细节投影)位置[=:：]([^；。\n]+)', clause)
+            if match and re.search(r'门外|门内|楼梯|楼道|走廊|退路|站在|坐在|躺在|前往|到达', match.group(1)):
+                position = match.group(1).strip()
+                if not any(s.get('kind') == 'appearance_location_leak' and s.get('source_text') == position for s in signals):
+                    signals.append({'kind':'appearance_location_leak', 'source_text':position,
+                        'current_blocking':ev.get('blocking', {}),
+                        'question':'实际配饰执行段是否夹带另一瞬间/旧镜头的人物站位？与当前镜头对照，不能直接由关键词判FAIL。'})
+    return signals
+
+
 def conflict_errors(shot, prompt):
     """Only facts with explicit subject/instant attribution can auto-block."""
-    errors = []
+    from spatial_contract import selection_errors, projection_errors
+    errors = selection_errors(shot) + projection_errors(shot)
     facts = shot.get('semantic_facts', [])
     if not isinstance(facts, list):
         return ['INPUT_CONFLICT:semantic_facts须为列表']
@@ -192,7 +240,9 @@ def _actual_input(state, root, shot, packet, package_root):
                 'character_bindings', 'reference_bindings', 'framing', 'visible_region',
                 'visual_evidence', 'visual_evidence_context', 'continuity_contract',
                 'adjacent_face_comparison', 'semantic_facts', 'subject_visibility',
-                'memory_applications', 'rule_exceptions', 'repair_source')})}
+                'memory_applications', 'rule_exceptions', 'repair_source')},
+                **({'coordinate_edit': panel['repair_focus']['coordinate_edit']}
+                   if isinstance(panel.get('repair_focus'), dict) and panel['repair_focus'].get('coordinate_edit') is not None else {}))}
 
 
 def planned_input(state, root, shot, plan_row):
@@ -287,6 +337,10 @@ def preparation_basis(state, root, shot, panel, prompt):
         'appearance_anchors': {'details':context.get('details', {}),
             'visibility':(shot.get('visual_evidence') or {}).get('detail_visibility', {}),
             'checks': [c for c in (shot.get('visual_evidence') or {}).get('checks', []) if c.get('kind') == 'accessory']}}
+    signals = scoped_input_signals(panel, prompt, context)
+    if signals:
+        targets['all_execution_text_and_criteria'] = {'scoped_conflict_signals': signals,
+            'instruction': '仅核对这些疑点与相关原输入；在本项evidence说明修正或不构成冲突的依据，不另开审查轮次。'}
     return {'input_semantics_policy': PREPARED_POLICY, 'preparation_targets':copy.deepcopy(targets)}
 
 
@@ -373,26 +427,30 @@ def dependency_rows(state, root, dependency_plan=None):
     return rows
 
 
-def coverage(state, root, dependency_plan=None):
+def coverage(state, root, dependency_plan=None, *, panel_ids=None):
     if not enabled(state):
         return {'policy': None, 'status': 'LEGACY_FROZEN_CONTRACT'}
     from audit_cache import derived, content_key
     from codex_reference_contract import file_session
     # This is also a public read-only entry, used without production_runtime.
     # Keep all panels in one transaction; nested runtime callers reuse theirs.
+    selected=tuple(panel_ids) if panel_ids is not None else None
     with file_session():
-        return derived('final_semantic_coverage', content_key([str(root), state, dependency_plan]),
-                       lambda: _coverage(state, root, dependency_plan))
+        return derived('final_semantic_coverage', content_key([str(root), state, dependency_plan, selected]),
+                       lambda: _coverage(state, root, dependency_plan, panel_ids=selected))
 
 
-def _coverage(state, root, dependency_plan=None):
+def _coverage(state, root, dependency_plan=None, *, panel_ids=None):
     root = Path(root)
     source = read_json(checked_file(root, state['source_snapshot']))
     shots = {p['panel_id']: p for p in read_json(checked_file(root, state['shot_manifest']))['panels']}
     records = {r['panel_id']: r for r in state['panels']}
     plans = dependency_rows(state, root, dependency_plan)
+    selected=source['panel_ids'] if panel_ids is None else [p for p in source['panel_ids'] if p in panel_ids]
+    if panel_ids is not None and (not panel_ids or len(set(panel_ids))!=len(panel_ids) or set(selected)!=set(panel_ids)):
+        raise ValueError('语义选集须准确属于源序，不为空且不重复')
     errors, pending = {}, []
-    for pid in source['panel_ids']:
+    for pid in selected:
         try:
             if shots[pid].get('generation_dependencies'):
                 found = panel_errors(state, root, shots[pid], plan_row=plans[pid]); pending.append(pid)
@@ -402,8 +460,9 @@ def _coverage(state, root, dependency_plan=None):
             if found: errors[pid] = found
         except (OSError, ValueError, TypeError, KeyError, IndexError) as exc:
             errors[pid] = ['INPUT_SEMANTICS_HOLD:' + str(exc)]
-    return {'policy': state['input_semantics_policy'], 'status': 'HOLD' if errors else 'PREPRODUCTION_INPUTS_REVIEWED',
-            'panel_ids': source['panel_ids'], 'reviewed_panel_ids': [p for p in source['panel_ids'] if p not in errors],
+    return {'policy': state['input_semantics_policy'], 'status': 'HOLD' if errors else 'SCOPED_INPUTS_REVIEWED' if panel_ids is not None else 'PREPRODUCTION_INPUTS_REVIEWED',
+            'scope':'selected' if panel_ids is not None else 'episode',
+            'panel_ids': selected, 'reviewed_panel_ids': [p for p in selected if p not in errors],
             'pending_real_reference_review_ids': pending, 'errors': errors,
             'dispatch_authorized': False, 'image_calls': 0}
 
@@ -425,7 +484,7 @@ def main():
             with file_session():
                 if read_json(path) != state:
                     raise ValueError('CHECK_SNAPSHOT_CHANGED: 生产状态在审计开始前变化')
-                report = coverage(state, root, plan_ref)
+                report = coverage(state, root, plan_ref, panel_ids=args.panels)
             print(json.dumps(report, ensure_ascii=False))
             return 0 if report['status'] != 'HOLD' else 1
         from panel_readiness import review_context
@@ -463,3 +522,4 @@ if __name__ == '__main__':
     from platform_io import configure_stdio
     configure_stdio()
     raise SystemExit(main())
+

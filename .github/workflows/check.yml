@@ -32,10 +32,12 @@ jobs:
       - if: matrix.python == '3.12'
         run: python -B tools/cross_platform_handoff.py produce --path exchange/synthetic.zip
       - if: matrix.python == '3.12'
+        run: python -B tools/cross_platform_handoff.py produce --episode-scope --path exchange/episode.zip
+      - if: matrix.python == '3.12'
         uses: actions/upload-artifact@v4
         with:
           name: handoff-${{ matrix.os }}
-          path: exchange/
+          path: exchange/*.zip
           retention-days: 3
   exchange:
     needs: test
@@ -61,3 +63,4 @@ jobs:
           name: handoff-${{ matrix.source }}
           path: exchange
       - run: python -B tools/cross_platform_handoff.py consume --path exchange/synthetic.zip
+      - run: python -B tools/cross_platform_handoff.py consume --path exchange/episode.zip

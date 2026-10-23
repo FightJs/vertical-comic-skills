@@ -5,6 +5,7 @@ No approval synthesis, creative JSON rewriting, budget changes or image calls.
 from pathlib import Path
 from platform_io import skill_entry_key
 import json,shutil
+from handoff_scope import episode_mode, ready_ids
 
 DIRECT='direct_delivery_v2'
 TEMPLATE='portable_run_template_v1'
@@ -67,8 +68,7 @@ def closure(root,index,*,verify_runtime=True):
                 from codex_reference_contract import checked_file, digest
                 if digest(audit)!=digest(checked_file(template_root,state['semantic_audit'])):
                     errors.append(eid+':交接审查与运行模板不一致')
-        first=[p for p in e['panels'] if p['panel_id'] in e['halves']['H001']]
-        if not any(p['classification']=='READY_H001' for p in first) and not all(p['classification']=='REUSE' for p in e['panels']):
+        if not ready_ids(index,e) and not all(p['classification']=='REUSE' for p in e['panels']):
             errors.append(eid+':本话没有可启动格，不能让其他话代替本话通过')
     return errors
 
@@ -124,14 +124,18 @@ def bind(package_root,run_root):
             state_file=inside(episode_root,plan['state_file']);state_file.write_text(json.dumps(state,ensure_ascii=False,indent=2)+'\n', encoding='utf-8', newline='\n')
             evidence={'policy':'runtime_only_relocation_v1','package_id':index['package_id'],'episode_id':e['episode_id'],
                       'template_state_sha256':old_sha,'local_state_sha256':sha(state_file),'changed_fields':['runtime_snapshot','toolchain','memory_source'],
-                      'creative_files_unchanged':True,'approval_rewritten':False,'budget_reset':False}
+                      'creative_files_unchanged':True,'approval_rewritten':False,'budget_reset':False,
+                      'input_mode':'package_only_production','external_inputs_required':False,
+                      'usage_config_path_role':'historical_origin_only_not_receiver_configuration'}
             proof=episode_root/'接包路径绑定.json';write(proof,evidence)
             runs.append({'episode_id':e['episode_id'],'state':state_file.relative_to(run_root).as_posix(),
                          'binding_evidence':{'path':proof.relative_to(run_root).as_posix(),'sha256':sha(proof)}})
         dest=run_root/'本地绑定索引.json';write(dest,{'package_id':index['package_id'],'episodes':runs})
     except Exception:
         shutil.rmtree(run_root);raise
-    return {'status':'LOCAL_RUN_BOUND_NOT_IMAGE_AUTHORIZATION','run_root':str(run_root),'run_index':str(dest),'image_calls':0}
+    return {'status':'LOCAL_RUN_BOUND_NOT_IMAGE_AUTHORIZATION','input_mode':'package_only_production',
+            'external_inputs_required':False,'book_profile_required':False,
+            'run_root':str(run_root),'run_index':str(dest),'image_calls':0}
 
 
 def input_review(root,index):
@@ -140,7 +144,7 @@ def input_review(root,index):
     import hashlib
     episodes=[]
     for e in index['episodes']:
-        selected={k:e[k] for k in ('episode_id','panel_ids','halves')}
+        selected={k:e[k] for k in (('episode_id','panel_ids') if episode_mode(index) else ('episode_id','panel_ids','halves'))}
         selected['production_scope']=e['panels']
         for k in ('source_script','production_source_snapshot','visual_basis','shot_manifest','runtime_manifest'):
             reference(root,e.get(k));selected[k]=e[k]
@@ -155,5 +159,7 @@ def input_review(root,index):
             selected.update(input_semantics_policy=e['input_semantics_policy'],semantic_audit=e['semantic_audit'])
         episodes.append(selected)
     value={'policy':'approved_inputs_auto_export_v1','package_id':index['package_id'],'book_id':index['book_id'],'episodes':episodes}
+    if episode_mode(index):
+        value.update(handoff_policy=index['policy'],production_window_policy=index['production_window_policy'])
     if 'task_context' in index:value['task_context']=index['task_context']
     return {**value,'approved_input_digest':hashlib.sha256(json.dumps(value,ensure_ascii=False,sort_keys=True,separators=(',',':')).encode()).hexdigest()}

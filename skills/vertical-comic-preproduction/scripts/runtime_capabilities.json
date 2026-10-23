@@ -16,5 +16,27 @@
   "production_decisions": "first_batch_production_v1",
   "offline_preparation": "preparation_authorization_v1",
   "batch_candidate_context": "same_task_candidate_context_v1",
-  "precise_body_crop": "precise_body_crop_labels_v1"
+  "precise_body_crop": "precise_body_crop_labels_v1",
+  "draft_authoring": {
+    "policy": "panel_authoring_source_v1",
+    "derivation": "panel_derivation_v1",
+    "dependencies": "draft_input_dependencies_v1",
+    "approval_cache": false,
+    "legacy_auto_migration": false
+  },
+  "lossless_atlas_cache": "lossless_atlas_cache_v1",
+  "active_runtime_clock": {
+    "policy": "active_runtime_clock_v1",
+    "default_enabled": false,
+    "interrupt_adapter": "runtime_clock_hook.py",
+    "host_trust_required": true,
+    "legacy_auto_migration": false,
+    "external_call_atomic_pause": false,
+    "context": "comic_clock_context_v1",
+    "automatic_session_binding": "verified_host_receipt",
+    "stable_environment": true
+  },
+  "receiver_episode_audit": "receiver_episode_audit_v1",
+  "handoff_scope": "rehearsed_zip_handoff_v2",
+  "execution_timing": "observed_execution_timing_v1"
 }

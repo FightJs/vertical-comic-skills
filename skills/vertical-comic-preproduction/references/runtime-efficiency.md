@@ -1,5 +1,9 @@
 # 整话增量运行
 
+新运行的主表、增量派生、共用规则/图集复用与少冻结执行见[第二批草稿提速](draft-authoring.md)。派生文件不授予批准或生产权限。
+
+新运行优先按[第一批前期提速](preparation-efficiency.md)执行最小充分设计、代表格接线、单次B/包展示及问题分级处理。可选润饰不产生HOLD；真实缺口在现有委托内修复，局部问题只影响真实依赖，其他工作继续。正式输入与接包要求仍按原合同。
+
 新运行统一按[第一批生产决定](production-decisions.md)衔接审核、返修与交付：真实FAIL不改写，处理动作与交付结论分别记录；旧冻结合同不迁移。下文审核方法、源稿/批准/证据要求仍适用。
 
 当前新任务使用incremental_runtime_v2和[整话异步](episode-async.md)，没有固定半话C。旧incremental_runtime_v1恢复才读[旧半话运行](runtime-half-legacy.md)。
@@ -86,3 +90,10 @@ production_runtime.py编译现有逐格包，负责完整预检、审查队列�
 
 
 总控任务记录、真实等待、收尾检查与中断恢复统一见[任务协调与恢复](task-recovery.md)。新运行最终交付使用task_coordination.py finish-check，不能以进度摘要、子任务口头完成或等待超时结束轮次。
+
+
+## 新版整话接包与时间覆盖
+
+新版交接索引使用rehearsed_zip_handoff_v2；receiver-audit --episode-scope保留全话源序，在一个读取事务内完成准备和一次实际输入编译，不重复编译首半话。旧接口及格式保留。报告仅用于输入审计，不授予生产许可。
+
+新建整话运行自动声明timing_policy=observed_execution_timing_v1。实际领取通过后记录ready_at及timing_observations（本次观察，不是历史最早就绪时间）；真实提交、返回和保存沿异步执行器的实际事件记录。实际QA经原门禁校验后登记qa_recorded_at，并绑定QA版本。qa_completed_at只接受实际审图结束记录，缺失时不以登记时间补造。production_metrics分别报告save_to_qa和save_to_qa_registration及timestamp_coverage，均不是主动工作时长，不能相加并发区间冒充总耗时。返修新attempt清除旧时间，原attempt完整留在历史中。旧冻结运行不自动加策略或补历史时间。

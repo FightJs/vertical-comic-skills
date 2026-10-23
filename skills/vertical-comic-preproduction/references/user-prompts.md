@@ -16,7 +16,7 @@
 
 仅初次配置时保存本书配置，不调用会创建RV的prepare入口，不启动制作。若当前版尚无独立配置命令，按comic_start.py的既有profile格式，在用户明确的项目目录下保存`.comic/books/<书名UTF-8的SHA256前16位>.json`，字段为`policy=comic_book_profile_v1`、`book`、`script_path`、`asset_root`；路径须先验证并转为绝对路径。同书已有配置复用，路径冲突集中核对且保留旧文件。不要为保存配置调用prepare，也不要以quick-start的首次制作流程扩大本次职责。已安装的入口不能替未安装用户自行触发；首次安装仍需用户提供仓库链接或安装要求。
 
-执行时复用现有实现，不新增生产流程：环境及书籍配置见[短启动](quick-start.md)，更新见[安装更新](installation-update.md)，用户增补见[内置规则维护](builtin-rule-maintenance.md)。计时能力按实际安装版本核实；没有已验证的有效运行计时及暂停接线时，不声称已经自动扣除暂停。实际规则与工具能力不足时如实说明，不伪造批准或完成。
+执行时复用现有实现，不新增生产流程：环境及书籍配置见[短启动](quick-start.md)，更新见[安装更新](installation-update.md)，计时见[有效运行计时](runtime-clock.md)，用户增补见[内置规则维护](builtin-rule-maintenance.md)。计时能力按实际安装版本核实；没有已验证的有效运行计时及暂停接线时，不声称已经自动扣除暂停。实际规则与工具能力不足时如实说明，不伪造批准或完成。
 
 ## 1. 初次安装与可选配置
 

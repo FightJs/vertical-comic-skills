@@ -152,6 +152,10 @@ def decision_errors(decision, attempt, item):
         factors = decision.get('factors', {})
         if any(not text(factors.get(k)) for k in ('impact', 'distribution', 'scope', 'preservation_risk', 'history', 'manual_cost')):
             errors.append('第二类须简记六项取舍依据，不按数量机械重生')
+    from coordinate_repair import decision_errors as coordinate_errors
+    errors.extend(coordinate_errors(decision))
+    from spatial_contract import decision_errors as spatial_errors
+    errors.extend(spatial_errors(decision))
     return errors
 
 

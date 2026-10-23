@@ -4,7 +4,7 @@
 
 | 内容 | 正式来源 | 执行入口 |
 |---|---|---|
-| 源稿锁定、参考依据、半话流程、人工审查、修正次数 | production-foundation.md、staged-workflow.md、half-episode.md | 各阶段 Skill 与完整 staged_workflow 门禁，始终执行 |
+| 源稿锁定、参考依据、整话流程、人工审查、修正次数 | production-foundation.md、staged-workflow.md | 各阶段 Skill 与完整 staged_workflow 门禁，始终执行 |
 | 格数/原序、文件哈希、实际输入、调用证据及版本 | 共享检查器代码与对应输入输出合同 | validate_preproduction、codex_reference_contract、execution_contract 等技术检查 |
 | 基础图像质量：身份、衣装、动作、空间、构图、画风 | reference-continuity.md、style_contract.py 与批准的逐格判据 | 原 dimension_review、style_review 及六项实际看图检查，始终执行 |
 | 跨话跨作品的通用视觉标准 | 新任务默认总控assets/rule-memory内置+用户增补的合并索引与正文；显式memory_root/旧RV按原来源，均由哈希/签名绑定 | rule_memory.load-stage/load 管读取，select/check 管实际适用与执行；镜头、生成和实际图片验收分别落实 |
@@ -44,3 +44,17 @@ visual_evidence_v1负责把本话具体布局、状态、细节预期和图片�
 物理与连续性方法分别维护在MEM-001/002/005/006/009，MEM-010 v2维护叙事驱动的相邻镜头判据。提示词模块在prompt-package.md，背景字段合同在shot-framing.md/schemas.md；编译器只查执行文字与依据一致性。生产只读规则库，冻结旧RV不自动重签或迁移。
 
 最终prompt与全部执行判据的一致性由[final-input-semantics.md](final-input-semantics.md)维护，input_semantics.py验证内容绑定和少数确定矛盾；仍由执行者逐格阅读与看参考。MEM-007负责表情变化原则，不负责给每格指定专注/闭嘴等默认状态。
+
+## 按任务读取，不全量加载
+
+- 授权与取消停点：读[合并审查](grouped-review.md)，最新明确委托按原范围覆盖旧停点；脚本优先及最少询问的具体边界均在该处。
+- 总控启动、恢复与中途进度：读[进度](review-progress.md)和[恢复](task-recovery.md)；阶段完成不冒充整个任务交付，仍有可执行工作时继续。
+- 新任务输入审计：读[输入审计](stage-input-audit.md)；只查本次来源和实际需求。
+- 字段查询与失败定位：按需查[数据合同](schemas.md)和[质量门禁](quality-gates.md)，不把这些文档重复抄入每格。
+- 用户需要调用示例：读[使用指南](usage.md)。确需补资产时读[资产细节](asset-production.md)；叙事表达难题查[编剧方法摘录](screenwriting-distillate.md)。
+- 只有旧包迁移或修复才读[旧包修复](legacy-package-repair.md)、[返修合同](repair-contract-v2.md)和[旧提示词阶段细节](stage-prompt-package.md)；这些文档不能替代当前整话流程。
+- 新版分工和接包统一使用[整话交接](split-production.md)。旧半话规则只按已验证旧包及原冻结版本启用，不因分工自动回退。
+
+## 空间规则的选择与执行
+
+MEM-003维护固定结构/唯一机位，MEM-009维护叙事与展示取舍，MEM-006维护真实承托，MEM-004维护有限返修。新相关格沿schemas.md的selected_relation_ids选择关系；各阶段只读取命中规则。spatial_contract.py共用选择、投影版本与返修范围核验；它不读像素、不替代语义审查、不新增用户停点。具体场景事实留RV，生产规则库只读。

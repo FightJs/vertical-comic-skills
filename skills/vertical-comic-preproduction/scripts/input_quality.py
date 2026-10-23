@@ -124,6 +124,12 @@ def repair_decision_errors(decision,record,*,require_image_call=False,state=None
                 from pathlib import Path
                 from codex_reference_contract import checked_file,read_json
                 new = read_json(checked_file(Path(root), new_package))['panels'][0]
+                from coordinate_repair import binding_errors as coordinate_binding_errors
+                coordinate_problems = coordinate_binding_errors(decision, new)
+                if coordinate_problems: return coordinate_problems
+                from spatial_contract import binding_errors as spatial_binding_errors
+                spatial_problems = spatial_binding_errors(decision, new)
+                if spatial_problems: return spatial_problems
                 expected = 'regenerate' if decision['action'] == 'regenerate' else 'local_edit'
                 if new.get('repair_method', 'local_edit') != expected:
                     return ['REPAIR_ROUTE_HOLD:实际局部编辑/重生方式与决定不同']

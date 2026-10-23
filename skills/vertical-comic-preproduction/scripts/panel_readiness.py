@@ -64,7 +64,7 @@ def binding_errors(state,manifest):
 
 def design_signature(panel):
     # These are observations, holds or call receipts, not creative authority.
-    ignored={'generation_execution','memory_applications','status','hold_reasons','boundary_comparison','inspection_plan'}
+    ignored={'generation_execution','memory_applications','status','hold_reasons','boundary_comparison','inspection_plan','planning_notes'}
     value={k:v for k,v in panel.items() if k not in ignored}
     return hashlib.sha256(json.dumps(value,ensure_ascii=False,sort_keys=True).encode()).hexdigest()
 
@@ -186,14 +186,14 @@ def local_tags_manifest(manifest,panel):
     return manifest
 
 @authority_scoped
-def report(state,root):
+def report(state,root,*,include_execution=True):
     active=_REVIEW.get()
     scope=None if active is None else [active[0],str(active[1])]
-    key=hashlib.sha256(content_key([str(resolve_path(Path(root))), state, scope]).encode()).hexdigest()
-    return copy.deepcopy(derived('preparation_report',key,lambda:_report(state,root),
+    key=hashlib.sha256(content_key([str(resolve_path(Path(root))), state, scope, include_execution]).encode()).hexdigest()
+    return copy.deepcopy(derived('preparation_report',key,lambda:_report(state,root,include_execution=include_execution),
                                  accept=lambda value:not value.get('global_errors')))
 
-def _report(state,root):
+def _report(state,root,*,include_execution=True):
     """Return ready/reviewable/blocked rows; caller still runs full input gates."""
     source=read_json(checked_file(Path(root),state['source_snapshot']));order=source['panel_ids']
     path=checked_file(Path(root),state['shot_manifest']);shots=read_json(path)
@@ -203,11 +203,14 @@ def _report(state,root):
     if any(shots.get(k)!=state.get(k) for k in ('book_id','episode_id','preparation_policy','readiness_policy')):errors.append('全话镜头归属或准备策略不一致')
     if audit.get('policy')!='semantic_audit_v1' or any(audit.get(k)!=v for k,v in expected.items()):errors.append('全话语义报告的书话、源稿或冻结版本错误')
     if [p.get('panel_id') for p in shots.get('panels',[])]!=order or [p.get('panel_id') for p in audit.get('panels',[])]!=order:errors.append('全话镜头/语义报告缺格、乱序或重复')
-    if errors:return {'global_errors':errors,'ready_for_review_ids':[],'prepared_panel_ids':[],'blocked_panel_ids':order,'blockers':{}}
+    if errors:
+        from issue_disposition import summarize
+        return {'issue_disposition':summarize(global_errors=errors),'global_errors':errors,'ready_for_review_ids':[],'prepared_panel_ids':[],'blocked_panel_ids':order,'blockers':{}}
     from scoped_inputs import blocked_panels, generation_holds, comparison_holds
     from execution_contract import semantic_checks
     from continuity_context import binding_errors as prior_binding,load_context
     raw=shots['panels'];by_id={p['panel_id']:p for p in raw};reviews={p['panel_id']:p for p in audit['panels']}
+    planning_items=[]
     direct_holds={pid:[] for pid in order};blocked=set();clone=[{**p,'generation_dependencies':[],'visual_state_keys':p.get('visual_state_keys') if isinstance(p.get('visual_state_keys'),list) else []} for p in raw]
     split=(len(order)+1)//2
     windows=[('EPISODE',order)] if state.get('execution_mode')=='episode_async_v1' else [('H001',order[:split]),('H002',order[split:])]
@@ -222,6 +225,10 @@ def _report(state,root):
     for pid in order:
         p=by_id[pid];row=reviews[pid]
         issues=[]
+        from issue_disposition import planning_notes
+        notes=planning_notes(p.get('planning_notes',[]),pid)
+        planning_items.extend(notes)
+        issues.extend(n['detail'] for n in notes if n['blocks_input'])
         # Per-shot execution risks are local design evidence. Classify every
         # row before dependency propagation; a later malformed row must not
         # become an episode-wide HOLD or disappear behind a dispatch limit.
@@ -277,11 +284,13 @@ def _report(state,root):
                 design_blocked.add(pid);changed=True
     from input_semantics import enabled as semantics_enabled, coverage as semantic_coverage
     execution_status = {}
-    if semantics_enabled(state):
+    if include_execution and semantics_enabled(state):
         # Keep design readiness separate: final input review is downstream of
         # candidate construction and must not create a preparation cycle.
         execution_status['final_input_semantics'] = semantic_coverage(state, root)
-    return {**execution_status, 'global_errors':[],'pending_comparison_panel_ids':sorted({p for h in comparison_holds(state) for p in h['panel_ids']}),
+    from issue_disposition import summarize
+    disposition=summarize(local_errors=reasons,notes=planning_items,ready_ids=[pid for pid in order if pid not in blocked])
+    return {**execution_status, 'issue_disposition':disposition, 'global_errors':[],'pending_comparison_panel_ids':sorted({p for h in comparison_holds(state) for p in h['panel_ids']}),
             'ready_for_review_ids':[pid for pid in order if pid not in design_blocked],
             'prepared_panel_ids':[pid for pid in order if pid not in blocked],
             'blocked_panel_ids':[pid for pid in order if pid in blocked],'blockers':reasons,'user_approval':'NOT_GRANTED'}

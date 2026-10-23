@@ -123,7 +123,7 @@ def _install(home,*,check=False,replace_existing=False):
         for saved,target in reversed(moved):os.replace(saved,target)
         raise
     finally:shutil.rmtree(stage,ignore_errors=True)
-    return {'status':'INSTALLED','runtime_status':'PASS','python':sys.executable,'skills':data['skills'],'memory_root':str(managed/'memory'),'backup':str(backups) if moved else None,'next_step':'在新的Codex轮次说：使用 $vertical-comic-preproduction。第一次使用，请引导我配置，进行前期制作。原冻结生产RV不升级；生图服务权限须在实际工具中核验。'}
+    return {'status':'INSTALLED','runtime_status':'PASS','python':sys.executable,'skills':data['skills'],'memory_root':str(managed/'memory'),'backup':str(backups) if moved else None,'next_step':'在新的Codex轮次使用 $vertical-comic-preproduction。已有正式交接包：说“接包生产：【本机包路径】”，直接接收，无需配置外部脚本和资产。需要前期制作：说“前期制作”，再收集书名、脚本、资产及话号。原冻结生产RV不升级；生图服务权限须在实际工具中核验。'}
 
 def update_repository():
     if not (ROOT/'.git').exists():
@@ -135,11 +135,28 @@ def update_repository():
     subprocess.run(['git','-C',str(ROOT),'pull','--ff-only'],check=True)
 
 def main():
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--codex-home',default=os.environ.get('CODEX_HOME',str(Path.home()/'.codex')));p.add_argument('--check',action='store_true');p.add_argument('--update',action='store_true');p.add_argument('--replace-existing',action='store_true');a=p.parse_args()
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--codex-home',default=os.environ.get('CODEX_HOME',str(Path.home()/'.codex')));p.add_argument('--check',action='store_true');p.add_argument('--update',action='store_true');p.add_argument('--replace-existing',action='store_true');p.add_argument('--clock-hooks',action='store_true',help='合并Interrupt计时Hook；仍须宿主信任及真实事件验证');a=p.parse_args()
     if a.update:
         update_repository()
         args=[x for x in sys.argv[1:] if x!='--update'];os.execv(sys.executable,[sys.executable, '-X', 'utf8',str(Path(__file__).resolve()),*args])
-    result=install(a.codex_home,check=a.check,replace_existing=a.replace_existing);print(json.dumps(result,ensure_ascii=False,indent=2))
+    from runtime_clock_setup import prepare_runtime
+    stable=prepare_runtime(a.codex_home) if not a.check else None
+    result=install(a.codex_home,check=a.check,replace_existing=a.replace_existing)
+    hook_path=Path(a.codex_home).expanduser().resolve()/'hooks.json'
+    clock_configured=hook_path.is_file() and 'runtime_clock_hook.py' in hook_path.read_text(encoding='utf-8-sig')
+    if a.clock_hooks or clock_configured:
+        from runtime_clock_setup import setup
+        result['clock_hooks']=setup(a.codex_home,apply=not a.check)
+    if stable:
+        from platform_io import atomic_json
+        marker_path=Path(a.codex_home).expanduser().resolve()/'skill-bundles'/NAME/'installed.json'
+        marker=json.loads(marker_path.read_text(encoding='utf-8'))
+        marker['python']=stable['python']
+        marker['clock_runtime']=stable
+        atomic_json(marker_path,marker)
+        result['python']=marker['python']
+        result['stable_runtime']=stable
+    print(json.dumps(result,ensure_ascii=False,indent=2))
 
 if __name__=='__main__':
     import sys

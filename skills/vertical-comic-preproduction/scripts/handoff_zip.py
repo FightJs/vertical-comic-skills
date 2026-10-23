@@ -17,6 +17,7 @@ import stat
 import subprocess
 import sys
 import zipfile
+from handoff_scope import EPISODE_POLICY, episode_mode, validate_episode, ready_ids, ready_key, count_key
 
 POLICY = 'rehearsed_zip_handoff_v1'
 INDEX = '交接验收索引.json'
@@ -90,10 +91,12 @@ def audit_index(root):
     if context is not None:
         validate_task(context)
         if context['book_id']!=data.get('book_id'):raise ValueError('TASK_SCOPE_HOLD:交接书名与任务失配')
-    if data.get('policy')!=POLICY or not data.get('package_id') or not data.get('book_id'):
+    if data.get('policy') not in {POLICY,EPISODE_POLICY} or not data.get('package_id') or not data.get('book_id'):
         raise ValueError('缺交接验收索引策略、包ID或书ID')
     for name in REQUIRED:
         if not (root/name).is_file() or not (root/name).read_text(encoding='utf-8-sig').strip():raise ValueError('缺交接入口或内容为空:'+name)
+    whole=episode_mode(data)
+    if whole and data.get('delivery_policy')!='direct_delivery_v2':raise ValueError('新版整话交接须完整direct_delivery_v2')
     episodes=data.get('episodes')
     if not isinstance(episodes,list) or not episodes:raise ValueError('缺准确话号与逐格交接范围')
     seen=set()
@@ -103,8 +106,7 @@ def audit_index(root):
         seen.add(eid)
         if not eid or len(relative(eid).parts)!=1:raise ValueError('话号须为安全单层名称')
         if not isinstance(ids,list) or not ids or any(not isinstance(p,str) or not p for p in ids) or len(set(ids))!=len(ids):raise ValueError(eid+':源格序缺失/重复')
-        cut=(len(ids)+1)//2
-        if halves!={'H001':ids[:cut],'H002':ids[cut:]}:raise ValueError(eid+':半话不符合准确源序ceil(N/2)')
+        validate_episode(data,episode)
         for key in ('source_snapshot','runtime_manifest','approval_evidence','path_binding_plan'):
             reference(root,episode.get(key))
         source=read(reference(root,episode['source_snapshot']))
@@ -114,7 +116,7 @@ def audit_index(root):
         if not isinstance(panels,list) or [p.get('panel_id') for p in panels]!=ids:raise ValueError(eid+':逐格准备/历史清单不完整')
         for row in panels:
             pid=row['panel_id'];kind=row.get('classification')
-            if kind not in KINDS:raise ValueError(pid+':未知交接状态')
+            if kind not in (KINDS if not whole else {'READY','WAIT_DEPENDENCY','HOLD','REUSE'}):raise ValueError(pid+':未知交接状态')
             if kind=='READY_H001' and pid not in halves['H001']:raise ValueError(pid+':不能提前放行H002')
             if kind=='PREPARED_H002' and pid not in halves['H002']:raise ValueError(pid+':H002准备范围错误')
             if kind in {'WAIT_DEPENDENCY','HOLD'}:
@@ -239,16 +241,16 @@ def delivery_evidence(manifest,read_bytes):
     if (idx.get('delivery_policy')!='direct_delivery_v2' or manifest.get('package_id')!=idx.get('package_id') or
         report.get('package_id')!=idx.get('package_id') or report.get('policy')!=POLICY or
         report.get('source_kind')!='observed_frozen_gate_rehearsal' or report.get('status')!='RELEASE_CANDIDATE' or
-        report.get('originals_unchanged') is not True or report.get('image_calls')!=0 or not report.get('ready_h001_count')):
+        report.get('originals_unchanged') is not True or report.get('image_calls')!=0 or not report.get(count_key(idx))):
         raise ValueError('交接包正式发布或演练证据不完整')
     results=report.get('results',[])
     if ([r.get('episode_id') for r in results]!=[e['episode_id'] for e in idx['episodes']] or
         any(r.get('status')!='REHEARSED' or r.get('errors') for r in results)):
         raise ValueError('交接包演练未覆盖全部话')
     for episode,result in zip(idx['episodes'],results):
-        if result.get('ready_h001')!=[p['panel_id'] for p in episode['panels'] if p['classification']=='READY_H001']:
+        if result.get(ready_key(idx))!=ready_ids(idx,episode):
             raise ValueError('交接包演练就绪范围失配')
-    if report['ready_h001_count']!=sum(len(r['ready_h001']) for r in results):raise ValueError('交接包演练就绪统计失配')
+    if report[count_key(idx)]!=sum(len(r[ready_key(idx)]) for r in results):raise ValueError('交接包演练就绪统计失配')
     for ref in report.get('evidence_files',[]):
         relative(ref['path']);body=read_bytes('演练与导出确认/原始预检/'+ref['path'])
         if len(body)!=ref.get('bytes') or hashlib.sha256(body).hexdigest()!=ref.get('sha256'):
@@ -358,6 +360,7 @@ def rehearse(zip_path,package_root,run_root,run_index,report,*,timeout=180):
     before=files(package_root)
     if before!=sorted(manifest['files'],key=lambda r:r['path']):raise ValueError('收到原件不等于交接清单内容')
     data=audit_index(package_root);local=read(run_index)
+    whole=episode_mode(data)
     if local.get('package_id')!=data['package_id']:raise ValueError('本地绑定索引属于其他包')
     runs=local.get('episodes',[])
     if [e.get('episode_id') for e in runs]!=[e['episode_id'] for e in data['episodes']]:raise ValueError('接包演练必须覆盖全部交接话')
@@ -397,17 +400,24 @@ def rehearse(zip_path,package_root,run_root,run_index,report,*,timeout=180):
                 caps=read(capability)
                 if not isinstance(caps,dict) or caps.get('policy')!='comic_runtime_capabilities_v1' or caps.get('receiver_audit')!='receiver_audit_bundle_v1' or caps.get('input_audit')!='receiver_input_audit_v1':
                     raise ValueError('未知冻结接包审计能力，不能静默降级')
+                if whole and caps.get('receiver_episode_audit')!='receiver_episode_audit_v1':
+                    raise ValueError('冻结工具不支持整话接包审计，不能降级为半话')
                 combined=True
+            if whole and not combined:raise ValueError('新版整话包缺冻结整话审计能力，不能降级')
             argv=[sys.executable,'-X','utf8','-B',str(script),'--state',str(state_path)]
             if combined:
-                argv.extend(['--action','receiver-audit','--progress','--h001-panels',*episode['halves']['H001'],'--panels',*episode['panel_ids']])
+                argv.extend(['--action','receiver-audit','--progress'])
+                argv.extend(['--episode-scope'] if whole else ['--h001-panels',*episode['halves']['H001']])
+                argv.extend(['--panels',*episode['panel_ids']])
                 proc=run_gate(argv,eid,'receiver_audit',state_path);rc=proc.returncode
                 bundle=json.loads(proc.stdout)
-                if (bundle.get('policy')!='receiver_audit_bundle_v1' or bundle.get('episode_id')!=eid or bundle.get('book_id')!=data['book_id'] or
-                        bundle.get('panel_ids')!=episode['panel_ids'] or bundle.get('h001_panel_ids')!=episode['halves']['H001'] or
+                if (bundle.get('policy')!=('receiver_episode_audit_v1' if whole else 'receiver_audit_bundle_v1') or bundle.get('episode_id')!=eid or bundle.get('book_id')!=data['book_id'] or
+                        bundle.get('panel_ids')!=episode['panel_ids'] or
+                        (not whole and bundle.get('h001_panel_ids')!=episode['halves']['H001']) or
+                        (whole and bundle.get('ready_panel_ids')!=ready_ids(data,episode)) or
                         bundle.get('dispatch_authorized') is not False or bundle.get('image_calls')!=0):
                     raise ValueError('合并接包审计结果缺失或范围失配')
-                raw=bundle['h001'];prepared=bundle['preparation'];all_inputs=bundle['all_inputs']
+                raw=bundle['all_inputs' if whole else 'h001'];prepared=bundle['preparation'];all_inputs=bundle['all_inputs']
                 write(report/(eid+'_stdout.json'),raw)
                 write(report/(eid+'_preparation.json'),prepared)
                 write(report/(eid+'_all_inputs.json'),all_inputs)
@@ -449,9 +459,9 @@ def rehearse(zip_path,package_root,run_root,run_index,report,*,timeout=180):
                     all_argv=[sys.executable,'-X','utf8','-B',str(script),'--state',str(state_path),'--action','compile','--panels',*episode['panel_ids']]
                     all_proc=run_gate(all_argv,eid,'all_inputs',state_path)
                     all_inputs=json.loads(all_proc.stdout)
-                full_expected=[p['panel_id'] for p in episode['panels'] if p['classification'] in {'READY_H001','PREPARED_H002'}]
+                full_expected=[p['panel_id'] for p in episode['panels'] if p['classification'] in ({'READY'} if whole else {'READY_H001','PREPARED_H002'})]
                 if (rc if combined else all_proc.returncode) or all_inputs.get('candidate_only') is not False or all_inputs.get('image_calls')!=0 or [j.get('panel_id') for j in all_inputs.get('jobs',[])]!=full_expected:
-                    raise ValueError('全话实际输入/批准预检未闭合，H002或依赖范围不符')
+                    raise ValueError('全话实际输入/批准预检未闭合，就绪或依赖范围不符')
                 for job in all_inputs.get('jobs',[]):
                     if combined and (job.get('candidate_only') or job.get('input_audit_only') is not True or job.get('dispatch_authorized') is not False or job.get('status')!='INPUT_AUDITED_NOT_DISPATCHABLE'):
                         raise ValueError('全话审计作业不能授予生产许可')
@@ -459,9 +469,9 @@ def rehearse(zip_path,package_root,run_root,run_index,report,*,timeout=180):
                         path=Path(value).resolve()
                         if not path.is_file() or not (path.is_relative_to(package_root) or path.is_relative_to(run_root)):raise ValueError('全话参考仍缺失或依赖来源机器；当前生图人员须报告准确受影响格并直接询问用户')
             pre=raw.get('preflight') or {}
-            expected=[p['panel_id'] for p in episode['panels'] if p['classification']=='READY_H001']
+            expected=ready_ids(data,episode)
             job_ids=[j.get('panel_id') for j in raw.get('jobs',[])]
-            if job_ids!=expected:errors.append('实际就绪格与声称READY_H001不符')
+            if job_ids!=expected:errors.append('实际就绪格与交接声明不符')
             if any(j.get('candidate_only') or j.get('status')!=('INPUT_AUDITED_NOT_DISPATCHABLE' if combined else 'NOT_RUN') or
                    combined and (j.get('input_audit_only') is not True or j.get('dispatch_authorized') is not False) for j in raw.get('jobs',[])):errors.append('预检作业状态不合法')
             permission_invalid=(pre.get('audit_policy')!='receiver_input_audit_v1' or pre.get('input_audit_only') is not True or pre.get('dispatch_authorized') is not False) if combined else pre.get('dispatch_authorized') is False
@@ -474,11 +484,11 @@ def rehearse(zip_path,package_root,run_root,run_index,report,*,timeout=180):
                     if not (p.is_relative_to(package_root) or p.is_relative_to(run_root)):errors.append('实际请求仍引用旧电脑/外部参考路径')
                     if not p.is_file():errors.append('实际请求参考不存在')
         except (OSError,ValueError,KeyError,TypeError) as exc:errors.append(str(exc))
-        results.append({'episode_id':eid,'status':'HOLD' if errors else 'REHEARSED','ready_h001':job_ids if not errors else [],'errors':errors,'argv':argv,'returncode':rc})
+        results.append({'episode_id':eid,'status':'HOLD' if errors else 'REHEARSED',ready_key(data):job_ids if not errors else [],'errors':errors,'argv':argv,'returncode':rc})
     if files(package_root)!=before:raise ValueError('演练改动收到原件，禁止发布')
     if zip_path is None and sha(package_root/INVENTORY)!=receipt['inventory_sha256']:raise ValueError('演练期间交接清单变化')
-    ready=sum(len(r['ready_h001']) for r in results)
-    result={'policy':POLICY,'source_kind':'observed_frozen_gate_rehearsal','package_id':data['package_id'],'candidate_zip_sha256':sha(zip_path) if zip_path else None,'reception':receipt,'originals_unchanged':True,'image_calls':0,'environment':{'python':sys.version,'executable':sys.executable,'platform':platform.platform()},'results':results,'ready_h001_count':ready,'status':'RELEASE_CANDIDATE' if ready and all(r['status']=='REHEARSED' for r in results) else 'HOLD','not_production_authorization':True}
+    ready=sum(len(r[ready_key(data)]) for r in results)
+    result={'policy':POLICY,'source_kind':'observed_frozen_gate_rehearsal','package_id':data['package_id'],'candidate_zip_sha256':sha(zip_path) if zip_path else None,'reception':receipt,'originals_unchanged':True,'image_calls':0,'environment':{'python':sys.version,'executable':sys.executable,'platform':platform.platform()},'results':results,count_key(data):ready,'status':'RELEASE_CANDIDATE' if ready and all(r['status']=='REHEARSED' for r in results) else 'HOLD','not_production_authorization':True}
     result['evidence_files']=files(report)
     write(report/'演练报告.json',result)
     return result
@@ -512,7 +522,7 @@ def release(candidate_zip,rehearsal_report,approval_file,output):
             reviewed=input_review(root,delivery_index)
     if (report.get('policy')!=POLICY or report.get('source_kind')!='observed_frozen_gate_rehearsal' or
             report.get('status')!='RELEASE_CANDIDATE' or not report.get('originals_unchanged') or report.get('image_calls')!=0 or
-            report.get('candidate_zip_sha256')!=sha(candidate_zip) or not report.get('ready_h001_count')):raise ValueError('未完成真实解压预检或无就绪格，不可发布正式可生产ZIP')
+            report.get('candidate_zip_sha256')!=sha(candidate_zip) or not report.get(count_key(delivery_index))):raise ValueError('未完成真实解压预检或无就绪格，不可发布正式可生产ZIP')
     if not report.get('results') or any(r.get('status')!='REHEARSED' or r.get('errors') for r in report['results']):raise ValueError('演练仍有系统性阻断')
     for ref in report.get('evidence_files',[]):reference(rehearsal_report.parent,ref)
     literal=(approval.get('status')=='APPROVED' and approval.get('source_kind')=='user_message' and approval.get('source_locator') and approval.get('quote'))
@@ -527,11 +537,11 @@ def release(candidate_zip,rehearsal_report,approval_file,output):
         if idx['package_id']!=report['package_id']:raise ValueError('演练包ID不同')
         if [r.get('episode_id') for r in report['results']]!=[e['episode_id'] for e in idx['episodes']]:raise ValueError('演练报告未覆盖准确全部话')
         for episode,result in zip(idx['episodes'],report['results']):
-            expected=[p['panel_id'] for p in episode['panels'] if p['classification']=='READY_H001']
-            if result.get('ready_h001')!=expected:raise ValueError('演练就绪范围与候选不一致')
+            expected=ready_ids(idx,episode)
+            if result.get(ready_key(idx))!=expected:raise ValueError('演练就绪范围与候选不一致')
             raw_name=episode['episode_id']+'_stdout.json'
             if raw_name not in {r['path'] for r in report.get('evidence_files',[])}:raise ValueError('缺冻结门禁原始输出')
-        if report['ready_h001_count']!=sum(len(r['ready_h001']) for r in report['results']):raise ValueError('演练就绪统计失配')
+        if report[count_key(idx)]!=sum(len(r[ready_key(idx)]) for r in report['results']):raise ValueError('演练就绪统计失配')
         additions={'演练与导出确认/演练报告.json':rehearsal_report.read_bytes(),'演练与导出确认/用户导出确认.json':Path(approval_file).read_bytes()}
         for ref in report.get('evidence_files',[]):additions['演练与导出确认/原始预检/'+ref['path']]=reference(rehearsal_report.parent,ref).read_bytes()
         additions['接包入口.md']=('# 正式交接包\n\n仅交付本ZIP，无需外置校验文件或再次解压套包；接收方已经解压时可直接提供完整包根目录。\n在Codex中使用 $vertical-comic-preproduction，填写：接包生产：【本ZIP或已解压包根的本机绝对路径】；输出位置：【本机目录】；审核人是我。\n接收端使用安装版comic_start.py receive：ZIP用--zip，已解压目录用--package-root；先校验包内清单及正式发布证据，ZIP解压后、目录直接进入绑定和演练；通过后依包内审核节点生产。\n详细范围、历史预算与步骤见交接说明.md、接包生产执行要求.md及交接验收索引.json。\n内部哈希用于完整性核对，不证明发布者身份；本ZIP最终SHA256只记录于导出日志，不写入自身。\n').encode('utf-8')
@@ -549,7 +559,7 @@ def release(candidate_zip,rehearsal_report,approval_file,output):
             with zipfile.ZipFile(output) as z:zip_inventory(z)
             check_delivery_archive(output)
         except Exception:output.unlink(missing_ok=True);raise
-    return {'status':'RELEASED_DIRECT_DELIVERY_ZIP','zip':str(output),'sha256':sha(output),'ready_h001_count':report['ready_h001_count'],'not_production_authorization':True}
+    return {'status':'RELEASED_DIRECT_DELIVERY_ZIP','zip':str(output),'sha256':sha(output),count_key(delivery_index):report[count_key(delivery_index)],'not_production_authorization':True}
 
 
 def main():

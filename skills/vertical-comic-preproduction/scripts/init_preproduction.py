@@ -118,6 +118,8 @@ def main() -> int:
         runtime = dict(config.get('runtime', default_runtime)) if config else dict(default_runtime)
         extra.update(runtime=runtime_settings(runtime), generation_packages={})
     if mode == "episode_async_v1":
+        from execution_timing import POLICY as TIMING_POLICY
+        extra["timing_policy"] = TIMING_POLICY
         from visual_evidence import POLICY as VISUAL_POLICY
         extra["visual_evidence_policy"] = (config or {}).get("quality", {}).get("policy", VISUAL_POLICY)
     if mode == 'episode_async_v1':

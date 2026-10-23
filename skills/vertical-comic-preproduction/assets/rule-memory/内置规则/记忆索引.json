@@ -143,7 +143,7 @@
     {
       "id": "MEM-003",
       "title": "换机位保持固定空间锚点",
-      "version": "1.2.0",
+      "version": "1.3.0",
       "status": "active",
       "scope": "cross_work",
       "primary_stage": "shot_design",
@@ -156,16 +156,18 @@
         "portable": true,
         "contains_story_facts": false,
         "rationale": "只约束通用制作方法与检查动作，不指定作品、人物、话格或剧情事实。",
-        "basis": "用户已授权构建通用规则记忆；后续新增条目先candidate再审查。"
+        "basis": "用户已授权构建通用规则记忆；后续新增条目先candidate再审查。 用户于2026-10-23审阅空间结构规则文件级方案后明确要求开始修改；仅沉淀通用方法，不保存测试剧情或宣称所有方法普适成功。"
       },
       "trigger": {
         "any_tags": [
-          "camera_change"
+          "camera_change",
+          "fixed_spatial_relations"
         ],
         "any_visual_terms": [
           "换机位",
           "反打"
-        ]
+        ],
+        "semantic_condition": "换机位/反打且需保持固定空间时使用camera_change；建筑或固定陈设关系影响本格理解、或空间返修时使用fixed_spatial_relations。不因室内、多人或对白提建筑自动触发；无需全部锚点入画。"
       },
       "requirements": {
         "shot_design": {
@@ -198,14 +200,14 @@
       },
       "file": {
         "path": "规则/镜头/MEM-003_换机位保持固定空间锚点.md",
-        "sha256": "c80702645015027981222e2dbf55c72988e57ad835f3f2c05c40779099b19bbb"
+        "sha256": "2db4835322e339964521cdb6768ce0d4c582f164f13b09724311e9ddae63c14a"
       },
       "load_policy": "on_match"
     },
     {
       "id": "MEM-004",
       "title": "局部返修保留批准特征",
-      "version": "1.2.0",
+      "version": "1.4.0",
       "status": "active",
       "scope": "cross_work",
       "primary_stage": "generation",
@@ -217,7 +219,7 @@
         "portable": true,
         "contains_story_facts": false,
         "rationale": "只约束通用制作方法与检查动作，不指定作品、人物、话格或剧情事实。",
-        "basis": "用户已授权构建通用规则记忆；后续新增条目先candidate再审查。 用户于2026-10-16授权落实通用提示词优化，补充同范围方法，既有触发/阶段/检查ID不变。"
+        "basis": "用户已授权构建通用规则记忆；后续新增条目先candidate再审查。 用户于2026-10-16授权落实通用提示词优化，补充同范围方法，既有触发/阶段/检查ID不变。 用户于2026-10-23审阅文件级坐标返修设计后明确要求“好的，开始修改”；按此授权补充条件式坐标方法，原触发和检查ID不变。 用户于2026-10-23审阅空间结构规则文件级方案后明确要求开始修改；仅沉淀通用方法，不保存测试剧情或宣称所有方法普适成功。"
       },
       "trigger": {
         "any_tags": [
@@ -251,7 +253,7 @@
       },
       "file": {
         "path": "规则/生图/MEM-004_局部返修保留批准特征.md",
-        "sha256": "678bb7cb6e8251ee41d4307b60ace6222863fdc769d6c51d919945eb54d16f08"
+        "sha256": "9f95df308c4997730e5176b6ebf115b80886bb301d82ff460ff589e52f9c0ccd"
       },
       "load_policy": "on_match"
     },
@@ -324,7 +326,7 @@
     {
       "id": "MEM-006",
       "title": "人体结构物理合理性与动作表现力",
-      "version": "1.3.0",
+      "version": "1.4.0",
       "status": "active",
       "scope": "cross_work",
       "primary_stage": "generation",
@@ -337,7 +339,7 @@
         "portable": true,
         "contains_story_facts": false,
         "rationale": "可跨话跨作品复用的制作与验收要求，不保存任何具体人物、话格或剧情事实。",
-        "basis": "用户于2026-10-19在完成实际图复核及通用修改方案后明确要求“好的开始修改skill文件”；据此修改既有通用方法，不保存案例剧情。"
+        "basis": "用户于2026-10-19在完成实际图复核及通用修改方案后明确要求“好的开始修改skill文件”；据此修改既有通用方法，不保存案例剧情。 用户于2026-10-23审阅空间结构规则文件级方案后明确要求开始修改；仅沉淀通用方法，不保存测试剧情或宣称所有方法普适成功。"
       },
       "trigger": {
         "any_tags": [
@@ -383,7 +385,7 @@
       },
       "file": {
         "path": "规则/生图/MEM-006_人体结构物理合理性与动作表现力.md",
-        "sha256": "78af98d34e2e8db9f09f83be144d144670b7b2acb983ec1ad37af630bb8bb04a"
+        "sha256": "d6a032b02508b27d139358b8252808a95a4f8f6cdc6ddbf930f1ce0eb5417a6d"
       },
       "load_policy": "stage_baseline"
     },
@@ -521,7 +523,7 @@
     {
       "id": "MEM-009",
       "title": "真实透视与遮挡优先于完整展示",
-      "version": "1.2.0",
+      "version": "1.3.0",
       "status": "active",
       "scope": "cross_work",
       "primary_stage": "shot_design",
@@ -534,18 +536,19 @@
         "portable": true,
         "contains_story_facts": false,
         "rationale": "可跨话跨作品复用的制作与验收要求，不保存任何具体人物、话格或剧情事实。",
-        "basis": "用户于2026-10-19在完成实际图复核及通用修改方案后明确要求“好的开始修改skill文件”；据此修改既有通用方法，不保存案例剧情。"
+        "basis": "用户于2026-10-19在完成实际图复核及通用修改方案后明确要求“好的开始修改skill文件”；据此修改既有通用方法，不保存案例剧情。 用户于2026-10-23审阅空间结构规则文件级方案后明确要求开始修改；仅沉淀通用方法，不保存测试剧情或宣称所有方法普适成功。"
       },
       "trigger": {
         "any_tags": [
           "physical_occlusion",
-          "perspective_overlap"
+          "perspective_overlap",
+          "framing_space_conflict"
         ],
         "any_visual_terms": [
           "遮挡",
           "挡住"
         ],
-        "semantic_condition": "构图涉及前后遮挡、透视重叠，或存在为完整展示主体而移动/扭曲遮挡物的风险时标记 physical_occlusion 或 perspective_overlap。"
+        "semantic_condition": "构图涉及前后遮挡、透视重叠，或存在为完整展示主体而移动/扭曲遮挡物的风险时标记 physical_occlusion 或 perspective_overlap。 核心动作、环境和标识难以自然同框时标记framing_space_conflict；裁切不得删核心线索。"
       },
       "requirements": {
         "shot_design": {
@@ -581,7 +584,7 @@
       },
       "file": {
         "path": "规则/镜头/MEM-009_真实透视与遮挡优先于完整展示.md",
-        "sha256": "649b2344b984a4e11cb72922eb27ab71efe77fff491345d015065b8fe3d3f300"
+        "sha256": "00feb6b2661e779e203b3d3314f5d52047537d83e7325d0d5afb0b1cda11f785"
       },
       "load_policy": "on_match"
     },

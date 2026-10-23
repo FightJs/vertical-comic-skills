@@ -364,6 +364,8 @@ def submit(state_path, panel_id, attempt_id, round_id, permit_id):
     A lost registration acknowledgement is conservative: a repeated operation
     does NOT grant another invocation, even if the service receipt is unknown.
     """
+    from runtime_clock import require_running
+    require_running(state_path)
     path=Path(state_path).resolve()
     with authority([path]):
         state=read_json(path);row=next(r for r in state['panels'] if r['panel_id']==panel_id)

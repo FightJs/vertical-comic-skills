@@ -227,6 +227,12 @@ def execution_constraints(panel):
     return list(dict.fromkeys(lines))
 
 
+def append_execution_constraints(prompt, panel):
+    """Expand applicable shared rule data into the real executable text once."""
+    missing=[line for line in execution_constraints(panel) if line not in prompt]
+    return prompt + ('\n【本格适用规则】\n'+'\n'.join(missing) if missing else '')
+
+
 def inspection_plan(panel, item, source_manifest_sha256):
     """Group original QA targets for one observation; never merges their verdicts."""
     names={'action_contact':'人体动作与接触','space_props':'场景、道具与遮挡',

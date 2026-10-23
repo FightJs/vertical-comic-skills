@@ -565,8 +565,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/handoff_transport.py",
-      "sha256": "493482cd8faf009b3edb97ce6cb15e41aaf45b1d628b1b89c8965d0dc5f8c433",
-      "bytes": 9594
+      "sha256": "64331877be6a4d6da1965048e41ed64fbe5566ba1de4e1a31141f0a4e72f579d",
+      "bytes": 9663
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/handoff_zip.py",

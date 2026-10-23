@@ -18,6 +18,7 @@ def metadata(z):
     if d.get('policy')!=POLICY: raise ValueError('未知传输格式')
     return d
 def identify(p):
+    if not Path(p).is_file(): raise ValueError('正式ZIP不存在')
     with zipfile.ZipFile(p) as z:
         return metadata(z).get('kind') if INDEX in z.namelist() else None
 

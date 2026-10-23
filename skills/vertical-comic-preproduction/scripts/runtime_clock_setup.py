@@ -9,7 +9,7 @@ NAME='vertical-comic-skills'
 
 def _probe(executable):
     code="import sys,json;import PIL,yaml,openpyxl,et_xmlfile;print(json.dumps({'python':sys.executable,'version':list(sys.version_info[:2])}))"
-    p=subprocess.run([str(executable),'-I','-c',code],capture_output=True,text=True,timeout=20)
+    p=subprocess.run([str(executable),'-X','utf8','-I','-c',code],capture_output=True,text=True,encoding="utf-8",timeout=20)
     if p.returncode:raise ValueError('stable Python/dependency probe failed: '+p.stderr[-500:])
     return json.loads(p.stdout)
 
@@ -26,11 +26,11 @@ def prepare_runtime(home, *, python=None):
         source=str(Path(python or sys.executable).absolute())
         _probe(source)  # Required dependencies must already be available; no hidden network install.
         destination=root/('python-'+uuid.uuid4().hex[:12])
-        subprocess.run([source,'-m','venv','--copies',str(destination)],check=True,capture_output=True,text=True,timeout=90)
+        subprocess.run([source,'-X','utf8','-m','venv','--copies',str(destination)],check=True,capture_output=True,text=True,encoding="utf-8",timeout=90)
         exe=destination/('Scripts/python.exe' if os.name=='nt' else 'bin/python')
         code="import sysconfig,json,importlib.metadata as m;from pathlib import Path;p=Path(sysconfig.get_path('purelib')).resolve();rows=[];\nfor name in ['Pillow','PyYAML','openpyxl','et_xmlfile']:\n d=m.distribution(name)\n for f in d.files or []:\n  q=Path(d.locate_file(f)).resolve()\n  if q.is_file() and q.is_relative_to(p) and '__pycache__' not in q.parts: rows.append([str(q),q.relative_to(p).as_posix()])\nprint(json.dumps(rows))"
-        rows=json.loads(subprocess.check_output([source,'-I','-c',code],text=True,timeout=20))
-        pure=Path(subprocess.check_output([str(exe),'-I','-c',"import sysconfig;print(sysconfig.get_path('purelib'))"],text=True).strip())
+        rows=json.loads(subprocess.check_output([source,'-X','utf8','-I','-c',code],text=True,encoding="utf-8",timeout=20))
+        pure=Path(subprocess.check_output([str(exe),'-X','utf8','-I','-c',"import sysconfig;print(sysconfig.get_path('purelib'))"],text=True,encoding="utf-8").strip())
         for original,relative in rows:
             target=pure/relative
             if not target.resolve().is_relative_to(pure.resolve()):raise ValueError('dependency path escapes runtime')
@@ -47,7 +47,7 @@ def setup(home, *, python=None, apply=False):
     runtime=prepare_runtime(home,python=python) if apply else None
     pointer=managed/'runtime/active.json'
     if runtime:executable=Path(runtime['python'])
-    elif pointer.exists():executable=Path(json.loads(pointer.read_text())['python'])
+    elif pointer.exists():executable=Path(json.loads(pointer.read_text(encoding='utf-8'))['python'])
     else:executable=managed/'runtime/<created-on-apply>/bin/python'
     if apply and not script.is_file():raise ValueError('installed hook script required')
     def quote(v):return "'"+str(v).replace("'","'\"'\"'")+"'"

@@ -875,8 +875,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/runtime_clock_setup.py",
-      "sha256": "856407900f6bb02a2f01c4ce8eae9b4882095bbee85978d5310c0e55e76e2dcb",
-      "bytes": 6485
+      "sha256": "196bd7982051052540519851ec574aca427a3aa1ddc7c23c991b390935ec2b1b",
+      "bytes": 6617
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/runtime_environment.py",
@@ -1110,8 +1110,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/tests/test_episode_handoff.py",
-      "sha256": "87178d44f9af5626f43b6801a10d76b4bb301ffb54f76afec58809c4b4724152",
-      "bytes": 7376
+      "sha256": "9be8814cd2067744d6a12543a3623ad4f3776393f7793a50f7153ca130447600",
+      "bytes": 7476
     },
     {
       "path": "skills/vertical-comic-preproduction/tests/test_episode_preparation.py",
@@ -1140,8 +1140,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/tests/test_execution_timing.py",
-      "sha256": "99570036ee5cd8c6623cff7cd908424c6f76f302d8f14d0fab8cec7280405d64",
-      "bytes": 3674
+      "sha256": "e7eff768b7b74222a52e49096c282ea6c1c2f3608a662b8e1ce49db2b4803f0b",
+      "bytes": 3706
     },
     {
       "path": "skills/vertical-comic-preproduction/tests/test_extracted_handoff.py",

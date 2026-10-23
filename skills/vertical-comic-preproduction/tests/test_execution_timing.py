@@ -23,7 +23,7 @@ class ExecutionTimingTests(unittest.TestCase):
         case.h.flush()
         result = case.reserve()
         self.assertEqual(result['status'], 'RESERVED')
-        state = json.loads(case.h.state_path.read_text())
+        state = json.loads(case.h.state_path.read_text(encoding='utf-8'))
         row = state['panels'][1]
         self.assertEqual(row['ready_at'], row['timing_observations']['ready_at']['at'])
         self.assertNotIn('submitted_at', row)
@@ -40,7 +40,7 @@ class ExecutionTimingTests(unittest.TestCase):
         path.write_text(json.dumps(case.state))
         commit_updates(path, digest(path), [{'panel_id': 'P001', 'attempt_id': case.r['attempt_id'],
                                             'round_id': 1, 'status': 'VISUAL_PASS'}])
-        row = json.loads(path.read_text())['panels'][0]
+        row = json.loads(path.read_text(encoding='utf-8'))['panels'][0]
         self.assertIn('qa_recorded_at', row)
         self.assertNotIn('qa_completed_at', row)
         self.assertEqual(row['timing_observations']['qa_recorded_at']['qa_report'], row['qa_report'])

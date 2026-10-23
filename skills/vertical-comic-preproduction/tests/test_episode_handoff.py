@@ -44,7 +44,7 @@ class EpisodeHandoffTests(unittest.TestCase):
         f = self.fixture
         f.scope_task()
         f.test_direct_bound_run_real_full_episode_gates_and_conditional_release()
-        report = json.loads((f.base / 'rehearsal/演练报告.json').read_text())
+        report = json.loads((f.base / 'rehearsal/演练报告.json').read_text(encoding='utf-8'))
         self.assertEqual(report['ready_panel_count'], 4)
         self.assertEqual(report['results'][0]['ready_panel_ids'], self.ids)
         self.assertIn('--episode-scope', report['results'][0]['argv'])
@@ -99,7 +99,7 @@ class EpisodeHandoffTests(unittest.TestCase):
         holder = ReceiverAuditTests()
         holder.fixture = self.fixture
         cap = self.fixture.package / 'runtime/skills/vertical-comic-preproduction/scripts/runtime_capabilities.json'
-        data = json.loads(cap.read_text())
+        data = json.loads(cap.read_text(encoding='utf-8'))
         data.pop('receiver_episode_audit')
         holder.set_capability(data)
         _, _, _, report = self.fixture.pipeline()
@@ -110,10 +110,10 @@ class EpisodeHandoffTests(unittest.TestCase):
         f = self.fixture
         cmd = [sys.executable, '-B', runtime.__file__, '--state', str(f.template / f.state_ref['path']),
                '--action', 'receiver-audit', '--episode-scope', '--panels', *self.ids]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        result = subprocess.run(cmd, capture_output=True, text=True,encoding="utf-8", timeout=30)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(json.loads(result.stdout)['ready_panel_ids'], self.ids)
-        mixed = subprocess.run(cmd + ['--h001-panels', self.ids[0]], capture_output=True, text=True, timeout=30)
+        mixed = subprocess.run(cmd + ['--h001-panels', self.ids[0]], capture_output=True, text=True,encoding="utf-8", timeout=30)
         self.assertNotEqual(mixed.returncode, 0)
 
     def test_source_order_and_read_snapshot_remain_strict(self):
@@ -125,7 +125,7 @@ class EpisodeHandoffTests(unittest.TestCase):
         def mutate(state, root):
             result = original(state, root)
             path = root / state['shot_manifest']['path']
-            path.write_text(path.read_text() + ' ')
+            path.write_text(path.read_text(encoding='utf-8') + ' ', encoding='utf-8')
             return result
         with patch.object(runtime, 'preparation_report', side_effect=mutate):
             with self.assertRaisesRegex(ValueError, 'CHECK_SNAPSHOT_CHANGED'):

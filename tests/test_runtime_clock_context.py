@@ -76,9 +76,9 @@ class ContextTests(unittest.TestCase):
         exe=result['runtime']['python'];self.assertTrue(pathlib.Path(exe).is_relative_to(self.home/'skill-bundles'))
         payload={'session_id':'thread-A','turn_id':'fresh','hook_event_name':'PreToolUse',
                  'tool_input':{'cmd':'python comic_start.py receive --runtime-limit-seconds 14400'}}
-        subprocess.run([exe,'-B',str(installed/'runtime_clock_hook.py')],input=json.dumps(payload),text=True,check=True,capture_output=True)
+        subprocess.run([exe,'-B',str(installed/'runtime_clock_hook.py')],input=json.dumps(payload),text=True,encoding="utf-8",check=True,capture_output=True)
         self.assertEqual(context.resolve()['session_id'],'thread-A')
-        config=json.loads(hooks.read_text());commands=[x['command'] for row in config['hooks']['Interrupt'] for x in row['hooks']]
+        config=json.loads(hooks.read_text(encoding='utf-8'));commands=[x['command'] for row in config['hooks']['Interrupt'] for x in row['hooks']]
         self.assertIn('echo unrelated',commands);self.assertFalse(any('old-deleted-python' in x for x in commands))
         self.assertTrue(pathlib.Path(result['backup']).is_file())
         self.assertEqual(setup(self.home,apply=True)['status'],'CONFIGURED_TRUST_NOT_VERIFIED')

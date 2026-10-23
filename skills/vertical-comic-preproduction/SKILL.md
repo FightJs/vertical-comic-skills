@@ -1,9 +1,11 @@
 ---
 name: vertical-comic-preproduction
-description: Coordinate first-batch per-panel comic production for further human editing, preserving real QA, scoped repair decisions and annotated delivery. Use for single or multiple episodes, whole-episode asynchronous generation, split preparation/production handoff, stage routing, resuming production, or explaining the comic skills. Excludes script rewriting, strip assembly, bubbles, lettering and PSD finishing.
+description: Coordinate first-batch per-panel comic production for further human editing, preserving real QA, scoped repair decisions and annotated delivery. Use for single or multiple episodes, whole-episode asynchronous generation, split preparation/production handoff, stage routing, resuming production, or explaining the comic skills. Also routes comic-bundle setup, updates, and user-requested prompt contributions. Excludes script rewriting, strip assembly, bubbles, lettering and PSD finishing.
 ---
 
 # 条漫第一批逐格图片生产总控
+
+**五类短指令**：用户要求条漫Skill“更新”“初次配置”“前期制作与交接”“接包生图与完整交付”或“提炼指定提示词到用户增补”时，先读[内置使用模板](references/user-prompts.md)的对应章节并执行，不要求引用外部Markdown。此入口采用所选模板的main预览更新、内部审查及4小时默认值，用户明确覆盖时按其要求；仅操作所选职责，配置不启动生产、用户增补不主动选材。
 
 所有阶段启动与恢复即执行[阶段与交付进度](references/review-progress.md)：总控汇报阶段、到本职责ZIP的百分比、进行事项、阻塞与下一步；正常制作每10分钟、仅服务等待每15分钟，重要变化立即报。显示独立于人工停点和少询问委托，子agent上报事实由总控合并；不为通知重跑检查、取消在途请求或改预算。阶段进度只能中途汇报；任务未完成且仍有可执行工作或子agent运行时，总控继续推进/等待并收敛产物，不能发送最终答复结束轮次，详见上述进度规则的“总控持续执行与子任务收敛”。
 

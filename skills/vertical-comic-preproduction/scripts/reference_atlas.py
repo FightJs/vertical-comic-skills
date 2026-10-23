@@ -80,3 +80,82 @@ def _verify_owner(ref, asset, subject, purpose, root):
                 raise ValueError('关键细节可读性区域不属于当前人物/用途')
     except (OSError,ValueError,TypeError,KeyError,AttributeError) as exc:errors.append(f'REFERENCE_ATLAS_HOLD:{exc}')
     return errors
+
+
+def select_reference_set(candidates, required_aliases):
+    """Explicit visible-use selection; never silently discard a required reference."""
+    aliases=[r.get('alias') for r in candidates]
+    if len(set(aliases))!=len(aliases): raise ValueError('参考alias重复')
+    if not required_aliases or len(set(required_aliases))!=len(required_aliases) or not set(required_aliases)<=set(aliases):
+        raise ValueError('须明确本格全部必要参考职责alias')
+    chosen=[r for r in candidates if r['alias'] in required_aliases]
+    if len(chosen)>5: raise ValueError('必要参考超过五张；先消解职责，再按需复用忠实图集，不截断')
+    return chosen
+
+
+def cached_lossless_atlas(spec, cache, root):
+    """Build/reuse exact source crops. Readability and approval remain separate."""
+    import json,os,tempfile,uuid
+    from PIL import Image
+    from platform_io import file_lock,atomic_json,replace_file
+    from input_dependencies import fingerprint,file_hash,recheck,observe
+    rows=spec.get('regions',[])
+    if not rows: raise ValueError('图集缺来源区域')
+    observations=[];sizes=[];canonical=[]
+    for row in rows:
+        if row.get('purpose') not in {'identity','costume_state'} or not row.get('subject_id') or not row.get('asset_id'):
+            raise ValueError('图集须明确人物、原资产ID及身份/衣装职责')
+        source=checked_file(Path(root),row['source_file'])
+        observations.append(observe(source))
+        with Image.open(source) as image:
+            box=rect(row['crop_rect_pixels'],image.size)
+        sizes.append((box[2]-box[0],box[3]-box[1]))
+        canonical.append({**row,'source_file':{'path':str(source),'sha256':file_hash(source)}})
+    width=max(w for w,h in sizes);height=sum(h for w,h in sizes)
+    if width*height>64_000_000: raise ValueError('图集过大；按实际可见需求减小来源范围')
+    key=fingerprint({'policy':'lossless_atlas_cache_v1','regions':canonical,'layout':'vertical_no_resize_v1','tool':file_hash(__file__)})
+    cache=Path(cache).resolve();cache.mkdir(parents=True,exist_ok=True)
+    target=cache/(key+'.png');receipt=cache/(key+'.json')
+    with file_lock(cache/(key+'.lock')):
+        if target.is_file() and receipt.is_file():
+            value=json.loads(receipt.read_text(encoding='utf-8-sig'))
+            if value.get('cache_key')==key and value.get('path')==str(target) and value.get('sha256')==file_hash(target):
+                recheck(observations)
+                return {**value,'reviewed':False,'detail_readability':[],'cache_reused':True,'observation_id':uuid.uuid4().hex}
+        atlas=Image.new('RGBA',(width,height),(0,0,0,0));regions=[];offset=0;owners={}
+        for row,(w,h) in zip(canonical,sizes):
+            with Image.open(row['source_file']['path']) as image:
+                crop=image.convert('RGBA').crop(tuple(row['crop_rect_pixels']))
+            atlas.paste(crop,(0,offset))
+            regions.append({**row,'assembly_region':[0,offset,w,offset+h]});offset+=h
+            mapping=owners.setdefault(row['subject_id'],{})
+            if row['purpose'] in mapping and mapping[row['purpose']]!=row['asset_id']:
+                raise ValueError('同一人物/用途不能在图集混用不同状态资产')
+            mapping[row['purpose']]=row['asset_id']
+        recheck(observations)
+        handle,tmp=tempfile.mkstemp(prefix='.atlas-',suffix='.png',dir=cache);os.close(handle)
+        try:
+            atlas.save(tmp,format='PNG');replace_file(tmp,target)
+        finally:
+            Path(tmp).unlink(missing_ok=True)
+        value={'path':str(target),'sha256':file_hash(target),'derivation_policy':POLICY,
+               'reference_kind':'faithful_reference_atlas','subject_ids':list(owners),'subject_asset_ids':owners,
+               'source_regions':regions,'reviewed':False,'detail_readability':[],
+               'cache_key':key,'dispatch_authorized':False}
+        atomic_json(receipt,value)
+        return {**value,'cache_reused':False,'observation_id':uuid.uuid4().hex}
+
+
+def main():
+    import argparse,json
+    from platform_io import configure_stdio
+    configure_stdio()
+    p=argparse.ArgumentParser(description='只构建/复用无缩放技术图集，不授予批准')
+    p.add_argument('--spec',required=True);p.add_argument('--cache',required=True);p.add_argument('--root',required=True);a=p.parse_args()
+    try:
+        spec=json.loads(Path(a.spec).read_text(encoding='utf-8-sig'))
+        print(json.dumps(cached_lossless_atlas(spec,a.cache,a.root),ensure_ascii=False));return 0
+    except (OSError,ValueError,KeyError,TypeError) as exc:
+        print(json.dumps({'status':'ATLAS_WORK_ITEM','error':str(exc)},ensure_ascii=False));return 1
+
+if __name__=='__main__': raise SystemExit(main())

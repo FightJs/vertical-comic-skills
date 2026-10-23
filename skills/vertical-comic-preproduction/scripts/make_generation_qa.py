@@ -276,6 +276,10 @@ def _main(argv=None) -> int:
                 item["ratio_check"] = "HOLD_IMAGE_READ_ERROR"
                 report["errors"].append(f"{pid}:无法读取图片: {exc}")
         item['inspection_plan']=inspection_plan(panel,item,report['source_manifest_sha256'])
+        from coordinate_repair import spec as coordinate_spec
+        coordinate = coordinate_spec(panel)
+        if isinstance(coordinate, dict):
+            item['inspection_plan']['coordinate_targets'] = coordinate.get('expected_observations', {})
         report["panels"].append(item)
 
     for previous, current in zip(report["panels"], report["panels"][1:]):

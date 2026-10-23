@@ -31,7 +31,8 @@ def _failed_image_aliases(panel):
 def repair_errors(panel, *, actual_prompt=None, require_focus=True):
     if panel.get('operation') != 'repair':
         return []
-    errors = []
+    from coordinate_repair import errors as coordinate_errors
+    errors = coordinate_errors(panel, panel.get('prompt', '') if actual_prompt is None else actual_prompt)
     from visual_evidence import repair_source_errors
     from appearance_lock import repair_errors as appearance_repair_errors
     errors.extend(repair_source_errors(panel))

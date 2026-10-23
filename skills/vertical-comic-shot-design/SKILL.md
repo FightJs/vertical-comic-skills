@@ -5,13 +5,7 @@ description: Design approved-script-driven per-panel shots, crop and physical co
 
 # 条漫镜头与空间设计
 
-所有阶段启动与恢复即执行[阶段与交付进度](../vertical-comic-preproduction/references/review-progress.md)：总控汇报阶段、到本职责ZIP的百分比、进行事项、阻塞与下一步；正常制作每10分钟、仅服务等待每15分钟，重要变化立即报。显示独立于人工停点和少询问委托，子agent上报事实由总控合并；不为通知重跑检查、取消在途请求或改预算。阶段进度只能中途汇报；任务未完成且仍有可执行工作或子agent运行时，总控继续推进/等待并收敛产物，不能发送最终答复结束轮次，详见上述进度规则的“总控持续执行与子任务收敛”。
-
-用户后续明确取消当前人工停点时，按[最新委托更新规则](../vertical-comic-preproduction/references/grouped-review.md#后续指令取消人工停点)更新当前运行授权；整体A也可由执行者内部审查，通过即继续，不因最初保留亲审而再次等待。
-
-用户要求冲突按脚本处理或已选择脚本时，优先执行[脚本优先与补充状态免重复亲审](../vertical-comic-preproduction/references/grouped-review.md#脚本优先与补充状态免重复亲审)：自动补必要状态、内部审图并继续，不再次裁决或提交补充候选亲审。
-
-用户已明确委托前期“仅在无法消解的剧本与资产冲突时询问”时，优先执行[前期最少询问规则](../vertical-comic-preproduction/references/grouped-review.md#前期仅询问无法消解的剧本资产冲突)：A、B、生图包与导出由执行者审核并记录决定，不再请求逐项确认；该委托不自动扩大到正文生产。
+阶段开始时按[规则归属](../vertical-comic-preproduction/references/rule-ownership.md)读取共同规则与本阶段合同；授权和进度沿用该页入口，同一运行不重复加载未变内容。新制作按[前期提速](../vertical-comic-preproduction/references/preparation-efficiency.md)先贯通代表格，再用[唯一主表](../vertical-comic-preproduction/references/draft-authoring.md)增量派生。接包直接使用已审输入。
 
 新整话按[服饰与单画面](../vertical-comic-preproduction/references/appearance-and-single-frame.md)逐细节区分自身佩戴侧、本机位投影和遮挡；镜面另给反射依据。每格只选一个连续画面，脚本双格择关键一幅、另一幅忽略，原稿不改，B的动作/人物/裁切同步选定范围。
 
@@ -19,7 +13,7 @@ description: Design approved-script-driven per-panel shots, crop and physical co
 
 首次读共享[共同约束](../vertical-comic-preproduction/references/production-foundation.md)和[规则归属](../vertical-comic-preproduction/references/rule-ownership.md)，本阶段读[镜头流程](../vertical-comic-preproduction/references/stage-shot-design.md)、[裁切](../vertical-comic-preproduction/references/shot-framing.md)与[空间连续性](../vertical-comic-preproduction/references/visual-continuity.md)。规则正文按实际命中加载，不复制成新判据。
 
-新任务按[整话异步](../vertical-comic-preproduction/references/episode-async.md)准备完整源序、镜头和候选实际包；普通格准确就绪即可放行。旧RV按原冻结合同；分工制作先读[双电脑交接](../vertical-comic-preproduction/references/split-production.md)，显式保留半话停点，不整话自动派发。
+新任务按[整话异步](../vertical-comic-preproduction/references/episode-async.md)准备完整源序、镜头和候选实际包；普通格准确就绪即可放行。旧RV按原冻结合同；分工制作先读[双电脑交接](../vertical-comic-preproduction/references/split-production.md)，新版按整话准备与就绪调度，不因分工增加半话停点。
 
 先从动作及真实物理条件推导机位，执行[可实现性与输入质量](../vertical-comic-preproduction/references/execution-quality.md)：谁的哪条肢体接触哪个对象/部位、动作阶段、承托和遮挡是什么；当前裁切能否同时容纳并辨认。坐标可相对表达，不编参考无法证明的几何。困难接触先修镜头，不交模型自行补猜。
 
@@ -36,3 +30,5 @@ generation_dependencies只记录真实前图依赖，普通剧情先后不自动
 新运行按[最终输入语义审查](../vertical-comic-preproduction/references/final-input-semantics.md)执行：先审设计，再核对完整实际prompt、参考和判据；前期闭合后交接，接包只复查实际变化与新实图。审查沿用semantic_audit，不新增用户停点、不热改旧冻结包。
 
 前期完成[逐格输入收敛](../vertical-comic-preproduction/references/final-input-semantics.md#前期收敛按包执行v2)：确定设计连续性、验收比较与真实实图依赖；规则落实为本格约束。配饰区分身体自身侧与画面投影，明确锚点、遮挡及可见数量，不为展示配饰改变动作或裁切。
+
+建筑关系、动作承托或展示冲突相关格按[空间输入收敛](../vertical-comic-preproduction/references/final-input-semantics.md#空间输入收敛)选适用MEM-003/006/009，记录必要关系及必显范围；修改机位同步复核细节投影，不强制所有格生成空间底图。

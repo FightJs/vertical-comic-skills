@@ -344,6 +344,16 @@ def character_details(panel: dict[str, Any], event: str, angle: str, visible: st
             "只显示本格实际可见的面；未明确露出正脸时不得擅自补正脸",
         )
         position = executable_text(item.get("screen_position"), position_map.get(name, "屏幕位置未明确，保持CAMERA_HOLD"))
+        from spatial_contract import enabled as spatial_enabled
+        if spatial_enabled(panel):
+            ev = panel['visual_evidence']
+            owner = item.get('character_id') or item.get('subject_id')
+            blocking = ev.get('blocking', {}).get(owner)
+            projection = ev.get('visibility', {}).get(owner)
+            if not blocking or not projection:
+                raise ValueError(f'SPATIAL_HOLD:{name}:缺当前人物站位与可见性，不能继承旧屏幕位置')
+            position = projection['expected']
+            relation = f"世界位置={blocking['position']}，朝向={blocking['facing']}"
         from visual_evidence import BODY_CROP_LABELS
         crop = item.get('body_crop') or (panel.get('framing') or {}).get('body_crop', '')
         if crop in ('mixed', 'environment'):
@@ -385,6 +395,13 @@ def build_prompt(panel: dict[str, Any], angle: str, scale: str, ratio: str,
         crop_line = f"身体裁切：{crops.get(str(framing.get('body_crop')), '')}；视觉重点：{compact(framing.get('focus'))}；必显信息：{compact(framing.get('required_visible'))}；背景层级：{framing.get('background_level', '')}。"
     from visual_evidence import framing_execution_block, execution_block as visual_block, POLICY as VISUAL_POLICY
     execution_panel = {**panel, 'visible_region': visible}
+    from spatial_contract import enabled as spatial_enabled, selection_errors, projection_errors
+    if spatial_enabled(panel):
+        execution_panel.update(camera_angle_family=angle, shot_scale=scale, frame_ratio=ratio,
+                               camera_position=camera_position, facing_direction=facing,
+                               camera_height=height, camera_view_signature=signature)
+        problems = selection_errors(execution_panel) + projection_errors(execution_panel)
+        if problems: raise ValueError(';'.join(problems))
     framing_block = framing_execution_block(execution_panel)
     if framing_block:
         crop_line = ''  # The compiled block already carries crop/focus/required information.
@@ -422,6 +439,9 @@ def build_prompt(panel: dict[str, Any], angle: str, scale: str, ratio: str,
             "对白、旁白、心声和后期SFX不绘入底图；画内文字按本格准确要求。",
             "参考图：" + "、".join(refs) + "。按各自身份/衣装、场景、画风或编辑用途使用，不迁移相反的装饰、姿态与空间。",
         ]
+    from coordinate_repair import execution_block as coordinate_block
+    coordinate_text = coordinate_block(panel)
+    if coordinate_text: body.append(coordinate_text)
     from rule_memory import execution_constraints
     constraints = execution_constraints(panel)
     existing = '\n'.join(x for x in body if x)

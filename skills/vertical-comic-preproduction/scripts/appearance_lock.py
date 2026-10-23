@@ -38,6 +38,10 @@ def bindings(state,*docs):
 def detail_errors(did,d):
     if not isinstance(d,dict):return [did+':细节须为对象']
     errors=[];placement=d.get('placement',{})
+    if d.get('subject_kind') == 'animal' and d.get('clothing_applicable') is False:
+        attachment = placement.get('attachment', '') if isinstance(placement, dict) else ''
+        if '领口、肩袖与身体连续连接' in attachment:
+            errors.append(did+':已明确无衣装的动物体表不能继承领口肩袖模板；须修批准外观属性')
     if not isinstance(placement,dict):return [did+':缺身体锚点']
     if (d.get('category') not in {'garment','accessory'} or d.get('presence') not in {'present','absent'} or
         type(d.get('count')) is not int or d['count']!=(0 if d.get('presence')=='absent' else max(1,d['count']))):
@@ -82,6 +86,8 @@ def frame_errors(panel):
 def panel_errors(panel,context=None):
     out=frame_errors(panel)
     if not enabled(panel):return out
+    from spatial_contract import projection_errors
+    out.extend(projection_errors(panel,context))
     ctx=context if context is not None else panel.get('visual_evidence_context')
     if not isinstance(ctx,dict):return out+['APPEARANCE_HOLD:缺当前衣装派生细节']
     ev=panel.get('visual_evidence') or {};details=ctx.get('details',{});visibility=ev.get('detail_visibility',{})
@@ -129,6 +135,10 @@ def execution_block(panel,context=None):
     lines=[]
     if single(panel):lines += [SINGLE_TEXT,'本格唯一画面：'+panel['frame_plan']['selected_scene']]
     if enabled(panel):
+        from spatial_contract import enabled as spatial_enabled
+        position_label = '本细节投影位置' if spatial_enabled(panel) else '本镜头位置'
+        if spatial_enabled(panel):
+            lines.append('人物世界位置和朝向只依当前blocking；下列细节位置仅描述身体锚点的当前投影，不另定义人物站位。')
         lines.append('衣装及配饰左右以角色自身为准，画面左右只描述本机位投影；不借其他人物/其他衣装/画风样例中的首饰。')
         details=(context if context is not None else panel['visual_evidence_context'])['details']
         for did,d in details.items():
@@ -140,7 +150,7 @@ def execution_block(panel,context=None):
             lines.append(f"{did}｜人物{d['subject_id']}｜当前衣装{d['costume_state']}｜{d['expected']}；数量{d['count']}；"+
                 ('保持无该装饰；' if d['presence']=='absent' else '款式/颜色/材质：'+'、'.join(design[k] for k in ('style','color','material'))+'；')+
                 f"自身侧={a['side']}，部位={a['body_part']}，手指={a.get('finger','不适用')}；锚点={a['anchor']}；附着={a['attachment']}；活动={a['motion']}；"+
-                f"本镜头可见数量={row['projection'].get('visible_count',d['count'])}（总数不变，不强求全部露出）；本镜头位置={row['projection']['screen_position']}；遮挡={row['projection']['occlusion']}；呈现={row['projection']['surface']}。"+
+                f"本镜头可见数量={row['projection'].get('visible_count',d['count'])}（总数不变，不强求全部露出）；{position_label}={row['projection']['screen_position']}；遮挡={row['projection']['occlusion']}；呈现={row['projection']['surface']}。"+
                 ('反射依据='+row['projection']['reflection_basis'] if row['projection']['surface']=='mirror_reflection' else ''))
         lines.append('不得换人物、换衣装、换佩戴侧或换手指，不增减装饰与层数；允许符合姿态的透视缩短及首饰自然摆动，不把衣料褶皱/高光当新配饰。')
     if panel.get('operation')=='repair' and enabled(panel):

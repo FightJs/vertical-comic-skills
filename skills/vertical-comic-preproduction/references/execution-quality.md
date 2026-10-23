@@ -1,5 +1,7 @@
 # 实际执行质量与返修分流：execution_quality_v1
 
+新运行优先按[第一批前期提速](preparation-efficiency.md)执行最小充分设计、代表格接线、单次B/包展示及问题分级处理。可选润饰不产生HOLD；真实缺口在现有委托内修复，局部问题只影响真实依赖，其他工作继续。正式输入与接包要求仍按原合同。
+
 新运行统一按[第一批生产决定](production-decisions.md)衔接审核、返修与交付：真实FAIL不改写，处理动作与交付结论分别记录；旧冻结合同不迁移。下文审核方法、源稿/批准/证据要求仍适用。
 
 本扩展复用visual_evidence_v1的scene_layouts、appearance_details、checks、原六项QA与原诊断，不增加人工停点。只在新整话RV启用；旧RV、已冻结批次不热升级。当前新建整话RV默认启用execution_quality_v1；配置可显式写execution_quality={"policy":"execution_quality_v1"}，初始化在根状态、镜头及包写input_quality_policy；A、集合、逐格须同策略。初始化不是批准，不能伪填已核对。
@@ -83,3 +85,15 @@ B的framing_feasibility同次核对关键接触能否在当前裁切中看清，
 
 
 新整话再叠加[服饰与单画面](appearance-and-single-frame.md)的appearance_lock_v1/single_frame_v1。规则增加具体身体位置、当前衣装核心与可见配饰检查；衣料褶皱、自然摆动、真实反射按批准状态判断，不锁死像素位置。原局部返修与并发/预算不变。
+
+## 可选坐标方法
+
+新生产合同选local_edit时，按[坐标引导返修](coordinate-repair.md)增加方法选择和精确目标。原严重程度、预算、QA绑定与停止条件不变。本文旧defects路线仍按冻结合同，不能因可框选把旧limb_ownership门禁静默改成finger。
+
+## 建筑与视角畸形的二轮分流
+
+沿MEM-003/006/009和原六项QA记录实际问题，再按MEM-004决定返修。空间问题类型与字段见schemas.md。局部刚性边在布局/机位成立时进入local_edit；投影冲突、空间连接或虚构承托先rebuild_inputs；展示压力选crop_candidate或rebuild_inputs，保持必显线索和比例；不确定先stop_diagnose。整体空间错误不得拆框当局部问题，不根据局部改善把原FAIL改成PASS。
+
+新版first_batch_production_v1由production_decisions及repair_routes共用spatial_contract核验，实际请求在input_quality核对spatial_issue_checks及已登记决定。第二轮仍失败沿原停止与采用版本流程，不能重置attempt/预算。空景路线仅有条件采用，额外真实调用与原许可一致；其他就绪格继续并行。
+
+修空间时保留批准光线、人物、衣装、手部和清晰度；返图沿原checks核对空间与核心叙事，再做全图/保留内容比较。记录部分改善与残留问题，不把“统一透视”当保证有效的修复。

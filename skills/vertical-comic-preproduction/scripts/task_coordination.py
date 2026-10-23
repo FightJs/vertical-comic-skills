@@ -87,6 +87,21 @@ def update(directory, expected_revision, event):
                 if not event.get('reviewer') or not event.get('conclusion'):
                     raise ValueError('缺实际验收人员与结论')
                 item.update(status='ACCEPTED', acceptance=event['evidence'])
+        elif action == 'work':
+            from issue_disposition import ADVISORY
+            work_id=event.get('work_id');status=event.get('status')
+            if not work_id or status not in {'OPEN','RESOLVED'} or not event.get('scope') or not event.get('next_action'):
+                raise ValueError('工作项须有稳定ID、范围、状态和下一步')
+            blocking=event.get('blocks_delivery',True)
+            if type(blocking) is not bool or not blocking and event.get('code') not in ADVISORY:
+                raise ValueError('只有明确可选建议可不阻断交付')
+            if status=='RESOLVED': verify(event.get('evidence'))
+            works=value.setdefault('work_items',{});old=works.get(work_id,{})
+            attempts=old.get('attempts',0)+(1 if status=='OPEN' else 0)
+            works[work_id]={'scope':event['scope'],'status':status,'blocks_delivery':blocking,
+                            'next_action':event['next_action'],'attempts':attempts,
+                            'common_cause_diagnosis_due':attempts>=2,
+                            **({'evidence':event['evidence']} if status=='RESOLVED' else {})}
         elif action == 'checkpoint':
             if not event.get('next_action'): raise ValueError('缺恢复下一步')
             verify(event.get('evidence'))
@@ -110,12 +125,20 @@ def pending(value):
             try: verify(item['observation'])
             except (OSError, ValueError, KeyError): blockers.append({'task_id': key, 'reason': '停止证据失效'})
         else: blockers.append({'task_id': key, 'reason': status})
+    for key,item in value.get('work_items',{}).items():
+        if item['blocks_delivery'] and item['status']!='RESOLVED':
+            blockers.append({'work_id':key,'reason':'OPEN_WORK_ITEM','scope':item['scope'],'next_action':item['next_action']})
+        elif item['blocks_delivery'] and item['status']=='RESOLVED':
+            try: verify(item['evidence'])
+            except (OSError,ValueError,KeyError): blockers.append({'work_id':key,'reason':'工作项解决证据失效'})
     return blockers
 
 def resume(directory):
     value = read(Path(directory)/'coordination.json')
-    return {'status': 'RECONCILE_BEFORE_RESUME', 'revision': value['revision'],
-            'tasks': value['tasks'], 'blockers': pending(value), 'checkpoint': value['checkpoint'],
+    from runtime_clock import status as clock_status
+    clock = clock_status(directory) if (Path(directory)/'runtime-clock.json').is_file() else None
+    return {'runtime_clock': clock, 'status': 'RECONCILE_BEFORE_RESUME', 'revision': value['revision'],
+            'clock_resume_requires_explicit_work':True, 'tasks': value['tasks'], 'work_items':value.get('work_items',{}), 'blockers': pending(value), 'checkpoint': value['checkpoint'],
             'next': '先用宿主工具核实所有旧任务；不可达记UNKNOWN，不重新派发；此命令不唤醒会话'}
 
 def finish(directory, expected_revision, archive):

@@ -5,12 +5,9 @@ description: Review actual comic images against approved evidence, preserve trut
 
 # 条漫图片审核与第一批交接
 
-所有阶段启动与恢复即执行[阶段与交付进度](../vertical-comic-preproduction/references/review-progress.md)：总控汇报阶段、到本职责ZIP的百分比、进行事项、阻塞与下一步；正常制作每10分钟、仅服务等待每15分钟，重要变化立即报。显示独立于人工停点和少询问委托，子agent上报事实由总控合并；不为通知重跑检查、取消在途请求或改预算。阶段进度只能中途汇报；任务未完成且仍有可执行工作或子agent运行时，总控继续推进/等待并收敛产物，不能发送最终答复结束轮次，详见上述进度规则的“总控持续执行与子任务收敛”。
-
-用户已明确委托前期“仅在无法消解的剧本与资产冲突时询问”时，优先执行[前期最少询问规则](../vertical-comic-preproduction/references/grouped-review.md#前期仅询问无法消解的剧本资产冲突)：A、B、生图包与导出由执行者审核并记录决定，不再请求逐项确认；该委托不自动扩大到正文生产。
+阶段开始时按[规则归属](../vertical-comic-preproduction/references/rule-ownership.md)读取共同规则与本阶段合同；授权和进度沿用该页入口，同一运行不重复加载未变内容。新制作按[前期提速](../vertical-comic-preproduction/references/preparation-efficiency.md)先贯通代表格，再用[唯一主表](../vertical-comic-preproduction/references/draft-authoring.md)增量派生。接包直接使用已审输入。
 
 本技能负责供人工继续加工的第一批独立逐格图片。新运行先读[生产决定与阶段交接](../vertical-comic-preproduction/references/production-decisions.md)：沿用真实审核，逐问题分三类，按影响/成本决定一次合并修复、重生或留人工；采用版本与原QA绑定，交付附简明问题表。旧RV按冻结合同，不热替换工具或规则。
-
 
 新整话按[服饰与单画面](../vertical-comic-preproduction/references/appearance-and-single-frame.md)在原QA核对衣装、人物归属、款式/总数量、身体佩戴侧/手指、附着与画面投影，结合全图和原尺寸局部。看不清不能PASS，一图多格必FAIL；返修同时检查已正确服饰保留，不新增自动轮次。
 
@@ -18,7 +15,7 @@ description: Review actual comic images against approved evidence, preserve trut
 
 首次读共享[规则归属](../vertical-comic-preproduction/references/rule-ownership.md)，本阶段读[图片审查](../vertical-comic-preproduction/references/stage-image-review.md)、[参考连续性](../vertical-comic-preproduction/references/reference-continuity.md)及[具体视觉证据](../vertical-comic-preproduction/references/visual-evidence.md)。通用标准引用真实MEM，项目判据来自当前批准镜头，不在验收时改判据迁就图片。
 
-新任务按[整话异步](../vertical-comic-preproduction/references/episode-async.md)返图即审、滚动修复，默认无固定半话C。旧RV使用原冻结合同；分工制作先读[双电脑交接](../vertical-comic-preproduction/references/split-production.md)，第一半话确认后才提交后半话。历史图须保留实际生成输入、原图与真实QA，不用当前prompt冒充旧输入。
+新任务按[整话异步](../vertical-comic-preproduction/references/episode-async.md)返图即审、滚动修复，默认无固定半话C。旧RV使用原冻结合同；分工制作先读[双电脑交接](../vertical-comic-preproduction/references/split-production.md)，新版按整话就绪范围生产；旧包按原冻结窗口恢复。历史图须保留实际生成输入、原图与真实QA，不用当前prompt冒充旧输入。
 
 1. 打开实际原图、批准参考及必要真实前序图。用make_generation_qa.py组织inspection_plan，一次观察分别填写原六项、style_review及命中memory_review；模板和技术PASS不是视觉结论。
 2. 先在全图逐人物数可见掌/腕/袖口并追溯所属身体，核对承托、接触对象/部位/阶段及场景世界布局，再看身份、服饰配饰、表达和画风。局部接触正确不能抵消全图多手。换机位可改屏幕左右，不能改真实座位、门窗或道具；合法透视和遮挡不是错误。
@@ -30,7 +27,10 @@ description: Review actual comic images against approved evidence, preserve trut
 
 新运行按生产决定合同运行deliver及panel_delivery，复制准确采用版本，保存完整源序索引、四种交付结论、六列问题表、真实决定及审核依据；校验原图与派生图来源、真实尺寸/比例、全话比例分布及ZIP计数/CRC。合格图可提前准备交付文件，最后只补整话/跨话检查，不重绘。阶段进度和必要通知按[停点进度](../vertical-comic-preproduction/references/review-progress.md)，不把待确认称作最终验收。
 
-
 完整生产任务按[完整交付请求](../vertical-comic-preproduction/references/grouped-review.md#完整交付请求)收敛：逐图检查和真实决定照常完成，授权内审查由执行者闭环；合格图本地归集，全部指定话/格通过完整交接门禁后交一份最终ZIP；准确区分加工材料交齐与全部图片视觉合格。用户未要求时不先交少量图片阶段包，不用“已生成”代替“已验收”。
 
 返图按[前期收敛的检查目标](../vertical-comic-preproduction/references/final-input-semantics.md#前期收敛按包执行v2)审核：inspection_plan显示对应规则约束、配饰身体锚点与本镜头可见数量，分别写回原QA。原图观察不能被前期PASS替代；返修后同时核对已正确配饰及遮挡没有被改变。
+
+局部结构返修按[坐标引导返修](../vertical-comic-preproduction/references/coordinate-repair.md)在原问题记录标明局部/整体空间/未确定范围；不增加独立看图轮次。返回后原repair_comparison逐坐标目标实审，整主体复核覆盖人、动物和物体，局部改善不代表全图合格。
+
+空间相关格沿已选关系和实际修复目标检查；按[二轮分流](../vertical-comic-preproduction/references/execution-quality.md#建筑与视角畸形的二轮分流)记录范围及原QA证据。局部改善不等于整体通过，未见连接不推定正确；修后核对核心线索、批准光线和此前正确内容。

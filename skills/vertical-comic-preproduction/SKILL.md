@@ -7,16 +7,13 @@ description: Coordinate first-batch per-panel comic production for further human
 
 **五类短指令**：用户要求条漫Skill“更新”“初次配置”“前期制作与交接”“接包生图与完整交付”或“提炼指定提示词到用户增补”时，先读[内置使用模板](references/user-prompts.md)的对应章节并执行，不要求引用外部Markdown。此入口采用所选模板的main预览更新、内部审查及4小时默认值，用户明确覆盖时按其要求；仅操作所选职责，配置不启动生产、用户增补不主动选材。
 
-所有阶段启动与恢复即执行[阶段与交付进度](references/review-progress.md)：总控汇报阶段、到本职责ZIP的百分比、进行事项、阻塞与下一步；正常制作每10分钟、仅服务等待每15分钟，重要变化立即报。显示独立于人工停点和少询问委托，子agent上报事实由总控合并；不为通知重跑检查、取消在途请求或改预算。阶段进度只能中途汇报；任务未完成且仍有可执行工作或子agent运行时，总控继续推进/等待并收敛产物，不能发送最终答复结束轮次，详见上述进度规则的“总控持续执行与子任务收敛”。
+阶段开始时按[规则归属](references/rule-ownership.md)读取共同规则与本阶段合同；授权和进度沿用该页入口，同一运行不重复加载未变内容。新制作按[前期提速](references/preparation-efficiency.md)先贯通代表格，再用[唯一主表](references/draft-authoring.md)增量派生。接包直接使用已审输入。
 
-用户后续明确取消当前人工停点时，按[最新委托更新规则](references/grouped-review.md#后续指令取消人工停点)更新当前运行授权；整体A也可由执行者内部审查，通过即继续，不因最初保留亲审而再次等待。
+**接包优先**：用户提供正式ZIP或完整解压包根目录时，直接执行[免外部配置接包](references/quick-start.md#接包生产免外部配置)，优先于首次书籍配置和下文新运行创作步骤。书名、话号、格数、脚本依据和资产从已验证包内读取；不询问外部脚本/资产，不创建本书profile，不调用prepare，不重建主表或重做A/B。缺件只报告包内准确缺项，在现有授权内闭环。
 
-用户要求冲突按脚本处理或已选择脚本时，优先执行[脚本优先与补充状态免重复亲审](references/grouped-review.md#脚本优先与补充状态免重复亲审)：自动补必要状态、内部审图并继续，不再次裁决或提交补充候选亲审。
-
-用户已明确委托前期“仅在无法消解的剧本与资产冲突时询问”时，优先执行[前期最少询问规则](references/grouped-review.md#前期仅询问无法消解的剧本资产冲突)：A、B、生图包与导出由执行者审核并记录决定，不再请求逐项确认；该委托不自动扩大到正文生产。
+用户提出累计运行时限时，先执行[有效运行计时](references/runtime-clock.md)：新职责默认14400秒，人工暂停/明确等用户不计时；安装使用稳定独立环境；启动时通过可信Hook回执自动绑定当前会话，使用者不填session_id。缺回执须明确报错，不能把未绑定计时当作可用；Hook须获宿主信任。恢复先核实旧任务再续计，普通进度询问不恢复；不能仅凭提示词或后台计时宣称已自动扣除暂停。旧冻结入口每次实际提交前检查安装版计时入口。
 
 本技能负责供人工继续加工的第一批独立逐格图片。新运行先读[生产决定与阶段交接](references/production-decisions.md)：沿用真实审核，逐问题分三类，按影响/成本决定一次合并修复、重生或留人工；采用版本与原QA绑定，交付附简明问题表。旧RV按冻结合同，不热替换工具或规则。
-
 
 新整话同时执行[服装配饰定位与单画面](references/appearance-and-single-frame.md)：appearance_lock_v1固定当前衣装、配饰归属和身体锚点，single_frame_v1禁止一图双格。源稿多画面只选一幅绘制，原文/格序保留，未选内容不进实际prompt；A/B、实际参考、原QA及返修共用同一依据。新RV默认启用，旧RV按冻结版本，不热升级。
 
@@ -28,9 +25,9 @@ description: Coordinate first-batch per-panel comic production for further human
 
 首次执行先按[短启动的执行环境](references/quick-start.md#执行环境)检查当前Python；Windows使用原生跨平台运行时，不安装fcntl、不修改旧冻结包。
 
-用户首次使用或缺配置时，按[首次配置引导](references/quick-start.md#安装后的首次配置引导)一次收集缺少的书名、脚本、资产和话号，自动校验并生成本书配置；不要求用户预建JSON。已有配置只询问差异。
+仅前期制作的用户首次使用或缺配置时，按[首次配置引导](references/quick-start.md#安装后的首次配置引导)一次收集缺少的书名、脚本、资产和话号，自动校验并生成本书配置；不要求用户预建JSON。已有配置只询问差异。
 
-读[短启动与本书配置](references/quick-start.md)。用户只需脚本、资产、话号及可明确识别的书名，内部默认配置与规则自动解析，不要求填写技术JSON；“前期制作”路由分工准备阶段并停在正文前，“接包生产”接收正式ZIP或其已解压目录。用comic_start.py合并初始化或校验/解压/bind/rehearse步骤，初始化通过不等于源审计或批准通过。
+读[短启动与本书配置](references/quick-start.md)。前期制作用户只需脚本、资产、话号及可明确识别的书名，内部默认配置与规则自动解析，不要求填写技术JSON；“前期制作”路由分工准备阶段并停在正文前，“接包生产”接收正式ZIP或其已解压目录。用comic_start.py合并初始化或校验/解压/bind/rehearse步骤，初始化通过不等于源审计或批准通过。
 
 准备和生产是流程阶段，不要求不同负责人、电脑或会话。正式交付一经接收，当前生图人员负责在同一任务中闭环处理路径、材料、工具、历史账和设计问题：集中列出准确受影响范围并直接询问用户，获批后仅更新和重检该范围。不得要求用户另找前期负责人、返回前期会话或等待外部任务回传。
 
@@ -46,9 +43,9 @@ description: Coordinate first-batch per-panel comic production for further human
 
 - 新任务：按[整话异步](references/episode-async.md)使用episode_preparation_v1、episode_async_v1、scoped_episode_review_v1、comic_execution_v2与incremental_runtime_v2。全话准备、[逐格就绪](references/panel-readiness.md)，B与实际包合并展示并分别记录决定；缺口仅阻塞受影响格及真实依赖。默认无固定半话C。
 - 恢复任务：先从原冻结入口运行staged_workflow.py --check status；按原模式、源序、输入、规则与预算恢复，不静默迁移旧RV。
-- 用户指定分工制作：最终只交一个正式ZIP，交接说明、哈希清单及发布证据内置；接收端可用ZIP路径或其已解压包根目录及可选输出位置启动，旧版sidecar仍兼容。目录校验与发布证据完整时直接接包，不索回原ZIP、不要求重压；接收入口用安装版，生产编译仍用包内冻结工具。读[双电脑交接](references/split-production.md)、[直接交付](references/direct-delivery.md)及[ZIP演练](references/zip-handoff.md)。只提交获批当前半话，第一半话确认后才提交后半；缺技术编译的候选不能当正式可生产包。
+- 用户指定分工制作：最终只交一个正式ZIP，交接说明、哈希清单及发布证据内置；接收端可用ZIP路径或其已解压包根目录及可选输出位置启动，旧版sidecar仍兼容。目录校验与发布证据完整时直接接包，不索回原ZIP、不要求重压；接收入口用安装版，生产编译仍用包内冻结工具。读[双电脑交接](references/split-production.md)、[直接交付](references/direct-delivery.md)及[ZIP演练](references/zip-handoff.md)。新包统一整话就绪调度，只有真实依赖及用户指定审核点等待；缺技术编译的候选不能当正式可生产包。
 
-核对准确书话、源脚本、真实格数及源序、资产、批准画风和输出RV，不按估计格数初始化。配置存在时读[使用配置](references/usage-configuration.md)，新任务用init_preproduction.py创建未批准模板。
+接包只核对包内书话、原文、源序、资产、画风和本地输出，历史配置路径不作为生产输入；不调用usage_config.read_config。前期制作核对准确书话、源脚本、真实格数及源序、资产、批准画风和输出RV，不按估计格数初始化。前期配置存在时读[使用配置](references/usage-configuration.md)，新任务用init_preproduction.py创建未批准模板。
 
 ## 阶段职责
 
@@ -82,5 +79,6 @@ A由[视觉资产](../vertical-comic-visual-assets/SKILL.md)维护身份、衣�
 
 新整话按[前期输入收敛](references/final-input-semantics.md#前期收敛按包执行v2)组织：前期逐格完成原稿/资产、连续性、规则与完整prompt审查；生产按已审包执行，返图按包内目标做真实QA。人物配饰固定在角色自身身体锚点，机位投影和可见数量另行确定。
 
-
 微信发送交接包时执行[无损去重与分卷运输](references/handoff-transport.md)：正式发布后导出，完整恢复验证后发送全部交付文件；接收入口自动识别。
+
+新相关格按[空间输入收敛](references/final-input-semantics.md#空间输入收敛)选择MEM-003/006/009并绑定当前投影，首轮空间失败按[二轮分流](references/execution-quality.md#建筑与视角畸形的二轮分流)执行MEM-004；普通格和旧冻结运行保持原路径。

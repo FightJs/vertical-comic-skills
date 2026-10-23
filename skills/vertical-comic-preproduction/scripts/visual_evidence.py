@@ -327,6 +327,8 @@ def panel_errors(panel, context=None, *, prompt=False):
         errors.append('须说明本格空间检查适用性和依据')
     if panel.get('framing', {}).get('background_level') != 'minimal' and spatial != 'REQUIRED':
         errors.append('有背景空间的批准镜头不能豁免空间检查')
+    from spatial_contract import selection_errors
+    errors.extend(selection_errors(panel, context))
     layout = context.get('layout')
     if spatial == 'REQUIRED' and not isinstance(layout, dict): errors.append('缺适用批准布局')
     blocking, visibility = ev.get('blocking'), ev.get('visibility')
@@ -398,12 +400,19 @@ def panel_errors(panel, context=None, *, prompt=False):
 
 def execution_block(panel, context=None):
     ev = panel['visual_evidence']; context = context or panel['visual_evidence_context']
+    from spatial_contract import selection_errors
+    problems = selection_errors(panel, context)
+    if problems: raise ValueError(';'.join(problems))
     lines = ['本格可见关系与细节']
     framing = framing_execution_block(panel, context)
     if framing:
         lines.append(framing)
     if ev['spatial_applicability'] == 'REQUIRED':
         for row in (context.get('layout') or {}).get('relations', []):
+            if 'selected_relation_ids' in ev:
+                if row['id'] in ev['selected_relation_ids']:
+                    lines.append(row['expected'])
+                continue  # A selected world relation does not force both ends into frame.
             if panel.get('input_quality_policy') == 'execution_quality_v1':
                 needed = set((ev.get('scene_view') or {}).get('required_anchors', [])) | set(ev['blocking'])
                 if not {row['subject'], row['object']} <= needed: continue
@@ -568,8 +577,14 @@ def review_template(panel):
                               'observed': '', 'view': None} for c in ev['checks']],
             'continuity_comparisons': [], 'detail_visibility_observations': {},
             'visibility_observations': {}}
-    if panel.get('operation')=='repair' and panel.get('repair_focus',{}).get('structural_change'):
+    if panel.get('operation')=='repair' and (panel.get('repair_focus',{}).get('structural_change') or panel.get('repair_focus',{}).get('spatial_issue_checks')):
         result['repair_comparison']={'whole_subject_recheck':{'status':'UNREVIEWED','observed':''}}
+    from coordinate_repair import spec as coordinate_spec
+    coordinate = coordinate_spec(panel)
+    if isinstance(coordinate, dict):
+        comparison = result.setdefault('repair_comparison', {})
+        comparison['coordinate_observations'] = {key: {'status': 'UNREVIEWED', 'observed': ''}
+            for key in coordinate.get('expected_observations', {})}
     return result
 
 
@@ -659,10 +674,12 @@ def review_errors(panel, item, *, require_pass=True, image_size=None):
                 repair.get('clarity_status') not in verdicts or not text(repair.get('observed')) or
                 repair.get('preserved_features') != source.get('preserved_features')):
             errors.append('返修缺与所选清晰底图的细节/已完成修正保留比较')
-        if panel.get('repair_focus',{}).get('structural_change'):
+        if (panel.get('repair_focus',{}).get('structural_change') or panel.get('repair_focus',{}).get('spatial_issue_checks')):
             whole=repair.get('whole_subject_recheck',{})
             if whole.get('status') not in verdicts or not text(whole.get('observed')):
-                errors.append('结构返修须重数全人物肢体并核对旧结构移除、归属连接和承托；局部正确不能放行')
+                errors.append('结构返修须复核整个主体（人、动物或物体）的数量、旧结构移除、归属连接和承托；局部正确不能放行')
+        from coordinate_repair import review_errors as coordinate_review_errors
+        errors.extend(coordinate_review_errors(panel, repair, require_pass))
         regions=source.get('preservation_regions')
         if regions is not None:
             observed=repair.get('preserved_observations')
@@ -734,6 +751,12 @@ def repair_basis(state, root, panel, basis, records):
                  if c.get('attempt_id') == source['source_attempt_id'] and
                  c.get('output', {}).get('sha256') == source['image_sha256'])
     original=checked_file(Path(root), match['output'])
+    from coordinate_repair import spec as coordinate_spec, errors as coordinate_errors
+    if coordinate_spec(panel) is not None:
+        from PIL import Image
+        with Image.open(original) as im:
+            coordinate_problems = coordinate_errors(panel, panel.get('prompt', ''), im.size)
+        if coordinate_problems: raise ValueError(';'.join(coordinate_problems))
     if source.get('preservation_regions'):
         from PIL import Image
         from reference_atlas import rect

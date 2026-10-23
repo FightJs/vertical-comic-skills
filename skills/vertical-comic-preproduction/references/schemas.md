@@ -1,5 +1,7 @@
 # 结构化记录字段
 
+新运行的主表、增量派生、共用规则/图集复用与少冻结执行见[第二批草稿提速](draft-authoring.md)。派生文件不授予批准或生产权限。
+
 ## 本次任务身份
 
 新整话task_context字段及交接历史归属唯一合同见[任务来源](task-origin.md)。同一批各话使用相同task_id，接包绑定不变；独立重做新建任务。visual_basis.asset_tasks只记录本批源稿实际需求与补充决定，字段及工具见[资产流程](stage-asset-production.md#本批补充参考与资产入库)，不另建权威资产库。旧冻结RV不补字段。
@@ -203,3 +205,13 @@ phases使用现有review_policy.PHASES精确枚举，不能填通配符。执行
 ## 第一批生产决定与采用版本
 
 新运行production_policy=first_batch_production_v1；字段、短记录及命令以[production-decisions.md](production-decisions.md)为正式来源。panels原行增加production_decisions（每attempt的不可变决定文件引用）及adoption（采用attempt、决定引用、原因），不改status/output/attempt_history。根delivery_review绑定全源序交接索引。四种阶段交付结论不替代原QA、用户批准或下游参考资格。
+
+## 按格空间关系与投影绑定（选择式扩展）
+
+仅新制作或明确迁移的相关格在`visual_evidence`声明`selected_relation_ids`；不存在此字段的冻结旧格保持原合同。它是当前`scene_layouts`中关系ID的不重复列表，不复制正文。空间相关但确无固定关系（例如仅接触表面）可用空列表并说明原spatial_reason。非空必须spatial_applicability=REQUIRED；每个ID至少被一个原`checks`中kind=space的`relation_ids`引用，具体expected说明可观察目标及观察边界。选择实体关系不要求两端都入画；未知关系不填写成已确认依据。
+
+此扩展启用后，每个可见细节的`detail_visibility[ID].projection.basis_sha256`绑定`spatial_contract.projection_signature(panel)`，覆盖当前机位、取景、人物设计、blocking、visibility、scene_view及当前布局/视图依据。执行者实际核对投影后记录签名；机位/站位/裁切变化必须重核，编译器不自动补签。`screen_position`只描述该细节的投影与遮挡，不能夹带人物旧站位。世界位置仅由当前blocking负责。
+
+原生产决定`issues`的空间项使用`spatial_kind`：rigid_edge、projection_conflict、layout_connection、support_invention、framing_pressure、uncertain；沿用repair_scope=local_structure/global_space/uncertain和原QA引用。需要修复时`spatial_assessment`含evidence、target_basis、input_evidence、input_status（no_conflict_signal/resolved，resolved另含resolution_evidence）；局部直边修复还要求layout_status与camera_status均为confirmed且证据具体。此记录不授予批准或证明像素正确。
+
+实际返修包`repair_focus.spatial_issue_checks`为问题ID到原checks ID列表的映射，只覆盖本轮fix_now/opportunistic中的空间问题。每项指向space/contact具体判据；输入门禁核对决定与实际包一致。沿原visual_evidence_review观察与全图复查，不再建独立空间QA或新人工停点。

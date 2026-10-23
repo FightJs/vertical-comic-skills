@@ -52,7 +52,7 @@ python <冻结scripts>/production_runtime.py --state <本话状态> --action dec
 
 ## 人工交互
 
-第三类、明确路线的第二类、授权内纠偏、已批准技术操作及修后轻微残留，不逐格提问。needs_user仅用于tradeoff/design_change/additional_budget/user_reserved，另写recommendation。使用production_runtime --action production-questions只筛选真实待决项，输出图、格号、一句话问题、推荐动作和内容绑定event_id；用--pending读取原合并审查的event_id/status待答记录去重，已有问题返回KEEP_PENDING。没有待决项返回NO_PRODUCTION_QUESTION，不新增审批阶段。原A/B、用户保留高风险、分工半话确认和D不变。
+第三类、明确路线的第二类、授权内纠偏、已批准技术操作及修后轻微残留，不逐格提问。needs_user仅用于tradeoff/design_change/additional_budget/user_reserved，另写recommendation。使用production_runtime --action production-questions只筛选真实待决项，输出图、格号、一句话问题、推荐动作和内容绑定event_id；用--pending读取原合并审查的event_id/status待答记录去重，已有问题返回KEEP_PENDING。没有待决项返回NO_PRODUCTION_QUESTION，不新增审批阶段。原A/B、用户保留高风险和D不变；新分工没有默认半话确认，旧包仍按原冻结窗口。
 
 ## 第一批交接
 
@@ -78,3 +78,7 @@ python <scripts>/panel_delivery.py --state <本话状态> --review <本话相对
 沿用background-treatment及final-input-semantics：建立场景、出入/位置变化和环境线索保必要实景；已建立空间的表情反应近景优先评估场景同色留白/简化。保留承托接触遮挡及剧情物；色调光向连续，不扩大取景或缩小人物制造无效留白。开批一次核对裁切与衣装/垂手/道具、机位可见性、道具状态、参考姿势干扰和首轮/返修五路径预算；提前准备忠实图集，不删批准参考。
 
 先已有材料只读回放和隔离测试，覆盖三类决定、重生、止损、旧图采用、局部等待、UNKNOWN、预算和全源序。代码通过不代表实图质量或总效率提升。提问、调用、重复失败和等待按真实事件统计；没有观测留未知，不把决定数冒充实际调用数。
+
+## 坐标局部编辑
+
+需要局部结构修复时按[坐标引导返修](coordinate-repair.md)选择coordinate_local_edit；在原issues写repair_scope，沿原观察说明适用性与输入疑点。整体空间错误另行处理，局部可修不降低原category。

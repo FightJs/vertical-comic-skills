@@ -30,8 +30,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/SKILL.md",
-      "sha256": "8163a3e49e1ed958873d3bef5c96851ece4c2914906a8410d3715e1d9f95fd49",
-      "bytes": 12679
+      "sha256": "01129f5d406ec82295029940d277a9d4b9a930480d3bec9141b67bd3910176c6",
+      "bytes": 13259
     },
     {
       "path": "skills/vertical-comic-preproduction/agents/openai.yaml",
@@ -1242,6 +1242,11 @@
       "path": "memory/记忆索引.json",
       "sha256": "ad4921c71a989e65cfb014775113d869a01bdbcf3fa4bed8f4bc0a3c34b6d3c6",
       "bytes": 24435
+    },
+    {
+      "path": "skills/vertical-comic-preproduction/references/user-prompts.md",
+      "sha256": "ebd5f755c31b4712e901e0498434f71e6f1e89890025bb0189f117098300c7d8",
+      "bytes": 8914
     }
   ]
 }

@@ -28,6 +28,9 @@ def main():
             case.test_direct_bound_run_real_full_episode_gates_and_conditional_release()
             args.path.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(case.base / '正式交接包.zip', args.path)
+            from handoff_transport import export
+            export(args.path,args.path.parent/'transport-single')
+            export(args.path,args.path.parent/'transport-volumes',max_file_bytes=65536)
         finally:
             case.doCleanups()
         print(json.dumps({'status': 'SYNTHETIC_EXCHANGE_READY', 'image_calls': 0}))
@@ -39,6 +42,11 @@ def main():
             result = receive(args.path, output=Path(tmp) / '本地运行')
             if result['status'] != 'READY_FOR_PRODUCTION_ROUTING':
                 raise ValueError(json.dumps(result, ensure_ascii=False))
+            for mode in ['transport-single','transport-volumes']:
+                entry=next((args.path.parent/mode).glob('*.zip'))
+                transported=receive(entry,output=Path(tmp)/mode)
+                if transported['status']!='READY_FOR_PRODUCTION_ROUTING':
+                    raise ValueError(json.dumps(transported,ensure_ascii=False))
             originals=extract(args.path,Path(tmp)/'提前解压')['root']
             directory=receive(package_root=originals,output=Path(tmp)/'目录接包')
             if directory['status'] != 'READY_FOR_PRODUCTION_ROUTING':

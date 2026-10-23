@@ -559,7 +559,7 @@ def main():
     q=sub.add_parser('pack');q.add_argument('--root',required=True);q.add_argument('--output',required=True)
     q=sub.add_parser('extract');q.add_argument('--zip',required=True);q.add_argument('--destination',required=True);q.add_argument('--reserve-bytes',type=int,default=256*1024*1024);q.add_argument('--sha256-file')
     q=sub.add_parser('rehearse');q.add_argument('--zip',help='省略时核验已解压正式目录及内置发布证据');q.add_argument('--package-root',required=True);q.add_argument('--run-root',required=True);q.add_argument('--run-index',required=True);q.add_argument('--report-dir',required=True);q.add_argument('--timeout',type=int,default=180)
-    q=sub.add_parser('release');q.add_argument('--zip',required=True);q.add_argument('--rehearsal-report',required=True);q.add_argument('--approval',required=True);q.add_argument('--output',required=True)
+    q=sub.add_parser('release');q.add_argument('--zip',required=True);q.add_argument('--rehearsal-report',required=True);q.add_argument('--approval',required=True);q.add_argument('--output',required=True);q.add_argument('--transport-output',help='正式发布后自动导出微信运输包到全新目录')
     a=p.parse_args()
     try:
         if a.action=='bind':
@@ -573,7 +573,11 @@ def main():
             if a.reserve_bytes<0:raise ValueError('空间预留不得为负数')
             r=extract(a.zip,a.destination,reserve_bytes=a.reserve_bytes,checksum_file=a.sha256_file)
         elif a.action=='rehearse':r=rehearse(a.zip,a.package_root,a.run_root,a.run_index,a.report_dir,timeout=a.timeout)
-        else:r=release(a.zip,a.rehearsal_report,a.approval,a.output)
+        else:
+            r=release(a.zip,a.rehearsal_report,a.approval,a.output)
+            if a.transport_output:
+                from handoff_transport import export
+                r['transport']=export(a.output,a.transport_output)
         print(json.dumps(r,ensure_ascii=False));return 1 if r['status']=='HOLD' else 0
     except (OSError,ValueError,KeyError,TypeError,zipfile.BadZipFile) as exc:
         print(json.dumps({'status':'HOLD','errors':[str(exc)]},ensure_ascii=False));return 1

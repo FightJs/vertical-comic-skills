@@ -334,7 +334,7 @@ def show(directory, *, now=None, acknowledge=False, force=False):
     return {'status':'REPORT_DUE','message':format_summary(snapshot),'percent':snapshot['percent']}
 
 
-def complete(directory, archive, *, _coordination_checked=False):
+def complete(directory, archive, *, _coordination_checked=False, transport_receipt=None):
     """Explicit final check once, never from a heartbeat. No permission is granted."""
     import zipfile
     directory = Path(directory)
@@ -383,7 +383,12 @@ def complete(directory, archive, *, _coordination_checked=False):
                     data = z.read((Path(name).parent/relative).as_posix())
                     if hashlib.sha256(data).hexdigest()!=row.get('image',{}).get('sha256') or ref.get('sha256')!=row['image']['sha256']: raise ValueError('ZIP缺采用原图或哈希错误')
                 observe_runtime(directory,sp,'deliver',result)
+    transport_files=[]
+    if transport_receipt:
+        from handoff_transport import check_receipt
+        transport_files=check_receipt(transport_receipt,archive)
     baseline = refresh(directory)
+    baseline['files'].update({p:stat(p) for p in transport_files})
     atomic_json(directory/'delivered.json', {'zip':str(archive),'stat':stat(archive),
                 'dependencies':baseline['files'],'states':{p:fingerprint(read(p)) for p in task['states']}})
     result = refresh(directory,activity='完整ZIP已验证并形成交付',next_action='交付用户')
@@ -401,10 +406,11 @@ def main():
     p.add_argument('--stage',choices=tuple(LABELS)); p.add_argument('--blockers',help='准确额外阻塞的JSON数组文件；仅显示，不改变原HOLD')
     p.add_argument('--activity'); p.add_argument('--next'); p.add_argument('--wait-kind',choices=('NONE','SERVICE','DEPENDENCY','HUMAN','ENDED'),default='NONE')
     p.add_argument('--ack',action='store_true',help='仅在总控实际发出消息后确认送达'); p.add_argument('--force',action='store_true'); p.add_argument('--zip')
+    p.add_argument('--transport-receipt')
     a = p.parse_args()
     if a.action=='init': value = initialize(a.directory,a.role,a.state or [])
     elif a.action=='refresh': value = refresh(a.directory,activity=a.activity,next_action=a.next,wait_kind=a.wait_kind,stage=a.stage,blockers=read(a.blockers) if a.blockers else None)
-    elif a.action=='complete': value = complete(a.directory,a.zip)
+    elif a.action=='complete': value = complete(a.directory,a.zip,transport_receipt=a.transport_receipt)
     else: value = show(a.directory,acknowledge=a.ack,force=a.force)
     print(json.dumps(value,ensure_ascii=False,indent=2))
 

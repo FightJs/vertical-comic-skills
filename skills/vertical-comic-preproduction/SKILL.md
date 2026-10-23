@@ -79,3 +79,6 @@ A由[视觉资产](../vertical-comic-visual-assets/SKILL.md)维护身份、衣�
 派单短锁是可选运行能力，默认关闭。仅在需要显式准入、保存器接线或恢复该协议运行时读[一致性协议](references/dispatch-consistency.md)；普通RV继续原入口，不自动迁移或热更新。
 
 新整话按[前期输入收敛](references/final-input-semantics.md#前期收敛按包执行v2)组织：前期逐格完成原稿/资产、连续性、规则与完整prompt审查；生产按已审包执行，返图按包内目标做真实QA。人物配饰固定在角色自身身体锚点，机位投影和可见数量另行确定。
+
+
+微信发送交接包时执行[无损去重与分卷运输](references/handoff-transport.md)：正式发布后导出，完整恢复验证后发送全部交付文件；接收入口自动识别。

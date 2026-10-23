@@ -84,6 +84,20 @@ def prepare(project,book,ids,*,script=None,assets=None,output=None,workers=None,
 def receive(zip_path=None,*,package_root=None,output=None):
     if (zip_path is None)==(package_root is None):raise ValueError('接包提供ZIP或已解压包根目录其中一个')
     require_ready()
+    if zip_path is not None:
+        from handoff_transport import identify, restore
+        if identify(zip_path):
+            import tempfile
+            base=Path(output).resolve() if output else Path(zip_path).resolve().parent/'接包生产'
+            base.mkdir(parents=True,exist_ok=True)
+            holder=Path(tempfile.mkdtemp(prefix='收到运输原件_',dir=base))
+            try:
+                restored=restore(zip_path,holder/'完整原件')
+            except Exception:
+                import shutil
+                shutil.rmtree(holder)
+                raise
+            return receive(package_root=restored['root'],output=base)
     if package_root is not None:
         checked=check_delivery_directory(package_root);originals=Path(checked['root']);archive=None
         base=Path(output).resolve() if output else originals.parent/'接包生产'

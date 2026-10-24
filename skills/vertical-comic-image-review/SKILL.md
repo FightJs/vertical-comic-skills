@@ -27,10 +27,12 @@ description: Review actual comic images against approved evidence, preserve trut
 
 新运行按生产决定合同运行deliver及panel_delivery，复制准确采用版本，保存完整源序索引、四种交付结论、六列问题表、真实决定及审核依据；校验原图与派生图来源、真实尺寸/比例、全话比例分布及ZIP计数/CRC。合格图可提前准备交付文件，最后只补整话/跨话检查，不重绘。阶段进度和必要通知按[停点进度](../vertical-comic-preproduction/references/review-progress.md)，不把待确认称作最终验收。
 
-完整生产任务按[完整交付请求](../vertical-comic-preproduction/references/grouped-review.md#完整交付请求)收敛：逐图检查和真实决定照常完成，授权内审查由执行者闭环；合格图本地归集，全部指定话/格通过完整交接门禁后交一份最终ZIP；准确区分加工材料交齐与全部图片视觉合格。用户未要求时不先交少量图片阶段包，不用“已生成”代替“已验收”。
+完整生产任务按[完整交付请求](../vertical-comic-preproduction/references/grouped-review.md#完整交付请求)收敛：逐图检查和真实决定照常完成，授权内审查由执行者闭环；合格图本地归集，全部指定话/格通过完整交接门禁后交完整成品ZIP（不设容量上限，附逐图问题CSV）；准确区分加工材料交齐与全部图片视觉合格。用户未要求时不先交少量图片阶段包，不用“已生成”代替“已验收”。
 
 返图按[前期收敛的检查目标](../vertical-comic-preproduction/references/final-input-semantics.md#前期收敛按包执行v2)审核：inspection_plan显示对应规则约束、配饰身体锚点与本镜头可见数量，分别写回原QA。原图观察不能被前期PASS替代；返修后同时核对已正确配饰及遮挡没有被改变。
 
 局部结构返修按[坐标引导返修](../vertical-comic-preproduction/references/coordinate-repair.md)在原问题记录标明局部/整体空间/未确定范围；不增加独立看图轮次。返回后原repair_comparison逐坐标目标实审，整主体复核覆盖人、动物和物体，局部改善不代表全图合格。
 
 空间相关格沿已选关系和实际修复目标检查；按[二轮分流](../vertical-comic-preproduction/references/execution-quality.md#建筑与视角畸形的二轮分流)记录范围及原QA证据。局部改善不等于整体通过，未见连接不推定正确；修后核对核心线索、批准光线和此前正确内容。
+
+逐格成品的最终ZIP还须执行[完整交付与容量门禁](../vertical-comic-preproduction/references/delivery-contract.md)：按准确采用图封装普通ZIP，保持图片原字节；成品不设1GB容量门禁、不因体积自动分包；ZIP根目录必须包含图片问题总览.csv和问题明细.csv。只有交付验收.json、CSV对应校验和原内容门禁同时通过才结束；打包不降质、不追加生图、不改预算。

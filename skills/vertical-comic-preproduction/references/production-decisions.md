@@ -56,7 +56,7 @@ python <冻结scripts>/production_runtime.py --state <本话状态> --action dec
 
 ## 第一批交接
 
-完整交付仍覆盖本次全部指定话/格并最终交一份ZIP，不以少量图片阶段包结束任务。四种结果独立于审核：DELIVERABLE可交付；MANUAL_RETOUCH可交付人工后修；MANUAL_PRIORITY重大问题未解决、仅供加工；INCOMPLETE缺图、未知、未审、未完成处理或必要比较。重大问题不能自动标成可用，未核实疑点不让人工据此误改。
+完整成品交付覆盖本次全部指定话/格，最终ZIP不设容量门禁，并包含两份逐图问题CSV，不以少量图片阶段包结束任务。四种结果独立于审核：DELIVERABLE可交付；MANUAL_RETOUCH可交付人工后修；MANUAL_PRIORITY重大问题未解决、仅供加工；INCOMPLETE缺图、未知、未审、未完成处理或必要比较。重大问题不能自动标成可用，未核实疑点不让人工据此误改。
 
 采用原batch_review_v1及cross_episode_review_v1比较记录，准确绑定采用图；允许其真实FAIL，不能改成PASS。源稿、批准、引用哈希、真实执行、完整观察、历史/预算不符仍阻止导出。缺必要比较记未完成。INCOMPLETE保留在诊断索引，不通过完整deliver/默认导出；仅用户明确请求部分材料时，准确保存D/委托决定并以panel_delivery.py --partial --export显式导出，结果仍为不完整，保留缺口与原任务；即使已有D决定也不把缺图、UNKNOWN、未审或未决问题变成完成。MANUAL_PRIORITY可作为准确标注的加工材料交接，但不计视觉合格。只把新的阶段交接接入deliver，原VISUAL_PASS及下游参考门禁不放宽。
 
@@ -82,3 +82,7 @@ python <scripts>/panel_delivery.py --state <本话状态> --review <本话相对
 ## 坐标局部编辑
 
 需要局部结构修复时按[坐标引导返修](coordinate-repair.md)选择coordinate_local_edit；在原issues写repair_scope，沿原观察说明适用性与输入疑点。整体空间错误另行处理，局部可修不降低原category。
+
+## 成品问题CSV
+
+直接复用上述采用版本索引，不重新判图。每话目录及最终ZIP根目录导出图片问题总览.csv（每格一行，含无遗留问题的格）和问题明细.csv（每个遗留问题一行，重大优先）。字段与编码见[交付合同](delivery-contract.md)。主表保留源序，采用旧图时使用旧图QA和遗留问题；已解决问题留历史，未核实项明确标为疑点，不把UNKNOWN或未完成标成无问题。CSV是索引的确定性派生，不增加用户批准节点或生图调用。

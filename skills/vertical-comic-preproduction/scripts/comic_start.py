@@ -54,7 +54,7 @@ def episodes(values):
     if not out or len(set(out))!=len(out):raise ValueError('话号缺失或重复')
     return out
 
-def prepare(project,book,ids,*,script=None,assets=None,output=None,workers=None,request_source=None,reuse_selection=None,runtime_limit_seconds=None,clock_session_id=None):
+def prepare(project,book,ids,*,script=None,assets=None,output=None,workers=None,request_source=None,reuse_selection=None,runtime_limit_seconds=None,clock_session_id=None,delivery_mode='allow_parts',max_file_bytes=900000000):
     project=Path(project).resolve();ids=episodes(ids)
     if not project.is_dir():raise ValueError('项目目录不存在')
     require_ready(probe_root=project)
@@ -92,6 +92,9 @@ def prepare(project,book,ids,*,script=None,assets=None,output=None,workers=None,
     if old is None:
         profile_dir.mkdir(parents=True,exist_ok=True);write(profile,{'policy':'comic_book_profile_v1','book':book,**inputs})
     result={'status':'INITIALIZED_NOT_PRODUCTION_APPROVAL','book':book,'episode_ids':ids,'task_context':task,'run_root':str(run),'config':str(cfg),'profile':str(profile),'image_calls':0,'next':'仅审本次脚本与资产需求；不查无关旧生产账。核对实际格数/格序并按A及B/包审查；模板没有批准'}
+    from delivery_contract import initialize as initialize_delivery
+    result['delivery_identity']=initialize_delivery(run,'preparation',[run/e/'00_输入审计/生产流程.json' for e in ids],
+        package_mode=delivery_mode,max_file_bytes=max_file_bytes,task_id=task['task_id'])
     result.update(start_display(run/'00_显示进度','preparation',[run/e/'00_输入审计/生产流程.json' for e in ids],config=config.get('progress')))
     result.update(clock)
     write(run/'启动摘要.json',result);return result
@@ -130,6 +133,9 @@ def receive(zip_path=None,*,package_root=None,output=None,runtime_limit_seconds=
     bound=bind(originals,target/'本地运行')
     result=rehearse(archive,originals,bound['run_root'],bound['run_index'],target/'接包预检')
     local_index = read(bound['run_index'])
+    from delivery_contract import initialize as initialize_delivery
+    delivery_identity=initialize_delivery(target,'production',[Path(bound['run_root'])/e['state'] for e in local_index['episodes']],
+        package_mode='single_zip')
     progress = start_display(target/'00_显示进度','production',[Path(bound['run_root'])/e['state'] for e in local_index['episodes']],rehearsal=result)
     # A received run is already configured by its verified package, not a new book.
     package_index=read(originals/INDEX)
@@ -144,6 +150,7 @@ def receive(zip_path=None,*,package_root=None,output=None,runtime_limit_seconds=
                             'execution_mode':state.get('execution_mode'),
                             'optimization_policy':state.get('optimization_policy')})
     return {**progress,**clock,'status':'READY_FOR_PRODUCTION_ROUTING' if result['status']=='RELEASE_CANDIDATE' else 'HOLD',
+            'delivery_identity':delivery_identity,
             'input_mode':'package_only_production','external_inputs_required':False,'book_profile_required':False,
             'package_id':package_index['package_id'],'book_id':package_index['book_id'],
             'episode_ids':[e['episode_id'] for e in local_index['episodes']],
@@ -160,6 +167,9 @@ def main():
     p.add_argument('--request-source',help='真实用户原话及source_locator的JSON；程序调用不冒充批准')
     p.add_argument('--reuse-selection',help='用户明确选中的旧成果来源、准确格号与证据引用JSON数组；不自动发现旧任务')
     p=sub.add_parser('receive');source=p.add_mutually_exclusive_group(required=True);source.add_argument('--zip');source.add_argument('--package-root',help='已解压正式交接包根目录，含ZIP文件清单.json');p.add_argument('--output')
+    preparation=sub.choices['prepare']
+    preparation.add_argument('--delivery-mode',choices=['single_zip','allow_parts'],default='allow_parts',help='默认单包优先、超限自动分包；仅用户明确限制单文件时选择single_zip')
+    preparation.add_argument('--max-file-bytes',type=int,default=900000000,help='微信单文件上限，最大900000000字节')
     for command in sub.choices.values():
         command.add_argument('--runtime-limit-seconds', type=int, help='显式启用累计有效运行计时，例如14400；不改变旧RV')
         command.add_argument('--clock-session-id', help='经核实的宿主session_id；需已信任Interrupt Hook')
@@ -168,7 +178,7 @@ def main():
         if a.runtime_limit_seconds is not None:
             from runtime_clock_context import resolve
             resolve(explicit_session=a.clock_session_id)
-        result=prepare(a.project,a.book,a.episodes,script=a.script,assets=a.assets,output=a.output,workers=a.workers,request_source=read(a.request_source) if a.request_source else None,reuse_selection=read(a.reuse_selection) if a.reuse_selection else None,runtime_limit_seconds=a.runtime_limit_seconds,clock_session_id=a.clock_session_id) if a.action=='prepare' else receive(a.zip,package_root=a.package_root,output=a.output,runtime_limit_seconds=a.runtime_limit_seconds,clock_session_id=a.clock_session_id)
+        result=prepare(a.project,a.book,a.episodes,script=a.script,assets=a.assets,output=a.output,workers=a.workers,request_source=read(a.request_source) if a.request_source else None,reuse_selection=read(a.reuse_selection) if a.reuse_selection else None,runtime_limit_seconds=a.runtime_limit_seconds,clock_session_id=a.clock_session_id,delivery_mode=a.delivery_mode,max_file_bytes=a.max_file_bytes) if a.action=='prepare' else receive(a.zip,package_root=a.package_root,output=a.output,runtime_limit_seconds=a.runtime_limit_seconds,clock_session_id=a.clock_session_id)
         print(json.dumps(result,ensure_ascii=False));return int(result['status']=='HOLD')
     except (OSError,ValueError,KeyError,TypeError,zipfile.BadZipFile) as e:print(json.dumps({'status':'HOLD','error':str(e)},ensure_ascii=False));return 1
 if __name__=='__main__':

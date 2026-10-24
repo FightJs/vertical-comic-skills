@@ -61,7 +61,7 @@ class RuntimeClockTests(unittest.TestCase):
         payload=json.dumps({'session_id':'session-real','turn_id':'turn-real','hook_event_name':'Interrupt'})
         env=dict(os.environ,CODEX_HOME=str(home))
         for _ in range(2):
-            subprocess.run([sys.executable,'-B',str(SCRIPTS/'runtime_clock_hook.py')],input=payload,text=True,encoding="utf-8",env=env,check=True,capture_output=True)
+            subprocess.run([sys.executable,'-B',str(SCRIPTS/'runtime_clock_hook.py')],input=payload,text=True,env=env,check=True,capture_output=True)
         first=c.status(directory);second=c.status(directory)
         self.assertEqual(first['state'],'PAUSED');self.assertTrue(first['hook_event_observed'])
         self.assertEqual(first['active_seconds'],second['active_seconds'])
@@ -77,15 +77,15 @@ class RuntimeClockTests(unittest.TestCase):
         (installed/'runtime_clock_hook.py').write_text('# fixture')
         path=home/'hooks.json';original={'description':'keep','hooks':{'Stop':[{'hooks':[{'type':'command','command':'echo keep'}]}]}}
         path.write_text(json.dumps(original))
-        preview=setup(home);self.assertEqual(json.loads(path.read_text(encoding='utf-8')),original)
+        preview=setup(home);self.assertEqual(json.loads(path.read_text()),original)
         first=setup(home,apply=True);second=setup(home,apply=True)
-        self.assertEqual(json.loads(path.read_text(encoding='utf-8'))['hooks']['Stop'],original['hooks']['Stop'])
+        self.assertEqual(json.loads(path.read_text())['hooks']['Stop'],original['hooks']['Stop'])
         self.assertTrue(pathlib.Path(first['backup']).is_file())
         self.assertEqual(second['status'],'CONFIGURED_TRUST_NOT_VERIFIED')
     def test_real_cli_pause_and_query(self):
         d=self.root/'cli'
         def run(*args):
-            return json.loads(subprocess.check_output([sys.executable,'-B',str(SCRIPTS/'runtime_clock.py'),*args,'--directory',str(d)],text=True,encoding="utf-8"))
+            return json.loads(subprocess.check_output([sys.executable,'-B',str(SCRIPTS/'runtime_clock.py'),*args,'--directory',str(d)],text=True))
         run('init','--role','preparation');run('start');v=run('pause');after=run('status')
         self.assertEqual(v['state'],'PAUSED');self.assertEqual(v['active_seconds'],after['active_seconds'])
         self.assertEqual(run('resume')['state'],'RUNNING')

@@ -123,3 +123,5 @@ v2技术来源包括源格映射、上下文、忠实图集、校准第二轮与
 
 
 新整话实际输入必须符合[服饰与单画面](appearance-and-single-frame.md)：每个panel携appearance_policy、frame_policy及frame_plan；当前入画衣装核心与可见细节实际随参考携带并编译进visual_execution_block。原源文保留，但双画面源只绘制已选一幅，不把忽略场面再次拼进prompt。身份/画风等原块不得被新约束块覆盖。
+
+新任务最终交付必须执行[完整交付与容量门禁](delivery-contract.md)：前期交接单ZIP优先、超限自动连续分卷，每文件不超过900000000字节；成品ZIP无容量上限、不因体积自动分包，并必须包含图片问题总览.csv及问题明细.csv。前期内容release之后走publish，成品目录export之后走普通ZIP发布；统一交付验收.json通过后才能finish-check/100%。容量失败只修装配与容器，不重新生图或降质；旧冻结运行不热升级。

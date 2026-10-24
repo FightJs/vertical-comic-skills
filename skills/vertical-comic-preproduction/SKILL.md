@@ -43,7 +43,7 @@ description: Coordinate first-batch per-panel comic production for further human
 
 - 新任务：按[整话异步](references/episode-async.md)使用episode_preparation_v1、episode_async_v1、scoped_episode_review_v1、comic_execution_v2与incremental_runtime_v2。全话准备、[逐格就绪](references/panel-readiness.md)，B与实际包合并展示并分别记录决定；缺口仅阻塞受影响格及真实依赖。默认无固定半话C。
 - 恢复任务：先从原冻结入口运行staged_workflow.py --check status；按原模式、源序、输入、规则与预算恢复，不静默迁移旧RV。
-- 用户指定分工制作：最终只交一个正式ZIP，交接说明、哈希清单及发布证据内置；接收端可用ZIP路径或其已解压包根目录及可选输出位置启动，旧版sidecar仍兼容。目录校验与发布证据完整时直接接包，不索回原ZIP、不要求重压；接收入口用安装版，生产编译仍用包内冻结工具。读[双电脑交接](references/split-production.md)、[直接交付](references/direct-delivery.md)及[ZIP演练](references/zip-handoff.md)。新包统一整话就绪调度，只有真实依赖及用户指定审核点等待；缺技术编译的候选不能当正式可生产包。
+- 用户指定分工制作：最终交付一个完整集合，单ZIP优先、超限自动连续分包，交接说明、哈希清单及发布证据内置；接收端可用ZIP路径或其已解压包根目录及可选输出位置启动，旧版sidecar仍兼容。目录校验与发布证据完整时直接接包，不索回原ZIP、不要求重压；接收入口用安装版，生产编译仍用包内冻结工具。读[双电脑交接](references/split-production.md)、[直接交付](references/direct-delivery.md)及[ZIP演练](references/zip-handoff.md)。新包统一整话就绪调度，只有真实依赖及用户指定审核点等待；缺技术编译的候选不能当正式可生产包。
 
 接包只核对包内书话、原文、源序、资产、画风和本地输出，历史配置路径不作为生产输入；不调用usage_config.read_config。前期制作核对准确书话、源脚本、真实格数及源序、资产、批准画风和输出RV，不按估计格数初始化。前期配置存在时读[使用配置](references/usage-configuration.md)，新任务用init_preproduction.py创建未批准模板。
 
@@ -61,7 +61,7 @@ A由[视觉资产](../vertical-comic-visual-assets/SKILL.md)维护身份、衣�
 
 ## 授权、修复与完成
 
-用户要求直接完成整批时，先读[完整交付请求](references/grouped-review.md#完整交付请求)：以指定全部源格的一份最终ZIP为结束条件，合格图本地归集，默认不交少量图片阶段包代替完整成果。启动时集中处理必要授权与兼容缺口，生产中在适用委托内自行决定并登记，局部阻塞不停止其他就绪格。
+用户要求直接完成整批时，先读[完整交付请求](references/grouped-review.md#完整交付请求)：以指定全部源格的完整成品ZIP（不设容量上限，附逐图问题CSV）为结束条件，合格图本地归集，默认不交少量图片阶段包代替完整成果。启动时集中处理必要授权与兼容缺口，生产中在适用委托内自行决定并登记，局部阻塞不停止其他就绪格。
 
 按[合并审查](references/grouped-review.md)处理准确范围。用户亲自批准与执行者在明确委托内的决定分开记录，后者绑定真实用户授权及约束，不伪造APPROVED；配置或泛指继续不授予新权限。仅范围外事项、明确保留亲审项或外部阻塞需要用户处理。
 
@@ -82,3 +82,5 @@ A由[视觉资产](../vertical-comic-visual-assets/SKILL.md)维护身份、衣�
 微信发送交接包时执行[无损去重与分卷运输](references/handoff-transport.md)：正式发布后导出，完整恢复验证后发送全部交付文件；接收入口自动识别。
 
 新相关格按[空间输入收敛](references/final-input-semantics.md#空间输入收敛)选择MEM-003/006/009并绑定当前投影，首轮空间失败按[二轮分流](references/execution-quality.md#建筑与视角畸形的二轮分流)执行MEM-004；普通格和旧冻结运行保持原路径。
+
+新任务最终交付必须执行[完整交付与容量门禁](references/delivery-contract.md)：前期交接单ZIP优先、超限自动连续分卷，每文件不超过900000000字节；成品ZIP无容量上限、不因体积自动分包，并必须包含图片问题总览.csv及问题明细.csv。前期内容release之后走publish，成品目录export之后走普通ZIP发布；统一交付验收.json通过后才能finish-check/100%。容量失败只修装配与容器，不重新生图或降质；旧冻结运行不热升级。

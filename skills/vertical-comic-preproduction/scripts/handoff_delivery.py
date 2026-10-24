@@ -163,3 +163,51 @@ def input_review(root,index):
         value.update(handoff_policy=index['policy'],production_window_policy=index['production_window_policy'])
     if 'task_context' in index:value['task_context']=index['task_context']
     return {**value,'approved_input_digest':hashlib.sha256(json.dumps(value,ensure_ascii=False,sort_keys=True,separators=(',',':')).encode()).hexdigest()}
+
+
+def copy_assembly_plan(source,destination,plan):
+    """Create a pre-approval candidate from an explicit reviewed file/dependency plan.
+
+    This is not a heuristic history deleter. Missing/unknown dependencies HOLD;
+    original audit_index and runtime manifests remain authoritative after copying.
+    """
+    from handoff_zip import inside,reference,files,audit_index
+    from platform_io import portable_relative
+    import tempfile
+    source=Path(source).resolve();destination=Path(destination).resolve()
+    if (destination.exists() or destination.is_relative_to(source) or source.is_relative_to(destination)):
+        raise ValueError('ASSEMBLY_HOLD:候选须为源包外全新目录')
+    if (not isinstance(plan,dict) or plan.get('policy')!='explicit_handoff_assembly_v1'
+        or plan.get('unresolved_paths')!=[] or not plan.get('reviewer') or not plan.get('evidence')):
+        raise ValueError('ASSEMBLY_HOLD:缺明确装配范围/复核依据，未知依赖不能省略')
+    rows=plan.get('files');required=plan.get('required_paths');dependencies=plan.get('dependencies')
+    if not isinstance(rows,list) or not rows or not isinstance(required,list) or not required or not isinstance(dependencies,dict):
+        raise ValueError('ASSEMBLY_HOLD:缺装配清单及必要引用')
+    selected={}
+    for row in rows:
+        if (not isinstance(row,dict) or row.get('reason') not in {'execution','traceability','runtime','release'}
+            or not row.get('evidence') or not isinstance(row.get('path'),str)):
+            raise ValueError('ASSEMBLY_HOLD:逐文件须有入包原因与依据')
+        portable_relative(row['path'])
+        if row['path'] in selected:raise ValueError('ASSEMBLY_HOLD:装配路径重复')
+        p=reference(source,row)
+        if p.is_symlink() or p.stat().st_size!=row.get('bytes'):raise ValueError('ASSEMBLY_HOLD:源文件尺寸或类型不符')
+        selected[row['path']]=p
+    if not set(required)<=set(selected):raise ValueError('ASSEMBLY_HOLD:缺必要材料')
+    for name,targets in dependencies.items():
+        if name not in selected or not isinstance(targets,list) or not set(targets)<=set(selected):
+            raise ValueError('ASSEMBLY_HOLD:传递引用未闭合')
+    destination.parent.mkdir(parents=True,exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=destination.parent,prefix='.handoff-assembly-') as temp:
+        stage=Path(temp)/'candidate';stage.mkdir()
+        for name,p in selected.items():
+            target=inside(stage,name);target.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(p,target)
+        # Prevent a selected subset from silently breaking real source approvals,
+        # run-template inventories, or original frozen runtime dependencies.
+        audit_index(stage)
+        if files(stage)!=[{k:row[k] for k in ('path','sha256','bytes')} for row in sorted(rows,key=lambda x:x['path'])]:
+            raise ValueError('ASSEMBLY_HOLD:复制后清单不符')
+        for row in rows:reference(source,row)
+        shutil.move(str(stage),str(destination))
+    return {'status':'ASSEMBLED_CANDIDATE_NOT_APPROVED','path':str(destination),'files':len(rows),
+        'image_calls':0,'approval_created':False}

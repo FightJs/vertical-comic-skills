@@ -223,6 +223,8 @@ def _export_candidate(state, root, review_ref, destination, *, allow_partial=Fal
         lines += [f"- {cell(r['panel_id'])}：{cell('；'.join(r['incomplete_reasons']))}" for r in review['panels'] if r['outcome'] == 'INCOMPLETE']
         (stage / '问题表.md').write_text('\n'.join(lines) + '\n', encoding='utf-8')
         (stage / '交付索引.json').write_text(json.dumps(index, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+        from delivery_csv import render
+        for name,data in render([index]).items():(stage/name).write_bytes(data)
         shutil.copyfile(checked_file(root, review_ref), stage / '交接审查依据.json')
         # All files/decisions were checked in the original read transaction.
         # Verify the same immutable inputs once more before publishing copied bytes.
@@ -247,12 +249,27 @@ def export(state, root, review_ref, destination, *, allow_partial=False):
         raise
 
 
+def publish_batch(contract,destination):
+    from delivery_publish import publish_production
+    return publish_production(contract,destination)
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument('--state', required=True); p.add_argument('--write')
+    p.add_argument('--state'); p.add_argument('--write')
+    p.add_argument('--publish',help='完整成品ZIP交付的新输出目录')
+    p.add_argument('--contract',help='本任务交付身份.json')
     p.add_argument('--review'); p.add_argument('--export')
     p.add_argument('--partial', action='store_true', help='仅用户明确要求部分材料时使用；不声明完整交付')
-    a = p.parse_args(); path = Path(a.state).resolve(); root = path.parent.parent
+    a = p.parse_args()
+    if a.publish:
+        if not a.contract or any((a.state,a.write,a.review,a.export,a.partial)):p.error('publish仅用contract及输出目录')
+        try:
+            print(json.dumps(publish_batch(a.contract,a.publish),ensure_ascii=False));return 0
+        except (OSError,ValueError,KeyError) as exc:
+            print(json.dumps({'status':'DELIVERY_HOLD','error':str(exc)},ensure_ascii=False));return 1
+    if not a.state:p.error('目录导出或审查须提供state')
+    path = Path(a.state).resolve(); root = path.parent.parent
     if a.partial and not a.export: p.error('--partial仅用于明确请求的部分导出')
     if a.export:
         if not a.review: p.error('导出须绑定已获D/委托决定的--review')
@@ -273,4 +290,4 @@ def main():
 if __name__ == '__main__':
     from platform_io import configure_stdio
     configure_stdio()
-    main()
+    raise SystemExit(main())

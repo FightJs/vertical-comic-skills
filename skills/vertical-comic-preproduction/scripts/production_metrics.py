@@ -20,7 +20,7 @@ def union_seconds(windows):
         else:merged[-1][1]=max(end,merged[-1][1])
     return sum(end-start for start,end in merged)
 
-def build(state_paths,*,native_events=None,verify_images=False,capacity=None):
+def _build(state_paths,*,native_events=None,verify_images=False,capacity=None):
     attempts={};panels={};warnings=[];sources=[];episodes=set();duplicates=0;diagnostics=Counter();windows=[];qa_windows=[];verified=set();declared=set();reads=[];conflicts=set()
     timings={k:[] for k in ('ready_to_submit','submit_to_return','return_to_save','save_to_qa','save_to_qa_registration')}
     edit_reviews=[]
@@ -148,6 +148,21 @@ def build(state_paths,*,native_events=None,verify_images=False,capacity=None):
             'note':'决定数不是实际提问/调用数，采用问题统计不代表最终交付门禁通过；缺事件数据不填0'},
         'warnings':warnings,'limitations':'状态比率为登记口径，历史未保留的调用和失败不可补造；verify-images仅核验原图格式和哈希，不授予视觉通过。'}
 
+def build(state_paths,*,native_events=None,verify_images=False,capacity=None,delivery_identity=None):
+    state_paths=list(state_paths)
+    result=_build(state_paths,native_events=native_events,verify_images=verify_images,capacity=capacity)
+    if delivery_identity is not None:
+        from delivery_contract import load_identity,capacity_summary
+        from production_progress import source_order,Records
+        value=load_identity(delivery_identity)
+        if set(value['states'])!={str(Path(p).resolve()) for p in state_paths}:
+            raise ValueError('DELIVERY_SCOPE_HOLD:容量统计范围与交付任务不符')
+        total=sum(len(source_order(json.loads(Path(p).read_text(encoding='utf-8-sig')),Path(p).parent.parent,Records())) for p in state_paths)
+        result['delivery_capacity']=capacity_summary(value['states'],total)
+        result['delivery_capacity'].update(max_file_bytes=value['max_file_bytes'],package_mode=value['package_mode'])
+    return result
+
+
 def draft_metrics(paths, atlas_paths=None):
     """Read explicit actual receipts only, no periodic scanning or inferred timing."""
     if not paths and not atlas_paths: return None
@@ -187,8 +202,8 @@ def draft_metrics(paths, atlas_paths=None):
 
 
 def main():
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--state',action='append',required=True);p.add_argument('--native-events');p.add_argument('--verify-images',action='store_true');p.add_argument('--capacity',type=int);p.add_argument('--draft-receipt',action='append');p.add_argument('--atlas-receipt',action='append');a=p.parse_args()
-    value=build(a.state,native_events=a.native_events,verify_images=a.verify_images,capacity=a.capacity)
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--state',action='append',required=True);p.add_argument('--native-events');p.add_argument('--verify-images',action='store_true');p.add_argument('--capacity',type=int);p.add_argument('--draft-receipt',action='append');p.add_argument('--atlas-receipt',action='append');p.add_argument('--delivery-identity');a=p.parse_args()
+    value=build(a.state,native_events=a.native_events,verify_images=a.verify_images,capacity=a.capacity,delivery_identity=a.delivery_identity)
     value['draft_preparation']=draft_metrics(a.draft_receipt,a.atlas_receipt)
     from runtime_clock import locate, status as clock_status
     clocks = {locate(path) for path in a.state} - {None}

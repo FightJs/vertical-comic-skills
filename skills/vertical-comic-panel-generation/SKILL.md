@@ -34,3 +34,5 @@ B和实际包按[合并审查](../vertical-comic-preproduction/references/groupe
 选择局部返修方法时按[坐标引导返修](../vertical-comic-preproduction/references/coordinate-repair.md)复用原QA判断范围；适用时编译坐标段并核验实际输入。整体房间/机位/空间关系错误不进入此法；专项视觉知识按命中MEM加载。
 
 空间相关格沿前期选择的关系与当前投影执行；首轮空间失败按[二轮分流](../vertical-comic-preproduction/references/execution-quality.md#建筑与视角畸形的二轮分流)区分局部刚性边、整体连接/投影、承托和构图压力。复用原许可和一次自动修正，不默认先空景后人物。
+
+逐格成品的最终ZIP还须执行[完整交付与容量门禁](../vertical-comic-preproduction/references/delivery-contract.md)：按准确采用图封装普通ZIP，保持图片原字节；成品不设1GB容量门禁、不因体积自动分包；ZIP根目录必须包含图片问题总览.csv和问题明细.csv。只有交付验收.json、CSV对应校验和原内容门禁同时通过才结束；打包不降质、不追加生图、不改预算。

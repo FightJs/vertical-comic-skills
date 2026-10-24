@@ -22,10 +22,11 @@ def identify(p):
     with zipfile.ZipFile(p) as z:
         return metadata(z).get('kind') if INDEX in z.namelist() else None
 
-def export(source,output,max_file_bytes=LIMIT):
+def export(source,output,max_file_bytes=LIMIT,*,package_mode="allow_parts"):
     from handoff_zip import check_delivery_archive
     checked=check_delivery_archive(source)
     if checked.get('format')=='legacy_with_checksum': raise ValueError('先使用原发布流程形成内置发布证据的正式包')
+    if package_mode not in {'single_zip','allow_parts'}:raise ValueError('未知包数限制')
     source=Path(source).resolve(); output=Path(output).resolve()
     if output.exists(): raise ValueError('输出目录必须全新')
     if not 65536<=max_file_bytes<=LIMIT: raise ValueError('卷容量须在65536至900000000字节之间')
@@ -49,6 +50,9 @@ def export(source,output,max_file_bytes=LIMIT):
             if archive.stat().st_size<=max_file_bytes:
                 shutil.copyfile(archive,output/'正式交接包.zip')
             else:
+                if package_mode=='single_zip':
+                    size=archive.stat().st_size
+                    raise ValueError(f'DELIVERY_SIZE_HOLD:去重后{size}字节，上限{max_file_bytes}，超出{size-max_file_bytes}；严格单ZIP不自动分卷')
                 # Conservative envelope reservation; verify actual ZIP size below.
                 chunk=max_file_bytes-32768; parts=[]
                 with archive.open('rb') as f:
@@ -68,11 +72,14 @@ def export(source,output,max_file_bytes=LIMIT):
                     with zipfile.ZipFile(p,'w',compression=zipfile.ZIP_STORED) as z:
                         z.writestr(INDEX,encode(dict(index,number=part['number'])))
                         z.write(td/str(part['number']),'payload.bin')
-                        z.writestr('交接说明.md','将全部卷放在同一目录，向最新版Skill提供任一卷路径。缺卷不得生产。')
+                        z.writestr('交接说明.md','将全部卷下载到同一个本机目录，无需手动解压。把第001卷拖入已安装条漫Skill的Codex会话并发送，即可接包生产。使用原文件本机路径以便读取同目录其他卷；不能仅上传第001卷到无法访问其他卷的环境。系统自动核对总卷数、序号和哈希，缺卷将提示准确序号。')
                     if p.stat().st_size>max_file_bytes: raise ValueError('分卷包装超出容量，未发布')
             entry=next(iter(sorted(output.glob('*.zip'))))
-            restored=td/'verify';restore(entry,restored)
+            restored=td/'verify';recovery=restore(entry,restored)
             report={'policy':POLICY,'status':'VERIFIED_TRANSPORT','source_bytes':source.stat().st_size,'source_sha256':before,'original_files':len(rows),'unique_objects':len(seen),'files':[{'path':p.name,'bytes':p.stat().st_size,'sha256':digest(p)} for p in sorted(output.glob('*.zip'))]}
+            report.update(max_file_bytes=max_file_bytes,package_mode=package_mode,
+                transport_bytes=sum(r['bytes'] for r in report['files']),recovery=recovery)
+            report['recovery']={k:v for k,v in recovery.items() if k!='root'}
             (output/'运输验证.json').write_bytes(encode(report))
             return report
         except Exception:
@@ -130,7 +137,7 @@ def restore(entry,destination):
         shutil.move(str(staging),str(destination))
         return {'root':str(destination/root.name),'status':'RESTORED_CHECKED','file_count':len(rows)}
 
-def check_receipt(path,source):
+def check_receipt(path,source,*,requirements=None):
     p=Path(path).resolve();d=json.loads(p.read_text(encoding='utf-8'))
     if d.get('status')!='VERIFIED_TRANSPORT' or d.get('source_sha256')!=digest(source):raise ValueError('运输记录与原正式包不符')
     dependencies={str(p):p.stat()}
@@ -141,13 +148,21 @@ def check_receipt(path,source):
         if f.stat().st_size!=row['bytes'] or digest(f)!=row['sha256']:raise ValueError('运输文件缺失或变化: '+name)
         dependencies[str(f)]=f.stat()
     if not d['files']:raise ValueError('运输文件集合为空')
+    if requirements is not None:
+        from delivery_contract import validate_artifact_set
+        if (d.get('max_file_bytes')!=requirements['max_file_bytes'] or d.get('package_mode')!=requirements['package_mode']
+            or d.get('transport_bytes')!=sum(r['bytes'] for r in d['files'])
+            or d.get('recovery',{}).get('status')!='RESTORED_CHECKED'
+            or d.get('recovery',{}).get('file_count')!=d.get('original_files')):
+            raise ValueError('DELIVERY_RECEIPT_HOLD:运输回执缺容量限制或实际完整恢复结论')
+        validate_artifact_set(requirements,[{**r,'path':str(p.parent/r['path'])} for r in d['files']])
     return list(dependencies)
 
 def main():
     p=argparse.ArgumentParser();sub=p.add_subparsers(dest='action',required=True)
-    a=sub.add_parser('export');a.add_argument('--zip',required=True);a.add_argument('--output',required=True);a.add_argument('--max-file-bytes',type=int,default=LIMIT)
+    a=sub.add_parser('export');a.add_argument('--zip',required=True);a.add_argument('--output',required=True);a.add_argument('--max-file-bytes',type=int,default=LIMIT);a.add_argument('--package-mode',choices=['single_zip','allow_parts'],default='allow_parts')
     a=sub.add_parser('restore');a.add_argument('--zip',required=True);a.add_argument('--destination',required=True)
-    a=p.parse_args();print(json.dumps(export(a.zip,a.output,a.max_file_bytes) if a.action=='export' else restore(a.zip,a.destination),ensure_ascii=False,indent=2))
+    a=p.parse_args();print(json.dumps(export(a.zip,a.output,a.max_file_bytes,package_mode=a.package_mode) if a.action=='export' else restore(a.zip,a.destination),ensure_ascii=False,indent=2))
 if __name__=='__main__':
     from platform_io import configure_stdio
     configure_stdio();main()

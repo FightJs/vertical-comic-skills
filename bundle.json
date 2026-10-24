@@ -9,74 +9,9 @@
   ],
   "files": [
     {
-      "path": "memory/规则/生图/MEM-001_床面承托与被褥遮挡.md",
-      "sha256": "7e9a3bc7650d3e61cfad5927dece85a6250dd09dc71c0b9e71e0c7dfefb511cf",
-      "bytes": 2381
-    },
-    {
-      "path": "memory/规则/生图/MEM-002_多人接触与肢体归属.md",
-      "sha256": "ad89f6e847954c55e839898fcb96895406df07b1c20b208cba9fdfd4c0ca2404",
-      "bytes": 1944
-    },
-    {
-      "path": "memory/规则/生图/MEM-004_局部返修保留批准特征.md",
-      "sha256": "9f95df308c4997730e5176b6ebf115b80886bb301d82ff460ff589e52f9c0ccd",
-      "bytes": 5491
-    },
-    {
-      "path": "memory/规则/生图/MEM-006_人体结构物理合理性与动作表现力.md",
-      "sha256": "d6a032b02508b27d139358b8252808a95a4f8f6cdc6ddbf930f1ce0eb5417a6d",
-      "bytes": 4319
-    },
-    {
-      "path": "memory/规则/生图/MEM-008_镜面统一磨砂且不呈现真实反射.md",
-      "sha256": "4d57461a67520ff2f8cc16d8c07a76ea6e7bec8fb8af2482998ae2db273c4a14",
-      "bytes": 1378
-    },
-    {
-      "path": "memory/规则/生图/MEM-011_掌掴完成后的结果瞬间表达.md",
-      "sha256": "d43611860efd323dc050e177ae2b881d65f84f6c1a7fa9f3173552b691a4765e",
-      "bytes": 4221
-    },
-    {
-      "path": "memory/规则/镜头/MEM-003_换机位保持固定空间锚点.md",
-      "sha256": "2db4835322e339964521cdb6768ce0d4c582f164f13b09724311e9ddae63c14a",
-      "bytes": 2882
-    },
-    {
-      "path": "memory/规则/镜头/MEM-005_人物场景与关键道具的一致性和连续性.md",
-      "sha256": "94ced5a4b635386956199c0e7d3a8860cde0205850769ad8f7ceb9c69363aca8",
-      "bytes": 3990
-    },
-    {
-      "path": "memory/规则/镜头/MEM-007_相邻格同角色微表情必须有可见变化.md",
-      "sha256": "8c4ba291921293113ab1c1ce791de35443cc02b8025a4a41d764a9f89c5b4ade",
-      "bytes": 2423
-    },
-    {
-      "path": "memory/规则/镜头/MEM-009_真实透视与遮挡优先于完整展示.md",
-      "sha256": "00feb6b2661e779e203b3d3314f5d52047537d83e7325d0d5afb0b1cda11f785",
-      "bytes": 3123
-    },
-    {
-      "path": "memory/规则/镜头/MEM-010_叙事驱动的相邻镜头与物理连续性.md",
-      "sha256": "0bc1ba2832cca681cc110576e34a50a758d15209e6848e63815cd8abd2b16167",
-      "bytes": 2420
-    },
-    {
-      "path": "memory/规则记忆输入与增添规范.md",
-      "sha256": "c6bf2dfa0be28eb10c8e148e4862d0721ce9e0188d2a44db33071f294a17fd28",
-      "bytes": 17116
-    },
-    {
-      "path": "memory/记忆索引.json",
-      "sha256": "b9eec22b1b2598877f6212918229cbb75f151dede148426697c7d542937c2fb7",
-      "bytes": 25748
-    },
-    {
       "path": "skills/vertical-comic-image-review/SKILL.md",
-      "sha256": "68095d1b2ced041a14f5677f3b09ed6eb848f317ba869fdb0f1fb1a6b269ee9c",
-      "bytes": 6895
+      "sha256": "cc8070737e18db642de86accf2dfbfe712632b36a7d0c9112bd3536d10e00c00",
+      "bytes": 7394
     },
     {
       "path": "skills/vertical-comic-image-review/agents/openai.yaml",
@@ -85,8 +20,8 @@
     },
     {
       "path": "skills/vertical-comic-panel-generation/SKILL.md",
-      "sha256": "a975ad19da9819e0872e11b2e0939113e5e582724e2ddce5e1c02eddb638c3e9",
-      "bytes": 7299
+      "sha256": "c7830c111410106dacca54152c50e8f7320aaaaa06cbdf7d2d49da861346d61f",
+      "bytes": 7753
     },
     {
       "path": "skills/vertical-comic-panel-generation/agents/openai.yaml",
@@ -95,8 +30,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/SKILL.md",
-      "sha256": "e4c1150c3be569cb67afe68698d3ae35bf24c8d49cb3bb0b7a58593fe5a3df4d",
-      "bytes": 13642
+      "sha256": "e8efc7c2fb8a657555627c61f81feb40e8cad332e3b1fe99a33d08ca933d44e9",
+      "bytes": 14269
     },
     {
       "path": "skills/vertical-comic-preproduction/agents/openai.yaml",
@@ -259,9 +194,14 @@
       "bytes": 5317
     },
     {
+      "path": "skills/vertical-comic-preproduction/references/delivery-contract.md",
+      "sha256": "fcb84c9f6a56750a290d21844262ee11d30b7fb652366051c05e427755e72c69",
+      "bytes": 6657
+    },
+    {
       "path": "skills/vertical-comic-preproduction/references/direct-delivery.md",
-      "sha256": "3c7f98245daa05951ffc435db503ecf39e927f404d459f012448294457975905",
-      "bytes": 11736
+      "sha256": "81a9ec45bd93aa40cb9e5d1902502450f0dd0fed65ca7e2284202bf3e8865a3f",
+      "bytes": 12328
     },
     {
       "path": "skills/vertical-comic-preproduction/references/dispatch-consistency.md",
@@ -300,13 +240,13 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/references/generation-io.md",
-      "sha256": "8d31e7890e345a2ca22a5ed6c5c9d053ad5b32a28b0ac0b421d7dd499f66c008",
-      "bytes": 15890
+      "sha256": "abed8ec536d2ad2cfa65a136228f7adfca123d9f2f8bb30ee0d3c6bf7fc8a7ac",
+      "bytes": 16416
     },
     {
       "path": "skills/vertical-comic-preproduction/references/grouped-review.md",
-      "sha256": "5dcefdeb2da1b6c06be5297ade7f923913627ba3f828bfeab94e51090d80cea3",
-      "bytes": 16610
+      "sha256": "604bdf4733d71a645adf101aff2637ec7e7024882dbacfb52731c8b7aac9f25e",
+      "bytes": 16655
     },
     {
       "path": "skills/vertical-comic-preproduction/references/half-episode.md",
@@ -315,8 +255,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/references/handoff-transport.md",
-      "sha256": "4ffbc3f7cb1575ab9cd58c2e42ddcd4f1faaac830b1167aea9b6c4e2d3b3cd0b",
-      "bytes": 1843
+      "sha256": "b89319ea59ef616d87d5a31dde8103d612f36044ed4c77568ba2a7a7d1819a02",
+      "bytes": 2369
     },
     {
       "path": "skills/vertical-comic-preproduction/references/identity-confirmation.md",
@@ -345,8 +285,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/references/production-decisions.md",
-      "sha256": "94b7df2eb993d217c6021d42d01f94cc303e01fea2f54da650d6f2db08d3d114",
-      "bytes": 10185
+      "sha256": "fc63af979b159c3a795ba9c9c751266dad49ebeb0ce2b5f48b79db73590e1979",
+      "bytes": 10788
     },
     {
       "path": "skills/vertical-comic-preproduction/references/production-foundation.md",
@@ -365,8 +305,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/references/quick-start.md",
-      "sha256": "e38a5685a931c779674e5c1508fc9330f1be1ed6b9cb682ab58e42888f51a3ca",
-      "bytes": 11901
+      "sha256": "57a0e48983ecfff6d173f53df3d3632ccecfa444791d5df61e80f34349880cc1",
+      "bytes": 12501
     },
     {
       "path": "skills/vertical-comic-preproduction/references/reference-budget.md",
@@ -400,8 +340,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/references/review-progress.md",
-      "sha256": "0469d4d76ee61ea5c4ede713e5e2db9d0fa3b68a72aec050532c7d1079bf60de",
-      "bytes": 13104
+      "sha256": "e522dcc495d0d373805ebe4edd6871eb67c642e5f86c50efc523e7da4e38ae25",
+      "bytes": 13668
     },
     {
       "path": "skills/vertical-comic-preproduction/references/rule-memory.md",
@@ -430,8 +370,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/references/schemas.md",
-      "sha256": "3b7ed3a81a3159b6635f333cb67787212653eb833e87da7d8e2a45d0f980e21a",
-      "bytes": 21222
+      "sha256": "f7873c40056c6d18a5b667d86ff3a0c22788d9acb39400506dbd57a3c15a18dd",
+      "bytes": 22731
     },
     {
       "path": "skills/vertical-comic-preproduction/references/screenwriting-distillate.md",
@@ -445,8 +385,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/references/split-production.md",
-      "sha256": "6582b49c4436c62ecd98471e32230462513b23bae937a29a0fbd6b6a0364e202",
-      "bytes": 3032
+      "sha256": "e9defe1f9b2856a72311d1a3e9ccd705dac699ffcb9c1df454ed9dc59c73225e",
+      "bytes": 3053
     },
     {
       "path": "skills/vertical-comic-preproduction/references/stage-asset-production.md",
@@ -505,8 +445,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/references/user-prompts.md",
-      "sha256": "4ef2afeeb67de21319653de4e7cf7c4d169bba2b3a73e6d52a6bbfbacd48a604",
-      "bytes": 8964
+      "sha256": "13176ab6f0c87e8973dbb389a516d965fbe017ac1c9fe19bbb13c99aab690cdb",
+      "bytes": 10049
     },
     {
       "path": "skills/vertical-comic-preproduction/references/visual-continuity.md",
@@ -530,8 +470,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/references/zip-handoff.md",
-      "sha256": "ed7622e626329a169454228310679ee2b835e6d7e8f56f7d5fae450ca12cadab",
-      "bytes": 5242
+      "sha256": "a60646ac346b6b3b0cc699ceaeaebbc72b48a84da1e4db12dd4dcd51647d6afd",
+      "bytes": 5882
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/appearance_lock.py",
@@ -600,8 +540,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/comic_start.py",
-      "sha256": "5573e6d8d88598b2f6f328039b912376ef36f269462adbb9c56f9adba3e6d317",
-      "bytes": 13383
+      "sha256": "269d2cd518c085450c0248534ee4ad23feecf56a27afe1696aebfa281cb5ec5a",
+      "bytes": 14445
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/continuity_context.py",
@@ -622,6 +562,21 @@
       "path": "skills/vertical-comic-preproduction/scripts/coordinate_repair.py",
       "sha256": "0d50f783a680dffc799a9bb954de9bf70a66ba2902f4a9c720df96a0cc5eb66c",
       "bytes": 10426
+    },
+    {
+      "path": "skills/vertical-comic-preproduction/scripts/delivery_contract.py",
+      "sha256": "59825984787978bdc411a5d2aa330080faac9864168a74353393ad01200b003d",
+      "bytes": 10088
+    },
+    {
+      "path": "skills/vertical-comic-preproduction/scripts/delivery_csv.py",
+      "sha256": "f69b873e91c39c9683b69e395d1f5fd2e3c9350d6d44f29ddcb9d7060d019edf",
+      "bytes": 3158
+    },
+    {
+      "path": "skills/vertical-comic-preproduction/scripts/delivery_publish.py",
+      "sha256": "f31fe82c3ad350f002ec85bfe0b03ccd7f1a06c2c608ea650fe6c2d6bd2b15a5",
+      "bytes": 16590
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/dispatch_publication.py",
@@ -660,8 +615,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/handoff_delivery.py",
-      "sha256": "e699d9a4cd8f852ab197bfdfb0640a0ca4cb487e8e0bb1178b0bcb5beabb11c7",
-      "bytes": 12227
+      "sha256": "84a590d8fbd2083b71116ae1960978c30434bdae59aa3155cd0caf7295c0072f",
+      "bytes": 15438
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/handoff_scope.py",
@@ -670,13 +625,13 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/handoff_transport.py",
-      "sha256": "64331877be6a4d6da1965048e41ed64fbe5566ba1de4e1a31141f0a4e72f579d",
-      "bytes": 9663
+      "sha256": "c2bad903059f0a8448352790e75bf72513dd9997e3bd990002b8cc02cd2f4110",
+      "bytes": 11361
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/handoff_zip.py",
-      "sha256": "002e28f6c8ce20d3b51b98686f5315c70d3a4facbe8d41d4bed5e874dc111312",
-      "bytes": 45039
+      "sha256": "bafe7974a4af0ea635519515cbb75d917ee714730e3401498912c487ea795804",
+      "bytes": 45728
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/identity_confirmation.py",
@@ -745,8 +700,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/panel_delivery.py",
-      "sha256": "93cef9285d196e3b1dc0dd4d267f14b75f1e1f6334b1cf57383e461e4147b698",
-      "bytes": 17888
+      "sha256": "f777fd46dbeed0d77a32eefa1e51a3bf0d46db294cfa4e5ee1463edcd2be392c",
+      "bytes": 18783
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/panel_derivation.py",
@@ -780,13 +735,13 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/production_metrics.py",
-      "sha256": "3c928187fb1efe7598cb65a566829a65d444dbbd09788b7315f2b2ee241c80bc",
-      "bytes": 15997
+      "sha256": "6899e8c22bf283e65ef0e37c36ea8a4f9fdb9bc70b990bb2163d0d9fbd45ede6",
+      "bytes": 17059
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/production_progress.py",
-      "sha256": "fec01715a913b66ba3acef6b397e313fd43108bd7e5debbde23773251c3158d4",
-      "bytes": 28591
+      "sha256": "58456814b3b46aa1069c31ca85c0e419b3348789e8dffacaf56d614e7529f47a",
+      "bytes": 32974
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/production_runtime.py",
@@ -855,8 +810,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/runtime_capabilities.json",
-      "sha256": "1531d37f9297915fc036654ddfc13baf6594bbd719c24a49a307780b65d0399f",
-      "bytes": 1639
+      "sha256": "fcda1e6f173eaa761c86f8bd110966ff4b45d1ef20bbd3ced2438c0c264b868f",
+      "bytes": 2042
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/runtime_clock.py",
@@ -940,8 +895,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/task_coordination.py",
-      "sha256": "e00ef161ba235d85c9d5a3e9a839959058afd758f81b6e930aed54267ba46eb3",
-      "bytes": 10336
+      "sha256": "898e01485470919a39b7c433ccbfbcbf8e7b00c2f14d739e80c73f34ef2f5057",
+      "bytes": 11024
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/update_skills.py",
@@ -1067,6 +1022,21 @@
       "path": "skills/vertical-comic-preproduction/tests/test_coordinate_repair.py",
       "sha256": "f08d542e716223cf83def4868d792a941aa02f519380d2a09be96cc12098093e",
       "bytes": 9043
+    },
+    {
+      "path": "skills/vertical-comic-preproduction/tests/test_delivery_contract.py",
+      "sha256": "8ea4f8184ff6d0c7e8f0a065986e9a3f04cd0c90288674a3392e159b58307b04",
+      "bytes": 6912
+    },
+    {
+      "path": "skills/vertical-comic-preproduction/tests/test_delivery_csv.py",
+      "sha256": "b33dc0d5c83be7cf9865df76f5a54e1d7d797ce64ae38c845699968eeb894a63",
+      "bytes": 2959
+    },
+    {
+      "path": "skills/vertical-comic-preproduction/tests/test_delivery_publish.py",
+      "sha256": "2fc900b9c9065c9833e3744a189e8a337fffa16b45c3e17fef145a667918c86f",
+      "bytes": 16558
     },
     {
       "path": "skills/vertical-comic-preproduction/tests/test_direct_handoff.py",
@@ -1347,6 +1317,71 @@
       "path": "skills/vertical-comic-visual-assets/agents/openai.yaml",
       "sha256": "bd1fe373e9f9408d2930032a82d18922760aabb83463c3d33912f870235eeae7",
       "bytes": 368
+    },
+    {
+      "path": "memory/规则/生图/MEM-001_床面承托与被褥遮挡.md",
+      "sha256": "7e9a3bc7650d3e61cfad5927dece85a6250dd09dc71c0b9e71e0c7dfefb511cf",
+      "bytes": 2381
+    },
+    {
+      "path": "memory/规则/生图/MEM-002_多人接触与肢体归属.md",
+      "sha256": "ad89f6e847954c55e839898fcb96895406df07b1c20b208cba9fdfd4c0ca2404",
+      "bytes": 1944
+    },
+    {
+      "path": "memory/规则/生图/MEM-004_局部返修保留批准特征.md",
+      "sha256": "9f95df308c4997730e5176b6ebf115b80886bb301d82ff460ff589e52f9c0ccd",
+      "bytes": 5491
+    },
+    {
+      "path": "memory/规则/生图/MEM-006_人体结构物理合理性与动作表现力.md",
+      "sha256": "d6a032b02508b27d139358b8252808a95a4f8f6cdc6ddbf930f1ce0eb5417a6d",
+      "bytes": 4319
+    },
+    {
+      "path": "memory/规则/生图/MEM-008_镜面统一磨砂且不呈现真实反射.md",
+      "sha256": "4d57461a67520ff2f8cc16d8c07a76ea6e7bec8fb8af2482998ae2db273c4a14",
+      "bytes": 1378
+    },
+    {
+      "path": "memory/规则/生图/MEM-011_掌掴完成后的结果瞬间表达.md",
+      "sha256": "d43611860efd323dc050e177ae2b881d65f84f6c1a7fa9f3173552b691a4765e",
+      "bytes": 4221
+    },
+    {
+      "path": "memory/规则/镜头/MEM-003_换机位保持固定空间锚点.md",
+      "sha256": "2db4835322e339964521cdb6768ce0d4c582f164f13b09724311e9ddae63c14a",
+      "bytes": 2882
+    },
+    {
+      "path": "memory/规则/镜头/MEM-005_人物场景与关键道具的一致性和连续性.md",
+      "sha256": "94ced5a4b635386956199c0e7d3a8860cde0205850769ad8f7ceb9c69363aca8",
+      "bytes": 3990
+    },
+    {
+      "path": "memory/规则/镜头/MEM-007_相邻格同角色微表情必须有可见变化.md",
+      "sha256": "8c4ba291921293113ab1c1ce791de35443cc02b8025a4a41d764a9f89c5b4ade",
+      "bytes": 2423
+    },
+    {
+      "path": "memory/规则/镜头/MEM-009_真实透视与遮挡优先于完整展示.md",
+      "sha256": "00feb6b2661e779e203b3d3314f5d52047537d83e7325d0d5afb0b1cda11f785",
+      "bytes": 3123
+    },
+    {
+      "path": "memory/规则/镜头/MEM-010_叙事驱动的相邻镜头与物理连续性.md",
+      "sha256": "0bc1ba2832cca681cc110576e34a50a758d15209e6848e63815cd8abd2b16167",
+      "bytes": 2420
+    },
+    {
+      "path": "memory/规则记忆输入与增添规范.md",
+      "sha256": "c6bf2dfa0be28eb10c8e148e4862d0721ce9e0188d2a44db33071f294a17fd28",
+      "bytes": 17116
+    },
+    {
+      "path": "memory/记忆索引.json",
+      "sha256": "b9eec22b1b2598877f6212918229cbb75f151dede148426697c7d542937c2fb7",
+      "bytes": 25748
     }
   ]
 }

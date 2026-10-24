@@ -96,7 +96,7 @@ production_progress.py show --directory <显示目录>
 
 每次更新原状态后，执行者上报变化，总控刷新一次；子agent可将已有runtime结果通过`--display-progress-dir`登记到本话观察文件，总控单写summary和通知cursor。接包结果与最终门禁结果沿原检查产生，不为显示重复检查。工具未接该可选参数或旧冻结工具不认识时，只用显示脚本旁路读取，不修改旧入口。
 
-最后在原正式交付验证通过后，新运行使用`task_coordination.py finish-check --directory <协调目录> --revision <当前revision> --zip <完整正式ZIP>`，内部调用显示complete。旧无协调记录运行才使用`production_progress.py complete --directory <显示目录> --zip <完整正式ZIP>`。此步骤复核现成ZIP及原验收证据，只有准确全范围通过才可到100%；它不生成图片、不增加人工批准，也不能代替原发布/交付门禁。ZIP可先形成而未实际交给用户，此时下一步应写“交付用户”；最后消息必须附真实ZIP链接。显示缓存不是批准证据，损坏时删除并从真实记录重建，不能据它派单。
+最后在原正式交付验证通过后，新运行使用`task_coordination.py finish-check --directory <协调目录> --revision <当前revision> --zip <实际发送ZIP> --delivery-report <交付验收.json>`，内部调用显示complete。旧无协调记录运行才使用`production_progress.py complete --directory <显示目录> --zip <完整正式ZIP>`。此步骤复核现成ZIP及原验收证据，只有准确全范围通过才可到100%；它不生成图片、不增加人工批准，也不能代替原发布/交付门禁。ZIP可先形成而未实际交给用户，此时下一步应写“交付用户”；最后消息必须附真实ZIP链接。显示缓存不是批准证据，损坏时删除并从真实记录重建，不能据它派单。
 
 总控可用`refresh --stage`指定当前真实工作的阶段（键见脚本help），避免存在局部旧缺口时仍把整批标题固定在最早阶段；该选项只改标题，不改百分比。`--blockers <JSON数组文件>`可显示尚未写入原状态的准确服务/人工/依赖事项，每项包含kind、scope、reason及适用panel_ids；它不新增生产HOLD。显示失败返回progress_warning，原初始化与接包判定保持有效，修复缓存后补报。
 
@@ -105,3 +105,5 @@ production_progress.py show --directory <显示目录>
 
 
 用户要求累计运行时限时，按[有效运行计时](runtime-clock.md)显式接入；暂停扣时须有真实事件依据，安装Hook不等于已获宿主信任。
+
+新任务最终交付必须执行[完整交付与容量门禁](delivery-contract.md)：前期交接单ZIP优先、超限自动连续分卷，每文件不超过900000000字节；成品ZIP无容量上限、不因体积自动分包，并必须包含图片问题总览.csv及问题明细.csv。前期内容release之后走publish，成品目录export之后走普通ZIP发布；统一交付验收.json通过后才能finish-check/100%。容量失败只修装配与容器，不重新生图或降质；旧冻结运行不热升级。

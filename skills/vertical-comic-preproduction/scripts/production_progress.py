@@ -63,6 +63,11 @@ def initialize(directory, role, states, *, config=None):
         raise ValueError('同一批一本书，每话只指定一个权威RV')
     task = {'policy': POLICY, 'role': role, 'states': paths, 'scope': [list(x) for x in scopes],
             'settings': settings(config), 'weights': WEIGHTS[role]}
+    from delivery_contract import for_display, POLICY as DELIVERY_POLICY
+    requirement,identity = for_display(directory)
+    if requirement is not None:
+        if any(task[k]!=requirement[k] for k in ('role','scope','states')):raise ValueError('交付要求与显示范围不符')
+        task.update(completion_policy=DELIVERY_POLICY,delivery_identity=identity)
     destination = directory/'task.json'
     if destination.exists() and read(destination) != task: raise ValueError('显示任务范围已锁定，不能换话或重置目标')
     directory.mkdir(parents=True, exist_ok=True)
@@ -279,6 +284,16 @@ def refresh(directory, *, activity=None, next_action=None, wait_kind='NONE', sta
                 'next': next_action or old.get('next', '继续当前可执行范围，补齐受影响项'),
                 'wait_kind': wait_kind, 'observed_at': time.time(), 'files': records.files,
                 'not_approval_evidence': True}
+    from delivery_contract import for_display,capacity_summary,CONTRACT
+    requirement,identity=for_display(directory,task)
+    if requirement is not None:
+        for path in (identity['path'],str(Path(identity['path']).parent/CONTRACT)):
+            snapshot['files'][path]=stat(path)
+        if task['role']=='production':
+            snapshot['capacity']=capacity_summary(task['states'],total)
+            snapshot['capacity']['max_file_bytes']=requirement['max_file_bytes']
+            estimate=snapshot['capacity']['estimated_image_bytes']
+            snapshot['capacity']['risk']='NO_SIZE_LIMIT' if requirement['max_file_bytes'] is None else 'UNKNOWN' if estimate is None else 'OVER_ESTIMATE' if estimate>requirement['max_file_bytes'] else 'ESTIMATE_ONLY'
     # A formal ZIP is counted once across the task, after its real checks.
     delivery_path = directory/'delivered.json'
     if delivery_path.exists():
@@ -319,6 +334,10 @@ def format_summary(snapshot):
     amounts = (f"镜头准备{counts['shots_prepared']}/{n}格；生图包准备{counts['package_prepared']}/{n}格" if snapshot['role']=='preparation' else
                f"已落盘{counts['images']}/{n}格；已审{counts['reviewed']}格；采用{counts['adopted']}格；在途{counts['inflight']}格；可用{counts['DELIVERABLE']}／人工后修{counts['MANUAL_RETOUCH']}／人工优先{counts['MANUAL_PRIORITY']}／未完成{counts['INCOMPLETE']}")
     blockers = '；'.join(f"{b['scope']}：{b['reason']}" for b in snapshot['blockers'][:3]) or ({'SERVICE':'等待生图服务返回','HUMAN':'等待用户决定','DEPENDENCY':'等待实际依赖；准确范围见进行事项'}.get(snapshot['wait_kind'],'无已登记阻塞'))
+    capacity=snapshot.get('capacity')
+    if capacity is not None:
+        estimate=capacity['estimated_image_bytes']
+        amounts+=f"；采用图{capacity['adopted_bytes']}字节；预计图片总量{estimate if estimate is not None else '待核定'}字节（不是ZIP实测）"
     return f"【{role}｜{LABELS[snapshot['stage']]}｜{progress}】\n进行中：{snapshot['activity']}\n完成量：{amounts}\n阻塞：{blockers}\n下一步：{snapshot['next']}"
 
 
@@ -340,13 +359,17 @@ def show(directory, *, now=None, acknowledge=False, force=False):
     return {'status':'REPORT_DUE','message':message,'percent':snapshot['percent'],'runtime_clock':clock}
 
 
-def complete(directory, archive, *, _coordination_checked=False, transport_receipt=None):
+def complete(directory, archive, *, _coordination_checked=False, transport_receipt=None, delivery_report=None):
     """Explicit final check once, never from a heartbeat. No permission is granted."""
     import zipfile
     directory = Path(directory)
     if (directory.parent/'00_任务协调/coordination.json').exists() and not _coordination_checked:
         raise ValueError('请使用task_coordination.py finish-check收敛子任务后交付')
     task = read(directory/'task.json'); archive = Path(archive).resolve()
+    from delivery_contract import for_display
+    requirements,identity=for_display(directory,task)
+    if requirements is not None:
+        return complete_validated(directory,archive,task,requirements,identity,delivery_report)
     if archive.suffix.lower() != '.zip': raise ValueError('完整目标须为正式ZIP')
     if task['role'] == 'preparation':
         from handoff_zip import check_delivery_archive, read_zip_json, zip_inventory, INDEX
@@ -408,6 +431,43 @@ def complete(directory, archive, *, _coordination_checked=False, transport_recei
     return result
 
 
+def complete_validated(directory,archive,task,requirements,identity,delivery_report):
+    from delivery_contract import assert_completion,reference,checked,state_bindings,CONTRACT
+    if not delivery_report:raise ValueError('DELIVERY_RECEIPT_HOLD:新任务必须提供完整交付验收记录')
+    report=assert_completion(requirements,delivery_report,archive)
+    if task['role']=='production':
+        from panel_delivery import gate
+        for sp in task['states']:
+            state=read(sp);result=gate(state,Path(sp).parent.parent)
+            if result['status']!='PASS' or not result['handoff_complete']:raise ValueError('成品原门禁变化')
+            observe_runtime(directory,sp,'deliver',result,expected_state=state)
+    baseline=refresh(directory)
+    units={**baseline['stage_units'],'delivery':baseline['total'] or 0}
+    if task['role']=='preparation':units['rehearsal']=baseline['total'] or 0
+    total=baseline['total']
+    if not total or math.floor(sum(task['weights'][k]*units[k]/total for k in units))!=100:
+        raise ValueError('DELIVERY_CONTENT_HOLD:前序阶段未闭合，不能写完成记录')
+    paths=[str(Path(delivery_report).resolve()),identity['path'],
+           str(Path(identity['path']).parent/CONTRACT)]
+    paths.extend(r['path'] for r in report['artifacts'])
+    paths.extend(report[k]['path'] for k in ('source','transport_receipt') if k in report)
+    baseline['files'].update({p:stat(p) for p in paths})
+    if report['states']!=state_bindings(requirements):raise ValueError('DELIVERY_CHANGED_HOLD:完成前状态变化')
+    if any(baseline['files'][p] is None for p in paths):raise ValueError('DELIVERY_CHANGED_HOLD:完成前交付依赖缺失')
+    atomic_json(directory/'delivered.json',{'policy':requirements['policy'],'zip':str(archive),'stat':stat(archive),
+        'delivery_report':reference(delivery_report),'artifacts':report['artifacts'],
+        'dependencies':baseline['files'],'states':{p:fingerprint(read(p)) for p in task['states']}})
+    result=refresh(directory,activity='内容与实际发送ZIP容量均已验收',next_action='交付验收记录中的实际发送文件')
+    if result['percent']!=100:
+        (directory/'delivered.json').unlink(missing_ok=True)
+        raise ValueError('DELIVERY_CHANGED_HOLD:完成提交后证据变化，保持未完成')
+    from runtime_clock import locate,event,release
+    clock=locate(directory)
+    if clock:event(clock,'finish','validated-delivery-finished');release(clock)
+    result['delivery_artifacts']=report['artifacts']
+    return result
+
+
 def read_zip(z, name):
     return name, json.loads(z.read(name).decode('utf-8-sig'))
 
@@ -418,11 +478,12 @@ def main():
     p.add_argument('--stage',choices=tuple(LABELS)); p.add_argument('--blockers',help='准确额外阻塞的JSON数组文件；仅显示，不改变原HOLD')
     p.add_argument('--activity'); p.add_argument('--next'); p.add_argument('--wait-kind',choices=('NONE','SERVICE','DEPENDENCY','HUMAN','ENDED'),default='NONE')
     p.add_argument('--ack',action='store_true',help='仅在总控实际发出消息后确认送达'); p.add_argument('--force',action='store_true'); p.add_argument('--zip')
+    p.add_argument('--delivery-report',help='完整交付入口生成的交付验收.json；新任务必须提供')
     p.add_argument('--transport-receipt',help='export生成的运输验证.json；交付微信运输包时必须提供')
     a = p.parse_args()
     if a.action=='init': value = initialize(a.directory,a.role,a.state or [])
     elif a.action=='refresh': value = refresh(a.directory,activity=a.activity,next_action=a.next,wait_kind=a.wait_kind,stage=a.stage,blockers=read(a.blockers) if a.blockers else None)
-    elif a.action=='complete': value = complete(a.directory,a.zip,transport_receipt=a.transport_receipt)
+    elif a.action=='complete': value = complete(a.directory,a.zip,transport_receipt=a.transport_receipt,delivery_report=a.delivery_report)
     else: value = show(a.directory,acknowledge=a.ack,force=a.force)
     print(json.dumps(value,ensure_ascii=False,indent=2))
 

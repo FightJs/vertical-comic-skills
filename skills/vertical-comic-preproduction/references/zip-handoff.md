@@ -36,6 +36,7 @@ handoff_zip.py extract --zip <候选ZIP> --destination <全新演练解压目录
 handoff_zip.py bind --package-root <演练包根> --run-root <包外全新本地运行>
 handoff_zip.py rehearse --zip <候选ZIP> --package-root <演练包根> --run-root <本地运行> --run-index <本地绑定索引> --report-dir <新报告目录>
 handoff_zip.py release --zip <候选ZIP> --rehearsal-report <演练报告> --approval <真实导出授权> --output <新正式ZIP>
+handoff_zip.py publish --zip <新正式ZIP> --contract <本任务交付身份.json> --output <全新发送目录>
 ```
 
 bind只重绑运行路径，原创作文件、源稿、批准和预算不变。新版冻结工具必须声明receiver_episode_audit=receiver_episode_audit_v1，实际执行production_runtime.py --action receiver-audit --episode-scope --panels <完整源序>，在同一读取事务中完成准备检查与一次全话实际输入编译；不再跑首半话编译。新包不支持该能力时报HOLD，不降级。旧包仍使用原冻结能力和原首半话检查。
@@ -54,3 +55,5 @@ comic_start.py receive --package-root <完整已解压包根> --output <输出�
 目录接收核对相同内容和内置发布证据，原ZIP容器CRC标为不可获得；不要求重压或找回ZIP。原件只读，本地运行位于包外。书话范围从包内解析，不询问外部脚本、资产或profile。演练完成后，整话就绪格经实际容量许可和正常compile再提交，用户指定审核点与真实前图依赖仍执行。生产、QA和最终交付沿原合同。
 
 微信运输使用[无损去重与分卷](handoff-transport.md)，只对正式ZIP导出；恢复后逐文件核验，缺卷、损坏、混卷均不得生产。
+
+新任务最终交付必须执行[完整交付与容量门禁](delivery-contract.md)：前期交接单ZIP优先、超限自动连续分卷，每文件不超过900000000字节；成品ZIP无容量上限、不因体积自动分包，并必须包含图片问题总览.csv及问题明细.csv。前期内容release之后走publish，成品目录export之后走普通ZIP发布；统一交付验收.json通过后才能finish-check/100%。容量失败只修装配与容器，不重新生图或降质；旧冻结运行不热升级。

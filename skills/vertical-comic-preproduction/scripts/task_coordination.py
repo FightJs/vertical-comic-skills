@@ -44,6 +44,10 @@ def initialize(directory, display):
             return value
         value = {'policy': POLICY, 'revision': 0, 'display': str(display),
                  'scope': task['scope'], 'tasks': {}, 'events': [], 'checkpoint': None}
+        if task.get('delivery_identity'):
+            verify(task['delivery_identity'])
+            value['delivery_identity'] = task['delivery_identity']
+            value['completion_policy'] = task['completion_policy']
         atomic_json(path, value)
         return value
 
@@ -141,7 +145,7 @@ def resume(directory):
             'clock_resume_requires_explicit_work':True, 'tasks': value['tasks'], 'work_items':value.get('work_items',{}), 'blockers': pending(value), 'checkpoint': value['checkpoint'],
             'next': '先用宿主工具核实所有旧任务；不可达记UNKNOWN，不重新派发；此命令不唤醒会话'}
 
-def finish(directory, expected_revision, archive):
+def finish(directory, expected_revision, archive, *, delivery_report=None):
     directory = Path(directory)
     with file_lock(directory/'coordination.lock'):
         path = directory/'coordination.json'; value = read(path)
@@ -151,12 +155,17 @@ def finish(directory, expected_revision, archive):
         # Real delivery validator remains authoritative; no caller-supplied PASS.
         from production_progress import complete
         before = reference(archive)
-        result = complete(value['display'], archive, _coordination_checked=True)
+        kwargs={'_coordination_checked':True}
+        if delivery_report is not None:kwargs['delivery_report']=delivery_report
+        result = complete(value['display'], archive, **kwargs)
         verify(before)
         if result['percent'] != 100: raise ValueError('交付尚未完成')
         value['revision'] += 1
         value['finish'] = {'status': 'READY_TO_DELIVER', 'archive': before,
                            'revision': value['revision']}
+        if delivery_report is not None:
+            value['finish']['delivery_report']=reference(delivery_report)
+            value['finish']['artifacts']=result.get('delivery_artifacts',[])
         atomic_json(path, value)
         return value['finish']
 
@@ -165,6 +174,7 @@ def main():
     parser.add_argument('action', choices=['init', 'event', 'resume', 'finish-check'])
     parser.add_argument('--directory', required=True); parser.add_argument('--display')
     parser.add_argument('--revision', type=int); parser.add_argument('--event'); parser.add_argument('--zip')
+    parser.add_argument('--delivery-report',help='新任务交付验收.json，完整传给最终门禁')
     a = parser.parse_args()
     try:
         if a.action == 'init':
@@ -176,7 +186,7 @@ def main():
             result = update(a.directory, a.revision, read(a.event))
         else:
             if a.revision is None or not a.zip: raise ValueError('finish-check缺--revision/--zip')
-            result = finish(a.directory, a.revision, a.zip)
+            result = finish(a.directory, a.revision, a.zip, delivery_report=a.delivery_report)
         print(json.dumps(result, ensure_ascii=False)); return 0
     except (OSError, ValueError, KeyError, TypeError) as exc:
         print(json.dumps({'status': 'COORDINATION_HOLD', 'error': str(exc)}, ensure_ascii=False)); return 1

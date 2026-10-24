@@ -562,6 +562,11 @@ def release(candidate_zip,rehearsal_report,approval_file,output):
     return {'status':'RELEASED_DIRECT_DELIVERY_ZIP','zip':str(output),'sha256':sha(output),count_key(delivery_index):report[count_key(delivery_index)],'not_production_authorization':True}
 
 
+def publish(source_zip,contract,output):
+    from delivery_publish import publish_preparation
+    return publish_preparation(contract,source_zip,output)
+
+
 def main():
     p=argparse.ArgumentParser(description=__doc__);sub=p.add_subparsers(dest='action',required=True)
     q=sub.add_parser('bind');q.add_argument('--package-root',required=True);q.add_argument('--run-root',required=True)
@@ -570,6 +575,8 @@ def main():
     q=sub.add_parser('extract');q.add_argument('--zip',required=True);q.add_argument('--destination',required=True);q.add_argument('--reserve-bytes',type=int,default=256*1024*1024);q.add_argument('--sha256-file')
     q=sub.add_parser('rehearse');q.add_argument('--zip',help='省略时核验已解压正式目录及内置发布证据');q.add_argument('--package-root',required=True);q.add_argument('--run-root',required=True);q.add_argument('--run-index',required=True);q.add_argument('--report-dir',required=True);q.add_argument('--timeout',type=int,default=180)
     q=sub.add_parser('release');q.add_argument('--zip',required=True);q.add_argument('--rehearsal-report',required=True);q.add_argument('--approval',required=True);q.add_argument('--output',required=True);q.add_argument('--transport-output',help='正式发布后自动导出微信运输包到全新目录')
+    q=sub.add_parser('assemble');q.add_argument('--root',required=True);q.add_argument('--plan',required=True);q.add_argument('--output',required=True)
+    q=sub.add_parser('publish');q.add_argument('--zip',required=True);q.add_argument('--contract',required=True);q.add_argument('--output',required=True)
     a=p.parse_args()
     try:
         if a.action=='bind':
@@ -578,6 +585,10 @@ def main():
         elif a.action=='review':
             from handoff_delivery import input_review
             r={'status':'FINAL_INPUTS_FOR_HUMAN_REVIEW',**input_review(a.root,audit_index(a.root))}
+        elif a.action=='assemble':
+            from handoff_delivery import copy_assembly_plan
+            r=copy_assembly_plan(a.root,a.output,read(a.plan))
+        elif a.action=='publish':r=publish(a.zip,a.contract,a.output)
         elif a.action=='pack':r=pack(a.root,a.output)
         elif a.action=='extract':
             if a.reserve_bytes<0:raise ValueError('空间预留不得为负数')

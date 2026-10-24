@@ -3,7 +3,20 @@ const fs = require('node:fs');
 const path = require('node:path');
 const source = fs.readFileSync(path.join(__dirname, '../scripts/async_generation.js'), 'utf8');
 // functions.exec exposes timeout timers, not interval timers.
-const run = require('node:vm').runInNewContext(source, {setTimeout,clearTimeout,Date,Error});
+const rawRun = require('node:vm').runInNewContext(source, {setTimeout,clearTimeout,Date,Error});
+
+// Unit-only registration adapter. Boundary integration tests use real Python writers.
+const crypto = require('node:crypto');
+const fixtureJob = j => ({...j,kind:j.kind??'panel',book_id:j.book_id??'BOOK',episode_id:j.episode_id??'E001',
+  arguments:j.arguments??{},submission:j.submission??{policy:'durable_image_submission_v1',task_id:'SYNTHETIC',input_digest:'a'.repeat(64)}});
+const fixtureAck = j => ({policy:'durable_image_submission_v1',status:'SUBMISSION_REGISTERED',invoke_allowed:true,
+ registration_id:crypto.createHash('sha256').update(JSON.stringify([j.job_id,j.panel_id,j.asset_id,j.attempt_id])).digest('hex'),
+ scope:{task_id:j.submission.task_id,book_id:j.book_id,episode_id:j.episode_id,job_id:j.job_id},
+ kind:j.kind,panel_id:j.panel_id,asset_id:j.asset_id,batch_id:j.batch_id,round_id:j.round_id,attempt_id:j.attempt_id,
+ input_digest:j.submission.input_digest,permit_id:j.dispatch_receipt?.permit_id});
+const run = (jobs,limit,invoke,onResult,options={}) => rawRun(jobs.map(fixtureJob),limit,invoke,onResult,
+ {onBeforeInvoke:async j=>fixtureAck(j),...options});
+
 const jobs = n => Array.from({length:n},(_,i)=>({job_id:'TEST',panel_id:`P${i+1}`,batch_id:'H001',round_id:1,attempt_id:`A${i+1}`}));
 const sleep = ms=>new Promise(r=>setTimeout(r,ms));
 (async()=>{
@@ -128,18 +141,17 @@ const sleep = ms=>new Promise(r=>setTimeout(r,ms));
    assert.equal(rejected[1].status,'NOT_DISPATCHED');
  }
  let preflightInvocations=0;
- await assert.rejects(()=>run(jobs(1),1,async()=>{preflightInvocations++},async()=>{},
-   {onInputHeadRefresh:()=>ack}),/INPUT_HEAD_SCOPE_HOLD/);
+ await assert.rejects(()=>rawRun(jobs(1).map(j=>({...j,submission:{policy:'durable_image_submission_v1',task_id:'S',input_digest:'a'.repeat(64)}})),1,async()=>{preflightInvocations++},async()=>{},
+   {onInputHeadRefresh:()=>ack}),/SUBMISSION_HOLD|INPUT_HEAD_SCOPE_HOLD/);
  assert.equal(preflightInvocations,0);
  let assetRefreshes=0;
  await run([{kind:'asset',job_id:'ASSET',asset_id:'VIEW',attempt_id:'A1'}],1,async()=>({}),async()=>{},
    {onInputHeadRefresh:()=>{assetRefreshes++;return ack}});
  assert.equal(assetRefreshes,0);
  const managedJobs=boundJobs(2).map((j,i)=>({...j,managed_submission_required:true,dispatch_receipt:{permit_id:'R'+i}}));
- const submitAck=j=>({status:'SUBMISSION_REGISTERED',invoke_allowed:true,scope:{book_id:j.book_id,episode_id:j.episode_id},
-   panel_id:j.panel_id,attempt_id:j.attempt_id,round_id:j.round_id,permit_id:j.dispatch_receipt.permit_id});
+ const submitAck=j=>fixtureAck(j);
  let managedInvoked=0;
- await assert.rejects(()=>run(managedJobs,1,async()=>{managedInvoked++},async()=>{}),/durable onBeforeInvoke/);
+ await assert.rejects(()=>rawRun(managedJobs.map(fixtureJob),1,async()=>{managedInvoked++},async()=>{}),/durable onBeforeInvoke/);
  assert.equal(managedInvoked,0);
  const submitOrder=[];
  await run(managedJobs,1,async j=>{submitOrder.push('invoke-'+j.panel_id);managedInvoked++;return {}},async()=>{},
@@ -172,5 +184,27 @@ const sleep = ms=>new Promise(r=>setTimeout(r,ms));
  await assert.rejects(()=>run(jobs(1),1,async()=>{invalidProgressCalls++},async()=>{},
    {progressPollMs:60001}),/progress intervals/);
  assert.equal(invalidProgressCalls,0);
+
+ for (const kind of ['panel','repair','asset']) {
+   const original=fixtureJob(kind==='asset'?{kind,job_id:'ASSET',asset_id:'X',attempt_id:'A1'}:{...jobs(1)[0],kind});
+   let touches=0;
+   await assert.rejects(()=>rawRun([original],1,async()=>{touches++},async()=>{}),/durable onBeforeInvoke/);
+   const blocked=await rawRun([original],1,async()=>{touches++},async()=>{},
+     {onBeforeInvoke:async()=>{throw Error('RUNTIME_CLOCK_PAUSED')}});
+   assert.equal(touches,0);assert.equal(blocked[0].status,'NOT_DISPATCHED');
+   for(const mutate of [a=>({...a,input_digest:'b'.repeat(64)}),a=>({...a,kind:'wrong'}),
+       a=>({...a,scope:{...a.scope,task_id:'other'}}),a=>({...a,invoke_allowed:false})]) {
+     await rawRun([original],1,async()=>{touches++},async()=>{}, {onBeforeInvoke:async j=>mutate(fixtureAck(j))});
+   }
+   assert.equal(touches,0);
+ }
+ for(const flag of ['candidate_only','input_audit_only']) {
+   await assert.rejects(()=>rawRun([{...fixtureJob(jobs(1)[0]),[flag]:true}],1,async()=>{},async()=>{},
+      {onBeforeInvoke:fixtureAck}),/CANDIDATE_HOLD/);
+ }
+ const mutable=fixtureJob({...jobs(1)[0],arguments:{prompt:'checked'}});let actualPrompt;
+ await rawRun([mutable],1,async j=>{actualPrompt=j.arguments.prompt},async()=>{},
+   {onBeforeInvoke:async j=>{mutable.arguments.prompt='changed externally';j.arguments.prompt='changed callback';return fixtureAck(j)}});
+ assert.equal(actualPrompt,'checked');
  console.log('Async generation concurrency, durable timing, asset/repair routing, full error preservation, unknown outcome, service circuit and review notification tests PASS; fake backend only.');
 })().catch(e=>{console.error(e);process.exitCode=1});

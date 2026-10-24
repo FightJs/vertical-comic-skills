@@ -6,8 +6,8 @@
 
 1. 先核对真实本话整话计划与已批准依据，编译当前可执行集合的独立单格包，逐格运行完整generate门禁。所有实际参考使用明确本地路径，每格独立顺序/哈希，禁止“最近图片”。当前Codex入口每个请求最多5条参考路径，同文件多用途先合并；超限条目留待重编译，只派合格独立集合，见 [reference-budget.md](reference-budget.md)。新状态与实图依赖按 [整话异步生产](episode-async.md) 处理；旧半话RV按原计划。
 2. 总控预留唯一许可，核定本话及全局剩余额度。待提交条目包含job_id/panel_id/batch_id/round_id/attempt_id，以及实际工具参数和包定位信息。预留不是发出请求，提交前正确登记IN_FLIGHT和实际请求证据。避免把调用计划记录成observed_tool_call。
-3. 在functions.exec中加载async_generation.js函数体（通过文件工具读文本，或将完整函数体复制到该exec），注入invoke与onResult。invoke执行提交前核对/真实请求登记并调用tools.image_gen__imagegen(job.arguments)；onResult保存实际返回图路径、工具来源、输入/输出哈希、时间及结果，串行写本话状态，并把许可终结事件交总控更新。不要将返回base64全文打印到日志。
-4. 调用await runHalfWave(当前就绪jobs,有效本话并发额度,invoke,onResult,{onReviewReady})；函数名沿用历史命名，当前jobs可来自整话EPISODE。执行器在同一轮启动多个invoke，等待所有任务收尾；不能for循环await上一张工具结果后再创建下一张请求，也不能发出Promise后结束exec导致请求被丢弃。它保持结果与源格对应，返回顺序不决定保存格号。onReviewReady在保存成功后发待审定位并yield；回调不占生图调用槽，不能在其中伪写图像PASS。agent打开原图及参考完成真实QA，单写队列保存审查结论。
+3. 在functions.exec中加载async_generation.js函数体（通过文件工具读文本，或将完整函数体复制到该exec），注入invoke、onResult与onBeforeInvoke。onBeforeInvoke通过[统一提交登记](submission-runtime.md)调用真实登记入口；invoke只调用tools.image_gen__imagegen(job.arguments)，不能把登记隐藏在可省略的invoke约定中；onResult保存实际返回图路径、工具来源、输入/输出哈希、时间及结果，串行写本话状态，并把许可终结事件交总控更新。不要将返回base64全文打印到日志。
+4. 调用await runHalfWave(当前就绪jobs,有效本话并发额度,invoke,onResult,{onBeforeInvoke,onReviewReady})；函数名沿用历史命名，当前jobs可来自整话EPISODE。执行器在同一轮启动多个invoke，等待所有任务收尾；不能for循环await上一张工具结果后再创建下一张请求，也不能发出Promise后结束exec导致请求被丢弃。它保持结果与源格对应，返回顺序不决定保存格号。onReviewReady在保存成功后发待审定位并yield；回调不占生图调用槽，不能在其中伪写图像PASS。agent打开原图及参考完成真实QA，单写队列保存审查结论。
 5. exec可yield后用wait恢复该运行，期间仍保留未完成Promise。尚有就绪条目未发出时继续调度，不把单张生成的等待当本话唯一工作。等待时可以整理本话其他格输入和当前证据；需要前置实图的格按真实返回及时QA再形成下一就绪集合。单次执行器调用不要求所有格都无依赖。
 6. 当前整话模式边返图边完整自审；整话收尾只补未审图和连续性，失败格按实际记录滚动返修。工具FULFILLED只说明函数返回，仍须核对是否实际有图；REJECTED记录真实异常，不自动重试。结果保存失败会停止提交余下条目，已在途任务仍收尾；NOT_DISPATCHED保持未提交，不能记为失败图或已生成。通知失败记review_signal_error并补通知/审查，不重发生图。结果未知先查证，禁止重复调用。旧半话流程按原轮次汇总。
 
@@ -45,3 +45,5 @@ onProgress: async event => {
 
 
 总控任务记录、真实等待、收尾检查与中断恢复统一见[任务协调与恢复](task-recovery.md)。新运行最终交付使用task_coordination.py finish-check，不能以进度摘要、子任务口头完成或等待超时结束轮次。
+
+正文、返修及资产均须使用原始编译job和真实onBeforeInvoke；缺登记接线、审计/候选job及登记回执不符时，执行器不触达图片工具。不能用手写成功对象替代登记。协议、CLI及恢复见[统一提交登记](submission-runtime.md)。

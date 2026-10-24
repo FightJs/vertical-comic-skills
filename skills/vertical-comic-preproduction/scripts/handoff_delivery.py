@@ -73,7 +73,7 @@ def closure(root,index,*,verify_runtime=True):
     return errors
 
 
-def bind(package_root,run_root):
+def bind(package_root,run_root,*,execution_context=None):
     from handoff_zip import audit_index,reference,inside,files,sha,write
     from runtime_snapshot import verify
     from execution_contract import toolchain
@@ -115,6 +115,13 @@ def bind(package_root,run_root):
         new_memory={k:v for k,v in (frozen['memory_source'] or {}).items() if k not in {'root','runtime_snapshot'}}
         if old_memory!=new_memory:raise ValueError('模板规则版本或索引变化，不能当作路径绑定')
         state={**state,'runtime_snapshot':snap_ref,'toolchain':new_toolchain}
+        if execution_context is not None:
+            from runtime_clock import execution_context as verify_context
+            verify_context(run_root/e['episode_id'],state={'runtime_execution_context':execution_context})
+            state['runtime_execution_context']=execution_context
+        elif state.get('runtime_execution_context') is not None:
+            # Historical preparation timing is not a receiver's clock policy.
+            state.pop('runtime_execution_context')
         if frozen['memory_source'] is not None or 'memory_source' in state:state['memory_source']=frozen['memory_source']
         plans.append((e,plan,source,state,sha(state_path)))
     run_root.mkdir(parents=True);runs=[]
@@ -123,7 +130,7 @@ def bind(package_root,run_root):
             episode_root=inside(run_root,e['episode_id']);shutil.copytree(source,episode_root)
             state_file=inside(episode_root,plan['state_file']);state_file.write_text(json.dumps(state,ensure_ascii=False,indent=2)+'\n', encoding='utf-8', newline='\n')
             evidence={'policy':'runtime_only_relocation_v1','package_id':index['package_id'],'episode_id':e['episode_id'],
-                      'template_state_sha256':old_sha,'local_state_sha256':sha(state_file),'changed_fields':['runtime_snapshot','toolchain','memory_source'],
+                      'template_state_sha256':old_sha,'local_state_sha256':sha(state_file),'changed_fields':['runtime_snapshot','toolchain','memory_source']+(['runtime_execution_context'] if execution_context is not None else []),
                       'creative_files_unchanged':True,'approval_rewritten':False,'budget_reset':False,
                       'input_mode':'package_only_production','external_inputs_required':False,
                       'usage_config_path_role':'historical_origin_only_not_receiver_configuration'}

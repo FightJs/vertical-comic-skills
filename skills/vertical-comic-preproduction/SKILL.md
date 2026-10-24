@@ -84,3 +84,5 @@ A由[视觉资产](../vertical-comic-visual-assets/SKILL.md)维护身份、衣�
 新相关格按[空间输入收敛](references/final-input-semantics.md#空间输入收敛)选择MEM-003/006/009并绑定当前投影，首轮空间失败按[二轮分流](references/execution-quality.md#建筑与视角畸形的二轮分流)执行MEM-004；普通格和旧冻结运行保持原路径。
 
 新任务最终交付必须执行[完整交付与容量门禁](references/delivery-contract.md)：前期交接单ZIP优先、超限自动连续分卷，每文件不超过900000000字节；成品ZIP无容量上限、不因体积自动分包，并必须包含图片问题总览.csv及问题明细.csv。前期内容release之后走publish，成品目录export之后走普通ZIP发布；统一交付验收.json通过后才能finish-check/100%。容量失败只修装配与容器，不重新生图或降质；旧冻结运行不热升级。
+
+新执行器的正文、返修及资产调用统一经过[提交登记](references/submission-runtime.md)，缺onBeforeInvoke或准确持久化回执时不调用。计时上下文缺失不自动视为不限时。

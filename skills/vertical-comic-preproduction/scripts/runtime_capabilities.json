@@ -34,7 +34,8 @@
     "external_call_atomic_pause": false,
     "context": "comic_clock_context_v1",
     "automatic_session_binding": "verified_host_receipt",
-    "stable_environment": true
+    "stable_environment": true,
+    "execution_context": "local_execution_context_v1"
   },
   "receiver_episode_audit": "receiver_episode_audit_v1",
   "handoff_scope": "rehearsed_zip_handoff_v2",
@@ -53,5 +54,19 @@
       "package_mode": "single_zip",
       "csv_policy": "adopted_issue_csv_v1"
     }
+  },
+  "durable_image_submission": {
+    "policy": "durable_image_submission_v1",
+    "required_by_executor": true,
+    "kinds": [
+      "panel",
+      "repair",
+      "asset"
+    ],
+    "ordinary_writer": "production_runtime.py submit",
+    "managed_writer": "managed_dispatch.py submit",
+    "asset_writer": "asset_runtime.py submit",
+    "legacy_auto_migration": false,
+    "external_call_atomic_pause": false
   }
 }

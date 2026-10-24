@@ -36,6 +36,7 @@ def main() -> int:
     parser.add_argument("--config", help="可选使用配置JSON；读取第三来源及请求并发，不修改全局agent配置")
     parser.add_argument("--runtime-snapshot", help="本批一次创建、各话共用的manifest.json绝对路径")
     parser.add_argument("--task-context", help="本批唯一任务来源JSON；恢复/接包保留原任务，不重新初始化")
+    parser.add_argument('--execution-context', help='本机职责计时上下文；不是创作批准')
     parser.add_argument("--memory-root", help="通用规则记忆库绝对路径")
     parser.add_argument("--memory-loading-policy", choices=("stage_baseline_loading_v1",), help="无配置的新库须显式绑定读取合同；旧库省略")
     parser.add_argument("--batch-size", type=int, choices=range(1, 6), default=None)
@@ -143,6 +144,12 @@ def main() -> int:
         extra["requested_generation"] = config["generation"]
 
     root = Path(args.output).resolve()
+    if args.execution_context:
+        from runtime_clock import execution_context
+        context = execution_context(root, state={'runtime_execution_context': {
+            'path': str(Path(args.execution_context).resolve()),
+            'sha256': __import__('hashlib').sha256(Path(args.execution_context).read_bytes()).hexdigest()}})
+        extra['runtime_execution_context'] = context['reference']
     if mode == 'episode_async_v1':
         from task_context import fresh, validate as validate_task, ORIGIN_FILE
         if (root/'00_输入审计/生产流程.json').exists():

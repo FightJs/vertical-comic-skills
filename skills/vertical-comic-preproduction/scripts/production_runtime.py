@@ -87,6 +87,9 @@ def compile_jobs(state, root, panel_ids=None, *, candidate=False, input_audit=Fa
                 shot = next(p for p in shots if p['panel_id'] == pid)
                 prepared = {'prepared_input_digest': fingerprint(actual_input(state, root, shot, packet, path.parent))}
             jobs.append({**prepared,
+                **__import__('submission_contract').panel_job(
+                    state,root,{**record,'batch_id':report['batch_id']},packet,arguments,
+                    candidate=candidate,input_audit=input_audit),
                 "kind": "repair" if panel.get("operation") == "repair" else "panel",
                 "book_id": state['book_id'], "episode_id": state['episode_id'],
                 "job_id": state.get("parallel_context", {}).get("job_id", state["episode_id"]),
@@ -543,7 +546,28 @@ def _episode_bundle(state, root, dependency_plan=None, *, panel_ids=None):
     return value
 
 
-def commit_updates(state_path, expected_sha256, updates, *, resolution_ref=None):
+def submit(state_path, job):
+    """Register the exact exported input once; a repeated ack never permits a call."""
+    path = Path(state_path).resolve()
+    return commit_updates(path, digest(path), [{'panel_id':job['panel_id'],
+        'attempt_id':job['attempt_id'], 'round_id':job['round_id'], 'status':'IN_FLIGHT'}],
+        submission_job=job)
+
+
+def submission_status(state_path, job):
+    """Read-only crash recovery evidence; never an invocation permission."""
+    from submission_contract import registration, identity, fingerprint, job_binding
+    state=read_json(Path(state_path))
+    if (job.get('submission',{}).get('task_id')!=identity(state) or job.get('book_id')!=state['book_id'] or
+        job.get('episode_id')!=state['episode_id']):raise ValueError('SUBMISSION_HOLD: recovery scope mismatch')
+    key,_=registration(job);record=state.get('submission_registrations',{}).get(key)
+    if record is not None and record['job_digest']!=fingerprint(job_binding(job)):
+        raise ValueError('SUBMISSION_HOLD: recovery input conflict')
+    return {'status':'REGISTRATION_FOUND' if record else 'NOT_REGISTERED',
+            'registration':record,'invoke_allowed':False,'image_calls':0}
+
+
+def commit_updates(state_path, expected_sha256, updates, *, resolution_ref=None, submission_job=None):
     """Single-writer CAS: real receipts/QA only; never changes frozen inputs/gates."""
     from staged_workflow import qa_errors
     from batch_round import attempt_errors
@@ -563,6 +587,24 @@ def commit_updates(state_path, expected_sha256, updates, *, resolution_ref=None)
         require_running(state_path)
     with state_write_lock(state_path):
         state = read_json(state_path); require_legacy(state)
+        submission_record = None
+        if submission_job is not None:
+            if len(updates)!=1 or updates[0].get('status')!='IN_FLIGHT':
+                raise ValueError('SUBMISSION_HOLD: exactly one new attempt required')
+            from submission_contract import panel_job, validate_job, registration, acknowledgement
+            record = next(r for r in state['panels'] if r['panel_id']==submission_job['panel_id'])
+            packet_path = checked_file(root,record['package_manifest'])
+            packet = read_json(packet_path)
+            errors, plan = validate_panel(packet['panels'][0],packet_path.parent)
+            if errors or plan is None: raise ValueError('SUBMISSION_HOLD: '+ ';'.join(errors))
+            actual = panel_job(state,root,record,packet,plan['arguments'])
+            validate_job(submission_job,actual)
+            key, submission_record = registration(actual)
+            previous = state.get('submission_registrations',{}).get(key)
+            if previous is not None:
+                if previous['job_digest'] != submission_record['job_digest']:
+                    raise ValueError('SUBMISSION_HOLD: registered input changed')
+                return acknowledgement(actual,previous,fresh=False,state_sha256=digest(state_path))
         operation = None
         if 'dispatch_consistency' in state:
             from dispatch_publication import _bytes, _sha
@@ -639,6 +681,11 @@ def commit_updates(state_path, expected_sha256, updates, *, resolution_ref=None)
         if digest(state_path) != expected_sha256:raise ValueError("STATE_CHANGED")
         if operation is not None:
             new.setdefault('runtime_operations', {})[operation] = {'panel_ids': [u['panel_id'] for u in updates]}
+        if any(u.get('status')=='IN_FLIGHT' for u in updates):
+            from runtime_clock import require_running
+            require_running(state_path)  # Locks/preflight may have waited through a pause.
+        if submission_record is not None:
+            new.setdefault('submission_registrations',{})[submission_record['registration_id']]=submission_record
         atomic_json(state_path, new)
         monitored=[]
         if new.get("runtime",{}).get("watchdog",{}).get("policy") == "worker_watchdog_v1":
@@ -659,6 +706,13 @@ def commit_updates(state_path, expected_sha256, updates, *, resolution_ref=None)
                        "evidence":ref}
                 try:monitored.append(record_progress(ledger,root,event)["status"])
                 except (OSError,ValueError,TypeError) as exc:monitored.append(f"PROGRESS_RECORD_ERROR:{exc}")
+        if submission_record is not None:
+            # If this fails after commit, retain registration and never grant a replay.
+            from runtime_clock import require_running
+            try: require_running(state_path)
+            except (OSError,ValueError) as exc:
+                raise ValueError('SUBMISSION_REGISTERED_NO_INVOKE: '+str(exc)) from exc
+            return acknowledgement(actual,submission_record,fresh=True,state_sha256=digest(state_path))
         return {"status":"UPDATES_SAVED","panel_ids":[u["panel_id"] for u in updates],
                 "state_sha256":digest(state_path),"watchdog_progress":monitored,
                 "user_approval":"NOT_GRANTED"}
@@ -801,7 +855,7 @@ def prepare_review(state, root, queue):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--state", required=True)
-    parser.add_argument("--action", choices=("authoring-import", "draft-plan", "draft-derive", "draft-atlas", "preparation-plan", "preparation-review", "readiness", "preflight", "compile", "audit-inputs", "receiver-audit", "review", "checkpoint", "bundle", "commit", "repair-authorize", "diagnosis-record", "watch-progress", "watch-check", "watch-ack", "repair-plan", "decisions-register", "delivery-review", "production-questions"), required=True)
+    parser.add_argument("--action", choices=("authoring-import", "draft-plan", "draft-derive", "draft-atlas", "preparation-plan", "preparation-review", "readiness", "preflight", "compile", "audit-inputs", "receiver-audit", "review", "checkpoint", "bundle", "commit", "submit", "submission-status", "repair-authorize", "diagnosis-record", "watch-progress", "watch-check", "watch-ack", "repair-plan", "decisions-register", "delivery-review", "production-questions"), required=True)
     parser.add_argument("--panels", nargs="*")
     parser.add_argument("--h001-panels", nargs="+", help="合并接包审计的准确首半话范围")
     parser.add_argument("--display-progress-dir", help="派生显示目录；仅保存现有检查结果，不新增门禁")
@@ -812,6 +866,7 @@ def main():
     parser.add_argument("--processed", help="仅去重观察通知的cursor JSON")
     parser.add_argument("--prepare-qa", action="store_true", help="仅新增/变化图生成未审模板及一次组联系表")
     parser.add_argument("--dependency-plan", help="已冻结依赖补齐方案的本话相对文件路径")
+    parser.add_argument("--job", help="submit使用编译器导出的原始单个job JSON")
     parser.add_argument("--updates", help="真实返回或实际QA形成的updates JSON")
     parser.add_argument("--resolution", help="解析原未知请求的本话相对真实查证报告；不授予重发")
     parser.add_argument("--repair-authorization", help="整话滚动返修诊断文件的本话相对路径")
@@ -872,6 +927,12 @@ def main():
                 value = acknowledge(ledger, state, read_json(Path(args.watch_alert_ids)), config=config,
                                     independent_work_pending=args.independent_work_pending)
             print(json.dumps(value, ensure_ascii=False)); return 0
+        if args.action == "submission-status":
+            if not args.job: raise ValueError("SUBMISSION_HOLD: --job required")
+            print(json.dumps(submission_status(path,read_json(Path(args.job))),ensure_ascii=False)); return 0
+        if args.action == "submit":
+            if not args.job: raise ValueError("SUBMISSION_HOLD: --job required")
+            print(json.dumps(submit(path,read_json(Path(args.job))),ensure_ascii=False)); return 0
         if args.action == "commit":
             resolution_ref={"path":args.resolution,"sha256":digest(root/args.resolution)} if args.resolution else None
             value=commit_updates(path,args.expected_state_sha256,read_json(Path(args.updates)),resolution_ref=resolution_ref)

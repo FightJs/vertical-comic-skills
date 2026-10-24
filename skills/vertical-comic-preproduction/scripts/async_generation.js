@@ -3,6 +3,12 @@
 (async function runHalfWave(jobs, limit, invoke, onResult, options = {}) {
   if (!Array.isArray(jobs) || !Number.isInteger(limit) || limit < 1 || typeof invoke !== 'function' || typeof onResult !== 'function')
     throw new Error('jobs/confirmed concurrency/invoke/onResult required');
+  // Keep the exact checked input across the asynchronous registration boundary.
+  const freeze = value => {
+    if (value && typeof value === 'object') { Object.values(value).forEach(freeze); Object.freeze(value); }
+    return value;
+  };
+  jobs = jobs.map(job => freeze(JSON.parse(JSON.stringify(job))));
   const target = j => j.kind === 'asset' ? j.asset_id : j.panel_id;
   const panelKeys = jobs.map(j => `${j.job_id}\u0000${j.kind === 'asset' ? 'asset' : 'panel'}\u0000${target(j)}`);
   if (jobs.some(j => !j.job_id || !target(j) || !j.attempt_id || ![undefined, 'panel', 'asset', 'repair'].includes(j.kind) || (j.kind !== 'asset' && (!j.batch_id || ![1, 2].includes(j.round_id)))) || new Set(panelKeys).size !== jobs.length)
@@ -10,15 +16,19 @@
   // Observed built-in local-reference limit. Full per-panel preflight remains
   // mandatory; this is a last check on the actual exported tool arguments.
   for (const job of jobs) {
-    if (job.candidate_only === true) throw new Error("CANDIDATE_HOLD: review-only jobs cannot be submitted");
+    if (job.candidate_only === true || job.input_audit_only === true || job.dispatch_authorized === false)
+      throw new Error("CANDIDATE_HOLD: review/audit-only jobs cannot be submitted");
     const refs = job.arguments?.referenced_image_paths;
     if (refs !== undefined && (!Array.isArray(refs) || refs.length > 5))
       throw new Error(`REFERENCE_LIMIT_HOLD: ${job.panel_id}, referenced_image_paths must contain at most 5 paths`);
     if (Array.isArray(refs) && new Set(refs).size !== refs.length)
       throw new Error(`REFERENCE_DUPLICATE_HOLD: ${job.panel_id}, merge same-file purposes before submitting`);
   }
-  if (jobs.some(j => j.managed_submission_required === true) && typeof options.onBeforeInvoke !== 'function')
-    throw new Error('SUBMISSION_HOLD: managed jobs require durable onBeforeInvoke');
+  if (typeof options.onBeforeInvoke !== 'function')
+    throw new Error('SUBMISSION_HOLD: all jobs require durable onBeforeInvoke');
+  if (jobs.some(j => j.submission?.policy !== 'durable_image_submission_v1' ||
+      !j.submission.task_id || !/^[a-f0-9]{64}$/.test(j.submission.input_digest) || !j.book_id || !j.episode_id))
+    throw new Error('SUBMISSION_HOLD: exact compiled job/owner protocol required');
   if (options.onBeforeInvoke !== undefined && typeof options.onBeforeInvoke !== 'function') throw new Error('onBeforeInvoke must be a function');
   if (options.onReviewReady !== undefined && typeof options.onReviewReady !== "function") throw new Error("onReviewReady must be a function");
   if (options.onReviewBatchReady !== undefined && typeof options.onReviewBatchReady !== "function") throw new Error("onReviewBatchReady must be a function");
@@ -119,18 +129,29 @@
     const poll = () => { signalProgress(); progressTimer = setTimeout(poll, progressPollMs); };
     progressTimer = setTimeout(poll, progressPollMs);
   }
+  const seenRegistrations = new Set();
   async function worker() {
     while (!stop && cursor < jobs.length) {
       const index = cursor++, job = jobs[index];
       let item = {job_id: job.job_id, kind: job.kind ?? 'panel', panel_id: job.panel_id, asset_id: job.asset_id, attempt_id: job.attempt_id, batch_id: job.batch_id, round_id: job.round_id, ...(job.ready_at ? {ready_at:job.ready_at} : {})};
-      if (options.onBeforeInvoke && job.kind !== 'asset') {
+      {
         try {
           const ack = await options.onBeforeInvoke(job);
-          if (ack?.status !== 'SUBMISSION_REGISTERED' || ack.invoke_allowed !== true ||
+          if (ack?.policy !== 'durable_image_submission_v1' || ack.status !== 'SUBMISSION_REGISTERED' || ack.invoke_allowed !== true ||
+              !/^[a-f0-9]{64}$/.test(ack.registration_id) || seenRegistrations.has(ack.registration_id) ||
+              ack.scope?.task_id !== job.submission.task_id || ack.scope?.job_id !== job.job_id ||
               ack.scope?.book_id !== job.book_id || ack.scope?.episode_id !== job.episode_id ||
-              ack.panel_id !== job.panel_id || ack.attempt_id !== job.attempt_id || ack.round_id !== job.round_id ||
-              !job.dispatch_receipt?.permit_id || ack.permit_id !== job.dispatch_receipt.permit_id)
-            throw new Error('SUBMISSION_HOLD: no fresh exact registration; do not repeat image call');
+              ack.kind !== (job.kind ?? 'panel') || (ack.panel_id ?? null) !== (job.panel_id ?? null) ||
+              (ack.asset_id ?? null) !== (job.asset_id ?? null) || ack.attempt_id !== job.attempt_id ||
+              (ack.batch_id ?? null) !== (job.batch_id ?? null) || (ack.round_id ?? null) !== (job.round_id ?? null) ||
+              ack.input_digest !== job.submission.input_digest ||
+              (ack.permit_id ?? null) !== (job.dispatch_receipt?.permit_id ?? null)) {
+            const failure = new Error('SUBMISSION_HOLD: no fresh exact registration; do not repeat image call');
+            failure.registration_ack = ack;
+            throw failure;
+          }
+          seenRegistrations.add(ack.registration_id);
+          item.registration_id = ack.registration_id;
         } catch (err) {
           stop = true; item.status = 'NOT_DISPATCHED'; item.outcome_hint = 'CHECK_SUBMISSION_REGISTRATION';
           item.submission_error = errorData(err); results[index] = item; continue;

@@ -74,7 +74,7 @@ def _verify_frozen_basis(state, path):
         raise ValueError('MANAGED_HOLD: frozen basis scope/path mismatch')
     frozen_state=json.loads(view.files[str(path)].read_bytes())
     fixed=('source_script','source_snapshot','visual_basis','shot_manifest','memory_source','runtime_snapshot',
-           'runtime','execution_mode','optimization_policy','preparation_policy','readiness_policy',
+           'runtime','runtime_execution_context','execution_mode','optimization_policy','preparation_policy','readiness_policy',
            'execution_contract','toolchain','parallel_context','production_authorization')
     if any(state.get(key)!=frozen_state.get(key) for key in fixed):
         raise ValueError('MANAGED_HOLD: frozen run identity/input references changed; new run required')
@@ -358,28 +358,27 @@ def save(state_path, updates, save_id, *, resolution_ref=None):
 
 
 
-def submit(state_path, panel_id, attempt_id, round_id, permit_id):
-    """Durably register one exact attempt before the host invokes imagegen.
-
-    A lost registration acknowledgement is conservative: a repeated operation
-    does NOT grant another invocation, even if the service receipt is unknown.
-    """
-    from runtime_clock import require_running
-    require_running(state_path)
+def submit(state_path, panel_id=None, attempt_id=None, round_id=None, permit_id=None, *, job=None):
+    """Use the same durable registration under the admitted writer authority."""
     path=Path(state_path).resolve()
     with authority([path]):
-        state=read_json(path);row=next(r for r in state['panels'] if r['panel_id']==panel_id)
-        if row['attempt_id']!=attempt_id or row['round_id']!=round_id:raise ValueError('SUBMISSION_HOLD: old attempt')
-        entries=[r for r in state['dispatch_ledger'] if r['permit_id']==permit_id and r['panel_id']==panel_id
-                 and r['attempt_id']==attempt_id and r['round_id']==round_id]
-        if len(entries)!=1:raise ValueError('SUBMISSION_HOLD: exact receipt required')
-        from production_runtime import commit_updates
-        value=commit_updates(path,digest(path),[{'panel_id':panel_id,'attempt_id':attempt_id,'round_id':round_id,'status':'IN_FLIGHT'}])
-        fresh=value['status']=='UPDATES_SAVED'
-        return {'status':'SUBMISSION_REGISTERED' if fresh else 'ALREADY_REGISTERED','invoke_allowed':fresh,
-                'scope':{'book_id':state['book_id'],'episode_id':state['episode_id']},
-                'panel_id':panel_id,'attempt_id':attempt_id,'round_id':round_id,'permit_id':permit_id,
-                'state_sha256':value['state_sha256'],'image_calls':0}
+        if job is None:
+            # Compatibility for existing supported callers; derive actual input,
+            # never authorize a caller-supplied stale permit or attempt.
+            from codex_reference_contract import checked_file, validate_panel
+            from submission_contract import panel_job
+            state=read_json(path)
+            row=next(r for r in state['panels'] if r['panel_id']==panel_id)
+            packet_path=checked_file(path.parent.parent,row['package_manifest'])
+            packet=read_json(packet_path)
+            errors,plan=validate_panel(packet['panels'][0],packet_path.parent)
+            if errors or plan is None:raise ValueError('SUBMISSION_HOLD: '+ ';'.join(errors))
+            job=panel_job(state,path.parent.parent,row,packet,plan['arguments'])
+            if (job['attempt_id']!=attempt_id or job['round_id']!=round_id or
+                (job.get('dispatch_receipt') or {}).get('permit_id')!=permit_id):
+                raise ValueError('SUBMISSION_HOLD: exact receipt/attempt required')
+        from production_runtime import submit as register
+        return register(path,job)
 
 
 def recover_saved(state_path, intent):
@@ -426,6 +425,9 @@ def call(state_path, action, **kwargs):
                     job['dispatch_receipt']=read_json(checked_file(path.parent.parent,record['package_manifest'])).get('dispatch_receipt')
                     job['managed_submission_required']=True
                 return value
+        if action == 'submission-status':
+            from production_runtime import submission_status
+            return submission_status(path,kwargs['job'])
         if action == 'commit':
             _validate_updates(path,kwargs['updates'])
             from production_runtime import commit_updates
@@ -455,7 +457,7 @@ def call(state_path, action, **kwargs):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--state', required=True)
-    parser.add_argument('--action', choices=('admit', 'reserve', 'compile', 'commit', 'approvals', 'release', 'repair', 'diagnosis', 'evidence', 'save', 'recover', 'submit', 'control', 'allocate'), required=True)
+    parser.add_argument('--action', choices=('admit', 'reserve', 'compile', 'commit', 'approvals', 'release', 'repair', 'diagnosis', 'evidence', 'save', 'recover', 'submit', 'submission-status', 'control', 'allocate'), required=True)
     parser.add_argument('--arguments', required=True, help='Explicit JSON arguments; never image calls')
     args = parser.parse_args(); kwargs = read_json(Path(args.arguments))
     if args.action == 'admit': value = admit(args.state, **kwargs)

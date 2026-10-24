@@ -6,6 +6,46 @@ from functools import lru_cache
 from platform_io import atomic_json, file_lock, configure_stdio
 
 POLICY = 'active_runtime_clock_v1'
+CONTEXT_POLICY = 'local_execution_context_v1'
+
+def initialize_context(run, role, limit):
+    """Local receiver/owner metadata, never portable creative approval evidence."""
+    run = Path(run).resolve(); directory = run/'00_任务协调'
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory/'execution-context.json'
+    value = {'policy': CONTEXT_POLICY, 'run_id': uuid.uuid4().hex,
+             'run_root': str(run), 'role': role, 'clock_required': limit is not None,
+             'clock_directory': str(directory), 'limit_seconds': limit}
+    if path.exists():
+        old = json.loads(path.read_text(encoding='utf-8'))
+        if any(old.get(k) != value[k] for k in ('policy','run_root','role','clock_required','clock_directory','limit_seconds')):
+            raise ValueError('CLOCK_CONTEXT_CONFLICT: preserve original owner policy')
+    else: atomic_json(path, value)
+    return {'path': str(path), 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
+
+def execution_context(path, *, state=None):
+    path = Path(path).resolve()
+    if state is None and path.is_file() and path.suffix == '.json':
+        state = json.loads(path.read_text(encoding='utf-8-sig'))
+    ref = (state or {}).get('runtime_execution_context')
+    if ref is None:
+        for parent in [path if path.is_dir() else path.parent, *path.parents]:
+            candidate = parent/'00_任务协调/execution-context.json'
+            if candidate.is_file():
+                ref = {'path': str(candidate), 'sha256': hashlib.sha256(candidate.read_bytes()).hexdigest()}
+                break
+    if ref is None: return None
+    target = Path(ref['path'])
+    if not target.is_absolute() or target.is_symlink() or not target.is_file() or hashlib.sha256(target.read_bytes()).hexdigest() != ref.get('sha256'):
+        raise ValueError('CLOCK_CONTEXT_MISSING_OR_CHANGED')
+    data = json.loads(target.read_text(encoding='utf-8'))
+    root = Path(data['run_root']).resolve(); directory = root/'00_任务协调'
+    if (data.get('policy') != CONTEXT_POLICY or type(data.get('clock_required')) is not bool or
+            not data.get('run_id') or data.get('role') not in {'preparation','production'} or
+            not path.is_relative_to(root) or target.resolve() != directory/'execution-context.json' or
+            data.get('clock_directory') != str(directory)):
+        raise ValueError('CLOCK_CONTEXT_SCOPE_MISMATCH')
+    return {**data, 'reference': ref}
 
 @lru_cache(maxsize=1)
 def boot_id():
@@ -120,13 +160,24 @@ def locate(path):
     path = Path(path).resolve()
     for parent in [path if path.is_dir() else path.parent, *path.parents]:
         candidate = parent/'00_任务协调'
-        if (candidate/'runtime-clock.json').is_file(): return candidate
+        if (candidate/'runtime-clock.json').is_file() or (candidate/'execution-context.json').is_file(): return candidate
     return None
 
 def require_running(path):
-    directory = locate(path)
+    context = execution_context(path)
+    if context and not context['clock_required']:
+        if (Path(context['clock_directory'])/'runtime-clock.json').exists():
+            raise ValueError('CLOCK_CONTEXT_CONFLICT: disabled context has a clock ledger')
+        return {'state': 'DISABLED', 'run_id': context['run_id']}
+    directory = Path(context['clock_directory']) if context else locate(path)
     if directory is None: return None  # Legacy RVs remain unchanged.
+    if not (directory/'runtime-clock.json').is_file(): raise ValueError('CLOCK_REQUIRED_LEDGER_MISSING')
     value = status(directory)
+    if context:
+        if value['role'] != context['role'] or value['limit_seconds'] != context['limit_seconds']:
+            raise ValueError('CLOCK_CONTEXT_SCOPE_MISMATCH')
+        from runtime_clock_context import require_bound
+        require_bound(directory)
     if value['state'] != 'RUNNING': raise ValueError('RUNTIME_CLOCK_'+value['state'])
     if (directory/'clock-session.json').exists():
         from runtime_clock_context import require_bound

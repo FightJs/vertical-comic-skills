@@ -76,3 +76,5 @@ CLI统一形式：`python -B managed_dispatch.py --state <本话状态> --action
 版本及安装包单独保存第一批/第二批证据。capability显式声明、默认关闭；当前代码支持准入命令，不自动改安装版、冻结包或真实RV。发行前执行核心、安装、JS、Skill/bundle及隔离包安装验收，再等待该提交的三平台CI。
 
 实际RV迁移记录至少包含：旧writer是否停止；原预约/在途/未知请求归属；原attempt/预算保留；原state/control哈希；新协议生效版本和admission ID。存在活动或未知请求就不能原地准入。故障时使用control暂停新增，继续save/recover原返回；保留新账本、容量结算和预算，不恢复旧state，不删策略标记。输入闭包完整性受损时先修复对应真实字节，不用旧状态掩盖损坏。
+
+受管与普通入口共用durable_image_submission_v1回执。推荐submit传完整原始job；SUBMISSION_REGISTERED且invoke_allowed=true才可紧接一次调用，ALREADY_REGISTERED不授权重发。详见[统一提交登记](submission-runtime.md)。

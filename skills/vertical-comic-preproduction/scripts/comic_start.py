@@ -14,7 +14,9 @@ from task_context import fresh, validate as validate_task
 BASE=Path(__file__).resolve().parents[1]
 
 def start_clock(run, role, limit, session):
-    if limit is None: return {}
+    from runtime_clock import initialize_context
+    if limit is None:
+        return {'runtime_execution_context': initialize_context(run, role, limit)}
     from runtime_clock import initialize, event, bind, status
     from runtime_clock_context import resolve
     context=resolve(explicit_session=session)
@@ -22,7 +24,9 @@ def start_clock(run, role, limit, session):
     initialize(directory, role, limit)
     binding=bind(directory,context['session_id'],identity_source='host:PreToolUse+CODEX_THREAD_ID')
     event(directory, 'start', 'initial-start')
+    reference = initialize_context(run, role, limit)
     result = {'clock_directory': str(directory), 'runtime_clock': status(directory)}
+    result['runtime_execution_context'] = reference
     result['clock_binding']=binding
     return result
 
@@ -86,7 +90,7 @@ def prepare(project,book,ids,*,script=None,assets=None,output=None,workers=None,
     cfg=run/'本次配置.json';write(cfg,config);read_config(cfg)
     snap=create(run/'00_总控/运行版本',memory_source=memory_source(config))
     for eid in ids:
-        cmd=[sys.executable, '-X', 'utf8','-B',str(Path(snap['path']).parent/'skills/vertical-comic-preproduction/scripts/init_preproduction.py'),'--book',book,'--episode',eid,'--config',str(cfg),'--runtime-snapshot',snap['path'],'--task-context',str(task_path),'--output',str(run/eid),'--backend','codex_builtin_imagegen']
+        cmd=[sys.executable, '-X', 'utf8','-B',str(Path(snap['path']).parent/'skills/vertical-comic-preproduction/scripts/init_preproduction.py'),'--book',book,'--episode',eid,'--config',str(cfg),'--runtime-snapshot',snap['path'],'--task-context',str(task_path),'--execution-context',clock['runtime_execution_context']['path'],'--output',str(run/eid),'--backend','codex_builtin_imagegen']
         proc=subprocess.run(cmd,capture_output=True,text=True, encoding='utf-8')
         if proc.returncode:raise ValueError('初始化失败，保留诊断运行目录:'+eid+':'+proc.stderr[-1000:])
     if old is None:
@@ -130,7 +134,7 @@ def receive(zip_path=None,*,package_root=None,output=None,runtime_limit_seconds=
     clock = start_clock(target, 'production', runtime_limit_seconds, clock_session_id)
     if archive is not None:originals=Path(extract(archive,target/'收到原件',checksum_file=checksum)['root'])
     write(target/'接收校验.json',checked)
-    bound=bind(originals,target/'本地运行')
+    bound=bind(originals,target/'本地运行',execution_context=clock['runtime_execution_context'])
     result=rehearse(archive,originals,bound['run_root'],bound['run_index'],target/'接包预检')
     local_index = read(bound['run_index'])
     from delivery_contract import initialize as initialize_delivery

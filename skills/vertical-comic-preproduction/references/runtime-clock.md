@@ -48,3 +48,5 @@
 仅接入用户明确指定的本地运行：执行安装版 `runtime_clock.py attach --directory <本次协调目录>`，自动核对当前会话。返回生效时间，保留原账本字节和全部旧事件，不倒推缺失暂停、不重置额度。旧owner仍活动时拒绝接管，先核实停止并显式unbind。已经完成的前期账本不重新计时。
 
 正在生图的旧RV只加本地会话绑定，不替换包内冻结脚本。旧入口仍按下节检查要求在提交前执行安装版check-submit；不能保证未接入的旧工作agent自动停止。异常退出缺少事件时保留TIME_UNCERTAIN诊断，不将未知空档全部算作暂停。
+
+新prepare/receive在本机保存local_execution_context_v1，状态绑定其文件哈希，明确限时与不限时。应计时却缺账本、绑定失效、上下文丢失/换版均拒绝新请求，不能回退旧运行不限时。工作执行者共享职责时钟，不接管总控owner。正文/返修/资产在[统一提交登记](submission-runtime.md)内核对计时；排队/锁等待后重新检查。登记后被暂停时保留原登记并报告SUBMISSION_REGISTERED_NO_INVOKE，不自动退回PENDING或重试。

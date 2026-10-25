@@ -155,7 +155,7 @@ def _prepare(state_reference, state_path, control_reference, control_path, conte
             'ready_observed': ready_observed}
 
 
-def _commit(prepared, state_path, control_path, context, expected_state_sha256, metrics, *, request_id=None):
+def _commit(prepared, state_path, control_path, context, expected_state_sha256, metrics, *, request_id=None, _stage_only=False):
     from runtime_clock import require_running
     require_running(state_path)
     state, control, job = (prepared[k] for k in ('state', 'control', 'job'))
@@ -192,6 +192,9 @@ def _commit(prepared, state_path, control_path, context, expected_state_sha256, 
         if lease_mode:new_state['dispatch_ledger']=new_control['permits']
         if request_id is not None:
             new_state.setdefault('reservation_requests', {})[request_id] = {'reserved': copy.deepcopy(reserved), 'max_count': metrics.get('requested_max_count')}
+        if _stage_only:
+            return {'new_state':new_state,'new_control':new_control,'reserved':reserved,
+                    'ready_observed':ready_observed,'created':created}
         _atomic_json(state_path, new_state)
         if not lease_mode:_atomic_json(control_path, new_control)
         committed = time.perf_counter()
@@ -246,6 +249,11 @@ def reserve_ready(state_path, expected_state_sha256, expected_control_sha256, ma
                               'clock': 'perf_counter', 'historical_ready_to_reserve_seconds': None,
                               'panels': []}}
     lock_paths = sorted((state_path.with_suffix('.runtime.lock'), control_path.with_suffix('.dispatch.lock')))
+    from runtime_pipeline import POLICY as PIPELINE_POLICY, reserve
+    from slot_leases import enabled as leased
+    if initial.get('runtime_pipeline_policy')==PIPELINE_POLICY and leased(read_json(control_path)):
+        return reserve(state_reference,state_path,control_reference,control_path,context,
+                       expected_state_sha256,expected_control_sha256,max_count,metrics,lock_paths)
     with _timed_locks(lock_paths, metrics):
         with _dispatch_reads(metrics):
             prepared = _prepare(state_reference, state_path, control_reference, control_path, context,

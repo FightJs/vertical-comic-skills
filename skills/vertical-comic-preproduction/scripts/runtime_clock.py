@@ -108,7 +108,8 @@ def _read(directory):
             if old['at']['wall'] <= e['at']['wall']: continue
         known[e['event_id']] = e
     events = list(known.values())
-    same_boot = len({(e['at']['host'], e['at']['boot']) for e in events}) <= 1
+    same_boot = (all(e['at'].get('boot') for e in events) and
+                 len({(e['at']['host'], e['at']['boot']) for e in events}) <= 1)
     events.sort(key=lambda e: (e['at']['mono'] if same_boot else e['at']['wall'], e['event_id']))
     value['events'] = events
     atomic_json(directory/'runtime-clock.json', value)
@@ -120,13 +121,18 @@ def status(directory, *, at=None):
         value = _read(directory)
     now = at or instant()
     state = 'NOT_STARTED'; opened = None; total = 0.; uncertain = None
-    last_interrupt = None; hook_seen = False
+    last_interrupt = next((e['at']['wall'] for e in reversed(value['events'])
+                           if e['source'].startswith('hook:') and e['action']=='pause'), None)
+    hook_seen = any(e['source'].startswith('hook:') for e in value['events'])
+    previous = None; closed = 0.
     try:
         for e in value['events']:
             action = e['action']; stamp = e['at']
-            if e['source'].startswith('hook:'):
-                hook_seen = True
-                if action == 'pause': last_interrupt = stamp['wall']
+            # Unknown boot IDs are not proof of one monotonic epoch. Validate
+            # adjacent receipts, including gaps between closed active intervals.
+            if previous is not None:
+                elapsed(previous, stamp)
+            previous = stamp
             if action == 'hook_probe': continue
             if action == 'uncertain': raise ValueError('CLOCK_TIME_UNCERTAIN: unclean lifecycle')
             if state == 'FINISHED':
@@ -136,7 +142,8 @@ def status(directory, *, at=None):
                 if opened is None: opened = stamp
                 state = 'RUNNING'
             elif action in {'pause','wait_user','finish'}:
-                if opened is not None: total += elapsed(opened, stamp); opened = None
+                if opened is not None:
+                    total += elapsed(opened, stamp); opened = None; closed = total
                 state = {'pause':'PAUSED','wait_user':'WAIT_USER','finish':'FINISHED'}[action]
         if opened is not None: total += elapsed(opened, now)
     except ValueError as exc:
@@ -147,7 +154,7 @@ def status(directory, *, at=None):
     binding=binding_status(directory)
     return {'binding':binding,'policy': POLICY, 'role': value['role'], 'state': state,
             'active_seconds': None if uncertain else round(total, 3),
-            'confirmed_closed_seconds': round(total, 3) if opened is None else None,
+            'confirmed_closed_seconds': round(closed, 3),
             'wall_seconds': round(wall, 3) if wall is not None else None,
             'excluded_seconds': round(max(0,wall-total), 3) if wall is not None and not uncertain else None,
             'remaining_seconds': round(max(0,value['limit_seconds']-total),3) if not uncertain else None,

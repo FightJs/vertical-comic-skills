@@ -151,6 +151,8 @@ def _build(state_paths,*,native_events=None,verify_images=False,capacity=None):
 def build(state_paths,*,native_events=None,verify_images=False,capacity=None,delivery_identity=None):
     state_paths=list(state_paths)
     result=_build(state_paths,native_events=native_events,verify_images=verify_images,capacity=capacity)
+    from runtime_pipeline import metrics as pipeline_metrics
+    result['pipeline_timing']=pipeline_metrics(state_paths)
     if delivery_identity is not None:
         from delivery_contract import load_identity,capacity_summary
         from production_progress import source_order,Records

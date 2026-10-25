@@ -42,6 +42,42 @@ class RuntimeClockTests(unittest.TestCase):
         self.event('start',0)
         self.assertEqual(c.status(self.clock,at=stamp(5,boot='other'))['state'],'TIME_UNCERTAIN')
         self.assertEqual(c.status(self.clock,at=stamp(5,wall=2000))['state'],'TIME_UNCERTAIN')
+    def test_unknown_boot_rollback_keeps_closed_lower_bound(self):
+        self.event('start',0);self.event('pause',20)
+        c.event(self.clock,'resume','new-start',at=stamp(100,boot=None))
+        c.event(self.clock,'pause','new-stop',at=stamp(10,boot=None,wall=1110))
+        value=c.status(self.clock,at=stamp(15,boot=None,wall=1115))
+        self.assertEqual(value['state'],'TIME_UNCERTAIN')
+        self.assertEqual(value['confirmed_closed_seconds'],20)
+        self.assertIsNone(value['remaining_seconds'])
+
+    def test_unknown_boot_does_not_sort_reset_into_fake_pause(self):
+        d=self.root/'unknown';c.initialize(d,'production',at=stamp(0,boot=None))
+        for action,key,at in [('start','a',stamp(100,boot=None)),
+                              ('pause','b',stamp(120,boot=None)),
+                              ('resume','c',stamp(10,boot=None,wall=1130)),
+                              ('pause','d',stamp(20,boot=None,wall=1140))]:
+            c.event(d,action,key,at=at)
+        value=c.status(d,at=stamp(30,boot=None,wall=1150))
+        self.assertEqual(value['state'],'TIME_UNCERTAIN')
+        self.assertEqual(value['confirmed_closed_seconds'],20)
+        self.assertIsNone(value['active_seconds'])
+
+    def test_running_uncertain_interval_keeps_previous_confirmed_time(self):
+        self.event('start',0);self.event('pause',25);self.event('resume',30)
+        value=c.status(self.clock,at=stamp(31,wall=2500))
+        self.assertEqual(value['state'],'TIME_UNCERTAIN')
+        self.assertEqual(value['confirmed_closed_seconds'],25)
+
+    def test_unknown_boot_continuous_events_and_duplicate_receipts(self):
+        d=self.root/'continuous';c.initialize(d,'production',at=stamp(0,boot=None))
+        # Arrival order differs from event order. Exact receipt replay is harmless.
+        for action,key,n in [('pause','p',20),('start','s',0),('resume','r',30),('pause','p',20)]:
+            c.event(d,action,key,at=stamp(n,boot=None))
+        value=c.status(d,at=stamp(40,boot=None))
+        self.assertEqual(value['active_seconds'],30)
+        self.assertEqual(value['confirmed_closed_seconds'],20)
+
     def test_hook_cli_receives_without_coordinator_lock(self):
         home=self.root/'home';session='realistic-session-id'
         c.bind(self.clock,session,home)

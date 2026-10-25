@@ -68,5 +68,13 @@
     "asset_writer": "asset_runtime.py submit",
     "legacy_auto_migration": false,
     "external_call_atomic_pause": false
+  },
+  "incremental_pipeline": {
+    "policy": "observed_incremental_pipeline_v1",
+    "validation_reuse": "content_verified_process_pool",
+    "qa_revision": "immutable_qa_decision_cas_v1",
+    "new_episode_default": true,
+    "legacy_auto_migration": false,
+    "persistent_pass_cache": false
   }
 }

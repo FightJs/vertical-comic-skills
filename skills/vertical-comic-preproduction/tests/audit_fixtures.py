@@ -12,7 +12,7 @@ def write(root, name, value):
     return {'path': name, 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
 
 
-def contexts(root, count=35):
+def contexts(root, count=35, *, multiple_proofs=False):
     root = Path(root)
     sources, all_entries, packets = [], [], []
     episodes = [f'E{i:03}' for i in range((count + 34) // 35)]
@@ -39,6 +39,15 @@ def contexts(root, count=35):
         sources.append({'root': str(root.resolve()), 'episode_id': episode, 'source_script': source,
                         'source_snapshot': snap, 'visual_basis': basis, 'shot_manifest': new,
                         'visual_approval': proof, 'shot_approval': proof})
+        if multiple_proofs:
+            originals=[]
+            for start in range(0,len(ids),5):
+                version=copy.deepcopy(shots)
+                for row in version['panels']:row['inspection_plan']={'version':start}
+                ref=write(root,episode+'/version-'+str(start)+'.json',version)
+                item={**proof,'panel_ids':ids[start:start+5], 'artifacts':[basis,ref,source,snap]}
+                originals.append(write(root,episode+'/proof-'+str(start)+'.json',item))
+            sources[-1].update(shot_approval=None,shot_approvals=originals)
         for row in rows:
             pid = row['panel_id']
             packet = {'book_id': 'BENCH', 'episode_id': episode, 'panels': [row]}

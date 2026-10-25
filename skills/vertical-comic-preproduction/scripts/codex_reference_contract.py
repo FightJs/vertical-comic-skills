@@ -205,6 +205,22 @@ def file_session():
     token = _FILE_SESSION.set(memo)
     try:
         yield memo
+        verify_read_snapshot(memo)
+    finally:
+        _FILE_SESSION.reset(token)
+
+
+def verify_read_snapshot(memo):
+    """Recheck captured input versions before an optimistic state CAS.
+
+    No validator, image decoding or fresh content hash runs here. A changed
+    stamp/target/query rejects the commit; it never refreshes stale evidence.
+    """
+    active = _FILE_SESSION.get()
+    if active is not None and active is not memo:
+        raise ValueError('READ_TRANSACTION_CONFLICT')
+    token = _FILE_SESSION.set(memo)
+    try:
         _valid()
         recheck_dependencies(tuple(memo['observations']))
         # A cached result may not reread every file before the caller returns.

@@ -568,6 +568,12 @@ def submission_status(state_path, job):
 
 
 def commit_updates(state_path, expected_sha256, updates, *, resolution_ref=None, submission_job=None):
+    from runtime_pipeline import commit
+    return commit(state_path, expected_sha256, updates,
+                  resolution_ref=resolution_ref, submission_job=submission_job)
+
+
+def _commit_updates(state_path, expected_sha256, updates, *, resolution_ref=None, submission_job=None, _prepare_only=False):
     """Single-writer CAS: real receipts/QA only; never changes frozen inputs/gates."""
     from staged_workflow import qa_errors
     from batch_round import attempt_errors
@@ -585,7 +591,8 @@ def commit_updates(state_path, expected_sha256, updates, *, resolution_ref=None,
     if any(u.get('status') == 'IN_FLIGHT' for u in updates):
         from runtime_clock import require_running
         require_running(state_path)
-    with state_write_lock(state_path):
+    from contextlib import nullcontext
+    with (nullcontext() if _prepare_only else state_write_lock(state_path)):
         state = read_json(state_path); require_legacy(state)
         submission_record = None
         if submission_job is not None:
@@ -674,49 +681,61 @@ def commit_updates(state_path, expected_sha256, updates, *, resolution_ref=None,
                 if new.get('runtime',{}).get('dispatch_policy')=='episode_slot_lease_v1':
                     from slot_leases import advance
                     advance(new,pid,row['status'],row.get('output'))
-        # Only small state snapshots are retained; no image/reference copies.
-        history=state_path.parent/"runtime_history";history.mkdir(exist_ok=True)
-        previous=history/(expected_sha256+".json")
-        if not previous.exists():previous.write_bytes(state_path.read_bytes())
-        if digest(state_path) != expected_sha256:raise ValueError("STATE_CHANGED")
-        if operation is not None:
-            new.setdefault('runtime_operations', {})[operation] = {'panel_ids': [u['panel_id'] for u in updates]}
-        if any(u.get('status')=='IN_FLIGHT' for u in updates):
-            from runtime_clock import require_running
-            require_running(state_path)  # Locks/preflight may have waited through a pause.
-        if submission_record is not None:
-            new.setdefault('submission_registrations',{})[submission_record['registration_id']]=submission_record
-        atomic_json(state_path, new)
-        monitored=[]
-        if new.get("runtime",{}).get("watchdog",{}).get("policy") == "worker_watchdog_v1":
-            from worker_watchdog import record_progress
-            ledger=root/"00_输入审计"/"worker_watchdog.json"
-            for update in updates:
-                row=records[update["panel_id"]]; status=row["status"]
-                stage="repair" if row.get("round_id")==2 else ("image_review" if status in {"VISUAL_PASS","VISUAL_FAIL"} else "generation")
-                kind={"IN_FLIGHT":"request_submitted","GENERATED":"image_saved",
-                      "VISUAL_PASS":"qa_saved","VISUAL_FAIL":"qa_saved",
-                      "CALL_FAILED":"request_returned","RESULT_UNKNOWN":"request_returned",
-                      "CANCELLED":"request_returned"}.get(status)
-                if kind is None: continue
-                ref=(row.get("output") if kind=="image_saved" else row.get("qa_report") if kind=="qa_saved" else None)
-                ref=ref or {"path":state_path.relative_to(root).as_posix(),"sha256":digest(state_path)}
-                event={"stage":stage if kind!="qa_saved" else "image_review", "kind":kind,
-                       "blocker_id":f"{row.get('batch_id','episode')}:{row['panel_id']}:{row.get('attempt_id','')}",
-                       "evidence":ref}
-                try:monitored.append(record_progress(ledger,root,event)["status"])
-                except (OSError,ValueError,TypeError) as exc:monitored.append(f"PROGRESS_RECORD_ERROR:{exc}")
-        if submission_record is not None:
-            # If this fails after commit, retain registration and never grant a replay.
-            from runtime_clock import require_running
-            try: require_running(state_path)
-            except (OSError,ValueError) as exc:
-                raise ValueError('SUBMISSION_REGISTERED_NO_INVOKE: '+str(exc)) from exc
-            return acknowledgement(actual,submission_record,fresh=True,state_sha256=digest(state_path))
-        return {"status":"UPDATES_SAVED","panel_ids":[u["panel_id"] for u in updates],
-                "state_sha256":digest(state_path),"watchdog_progress":monitored,
-                "user_approval":"NOT_GRANTED"}
+        if _prepare_only:
+            return {'prepared_state': new, 'operation': operation,
+                    'submission_record': submission_record,
+                    'actual': actual if submission_record is not None else None}
+        return _persist_updates(state_path, root, expected_sha256, updates, new,
+                                operation, submission_record,
+                                actual if submission_record is not None else None)
 
+
+def _persist_updates(state_path, root, expected_sha256, updates, new,
+                     operation, submission_record, actual):
+    from submission_contract import acknowledgement
+    records = {r['panel_id']:r for r in new['panels']}
+    # Only small state snapshots are retained; no image/reference copies.
+    history=state_path.parent/"runtime_history";history.mkdir(exist_ok=True)
+    previous=history/(expected_sha256+".json")
+    if not previous.exists():previous.write_bytes(state_path.read_bytes())
+    if digest(state_path) != expected_sha256:raise ValueError("STATE_CHANGED")
+    if operation is not None:
+        new.setdefault('runtime_operations', {})[operation] = {'panel_ids': [u['panel_id'] for u in updates]}
+    if any(u.get('status')=='IN_FLIGHT' for u in updates):
+        from runtime_clock import require_running
+        require_running(state_path)  # Locks/preflight may have waited through a pause.
+    if submission_record is not None:
+        new.setdefault('submission_registrations',{})[submission_record['registration_id']]=submission_record
+    atomic_json(state_path, new)
+    monitored=[]
+    if new.get("runtime",{}).get("watchdog",{}).get("policy") == "worker_watchdog_v1":
+        from worker_watchdog import record_progress
+        ledger=root/"00_输入审计"/"worker_watchdog.json"
+        for update in updates:
+            row=records[update["panel_id"]]; status=row["status"]
+            stage="repair" if row.get("round_id")==2 else ("image_review" if status in {"VISUAL_PASS","VISUAL_FAIL"} else "generation")
+            kind={"IN_FLIGHT":"request_submitted","GENERATED":"image_saved",
+                  "VISUAL_PASS":"qa_saved","VISUAL_FAIL":"qa_saved",
+                  "CALL_FAILED":"request_returned","RESULT_UNKNOWN":"request_returned",
+                  "CANCELLED":"request_returned"}.get(status)
+            if kind is None: continue
+            ref=(row.get("output") if kind=="image_saved" else row.get("qa_report") if kind=="qa_saved" else None)
+            ref=ref or {"path":state_path.relative_to(root).as_posix(),"sha256":digest(state_path)}
+            event={"stage":stage if kind!="qa_saved" else "image_review", "kind":kind,
+                   "blocker_id":f"{row.get('batch_id','episode')}:{row['panel_id']}:{row.get('attempt_id','')}",
+                   "evidence":ref}
+            try:monitored.append(record_progress(ledger,root,event)["status"])
+            except (OSError,ValueError,TypeError) as exc:monitored.append(f"PROGRESS_RECORD_ERROR:{exc}")
+    if submission_record is not None:
+        # If this fails after commit, retain registration and never grant a replay.
+        from runtime_clock import require_running
+        try: require_running(state_path)
+        except (OSError,ValueError) as exc:
+            raise ValueError('SUBMISSION_REGISTERED_NO_INVOKE: '+str(exc)) from exc
+        return acknowledgement(actual,submission_record,fresh=True,state_sha256=digest(state_path))
+    return {"status":"UPDATES_SAVED","panel_ids":[u["panel_id"] for u in updates],
+            "state_sha256":digest(state_path),"watchdog_progress":monitored,
+            "user_approval":"NOT_GRANTED"}
 
 def authorize_episode_repair(state_path, expected_sha256, authorization_ref):
     """Atomically open one second-round attempt without waiting for every panel."""
@@ -755,7 +774,7 @@ def authorize_episode_repair(state_path, expected_sha256, authorization_ref):
         if repair_input_issues:raise ValueError(';'.join(repair_input_issues))
         new=copy.deepcopy(state);target=next(r for r in new['panels'] if r['panel_id']==pid)
         old=copy.deepcopy(target)
-        for key in ('output','qa_report','call_evidence','failure_diagnosis','ready_at','submitted_at','returned_at','save_started_at','saved_at','qa_completed_at','qa_recorded_at','timing_observations'):
+        for key in ('output','qa_report','call_evidence','failure_diagnosis','ready_at','submitted_at','returned_at','save_started_at','saved_at','qa_completed_at','qa_recorded_at','timing_observations','quality_review','qa_revisions'):
             target.pop(key,None)
         target.update(status='REPAIR_AUTHORIZED',round_id=2,attempt_id=attempt,
                       package_manifest=packet_ref,shot_subset=subset_ref,attempt_history=[old])

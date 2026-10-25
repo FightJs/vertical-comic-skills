@@ -49,6 +49,8 @@ description: Coordinate first-batch per-panel comic production for further human
 
 ## 阶段职责
 
+新建整话优先按[公共校验、短锁与审核修订](references/incremental-pipeline.md)使用同一运行工作进程复用内容绑定校验；真实返回即保存，QA/问题/采用一次登记，修订留旧版，末尾全量核验。先贯通复杂格及实际局部返修；四小时按原职责总预算累计，不给每话重开窗口。
+
 提速先按[减少重复检查与版本返工](references/runtime-efficiency.md#减少重复检查与版本返工)执行：代表格先贯通真实入口，批量检查共用一次读取事务，按共因一次收敛问题，仅重建变化格及真实依赖，不为每次字段修正复制整套RV。最终全量演练和逐格质量检查保留。
 
 批量铺开逐格包之前，按[真实入口先行验证](references/final-input-semantics.md#批量制作前先走真实入口)用本批代表性复杂格及跨话边界跑完整候选编译，先稳定字段、参考职责和可移植路径。前期授权与正文授权分开，同批候选不提前索要前话B批准；具体边界见该文档。

@@ -121,6 +121,8 @@ def main() -> int:
     if mode == "episode_async_v1":
         from execution_timing import POLICY as TIMING_POLICY
         extra["timing_policy"] = TIMING_POLICY
+        if (Path(frozen_runtime["scripts"]) if frozen_runtime else Path(__file__).parent).joinpath("runtime_pipeline.py").is_file():
+            extra["runtime_pipeline_policy"] = "observed_incremental_pipeline_v1"
         from visual_evidence import POLICY as VISUAL_POLICY
         extra["visual_evidence_policy"] = (config or {}).get("quality", {}).get("policy", VISUAL_POLICY)
     if mode == 'episode_async_v1':

@@ -290,7 +290,13 @@ def check_delivery_directory(package_root):
 def pack(root,output):
     root=Path(root).resolve();output=Path(output).resolve()
     if output.suffix.lower()!='.zip' or output.exists() or output.is_relative_to(root):raise ValueError('输出须为包外不存在的ZIP，不覆盖原包')
-    data=audit_index(root);rows=files(root);manifest={'policy':POLICY,'package_id':data['package_id'],'files':rows}
+    rows=files(root)
+    data=audit_index(root)
+    if episode_mode(data):
+        from handoff_delivery import formal_context_errors
+        errors=formal_context_errors(root,data)
+        if errors:raise ValueError(';'.join(errors))
+    manifest={'policy':POLICY,'package_id':data['package_id'],'files':rows}
     output.parent.mkdir(parents=True,exist_ok=True)
     try:
         with zipfile.ZipFile(output,'x',compression=zipfile.ZIP_DEFLATED,compresslevel=3,allowZip64=True) as z:
@@ -345,7 +351,7 @@ def extract(zip_path,destination,*,reserve_bytes=256*1024*1024,checksum_file=Non
     return {'status':'EXTRACTED_CHECKED_NOT_PRODUCTION_APPROVAL','root':str(root),'archive_sha256':sha(zip_path)}
 
 
-def rehearse(zip_path,package_root,run_root,run_index,report,*,timeout=180):
+def rehearse(zip_path,package_root,run_root,run_index,report,*,timeout=180,budget_path=None):
     from runtime_snapshot import verify
     if timeout<=0:raise ValueError('预检超时须大于零')
     package_root=Path(package_root).resolve();run_root=Path(run_root).resolve()
@@ -373,7 +379,7 @@ def rehearse(zip_path,package_root,run_root,run_index,report,*,timeout=180):
         err_name=eid+'_stderr.txt' if label=='h001' else eid+'_'+label+'_stderr.txt'
         try:
             return run(argv,cwd=state_path.parent.parent,timeout=timeout,
-                       stdout_path=report/out_name,stderr_path=report/err_name)
+                       stdout_path=report/out_name,stderr_path=report/err_name,budget_path=budget_path or run_root)
         except subprocess.TimeoutExpired as exc:
             write(report/(eid+'_'+label+'_timeout.json'),
                   {'status':'HOLD','argv':argv,'timeout_seconds':timeout,
@@ -573,7 +579,7 @@ def main():
     q=sub.add_parser('review');q.add_argument('--root',required=True)
     q=sub.add_parser('pack');q.add_argument('--root',required=True);q.add_argument('--output',required=True)
     q=sub.add_parser('extract');q.add_argument('--zip',required=True);q.add_argument('--destination',required=True);q.add_argument('--reserve-bytes',type=int,default=256*1024*1024);q.add_argument('--sha256-file')
-    q=sub.add_parser('rehearse');q.add_argument('--zip',help='省略时核验已解压正式目录及内置发布证据');q.add_argument('--package-root',required=True);q.add_argument('--run-root',required=True);q.add_argument('--run-index',required=True);q.add_argument('--report-dir',required=True);q.add_argument('--timeout',type=int,default=180)
+    q=sub.add_parser('rehearse');q.add_argument('--zip',help='省略时核验已解压正式目录及内置发布证据');q.add_argument('--package-root',required=True);q.add_argument('--run-root',required=True);q.add_argument('--run-index',required=True);q.add_argument('--report-dir',required=True);q.add_argument('--timeout',type=int,default=180);q.add_argument('--budget-root',help='实际职责计时根目录；所有话共用剩余预算，不重置')
     q=sub.add_parser('release');q.add_argument('--zip',required=True);q.add_argument('--rehearsal-report',required=True);q.add_argument('--approval',required=True);q.add_argument('--output',required=True);q.add_argument('--transport-output',help='正式发布后自动导出微信运输包到全新目录')
     q=sub.add_parser('assemble');q.add_argument('--root',required=True);q.add_argument('--plan',required=True);q.add_argument('--output',required=True)
     q=sub.add_parser('publish');q.add_argument('--zip',required=True);q.add_argument('--contract',required=True);q.add_argument('--output',required=True)
@@ -593,7 +599,7 @@ def main():
         elif a.action=='extract':
             if a.reserve_bytes<0:raise ValueError('空间预留不得为负数')
             r=extract(a.zip,a.destination,reserve_bytes=a.reserve_bytes,checksum_file=a.sha256_file)
-        elif a.action=='rehearse':r=rehearse(a.zip,a.package_root,a.run_root,a.run_index,a.report_dir,timeout=a.timeout)
+        elif a.action=='rehearse':r=rehearse(a.zip,a.package_root,a.run_root,a.run_index,a.report_dir,timeout=a.timeout,budget_path=a.budget_root)
         else:
             r=release(a.zip,a.rehearsal_report,a.approval,a.output)
             if a.transport_output:

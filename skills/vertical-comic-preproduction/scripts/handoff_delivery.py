@@ -73,6 +73,31 @@ def closure(root,index,*,verify_runtime=True):
     return errors
 
 
+def formal_context_errors(root,index):
+    """Pre-compression reference closure, not another compile or approval format."""
+    from handoff_zip import inside,reference
+    from codex_reference_contract import file_session,checked_file,read_json
+    from continuity_context import load_context
+    from panel_readiness import review_context
+    errors=[]
+    with file_session():
+        for episode in index['episodes']:
+            plan=read_json(reference(root,episode['run_template']))
+            base=inside(root,plan['root'])
+            state=read_json(inside(base,plan['state_file']))
+            rows={r['panel_id']:r for r in state['panels']}
+            # Explicitly leave any caller's candidate review context.
+            with review_context(state,base,False):
+                for pid in episode['panel_ids']:
+                    try:
+                        packet=read_json(checked_file(base,rows[pid]['package_manifest']))
+                        _,issues=load_context(packet,base,readonly=True)
+                        errors.extend('FORMAL_CONTEXT_HOLD:'+episode['episode_id']+'/'+pid+':'+e for e in issues)
+                    except (KeyError,TypeError,ValueError,OSError) as exc:
+                        errors.append('FORMAL_CONTEXT_HOLD:'+episode['episode_id']+'/'+pid+':'+str(exc))
+    return errors
+
+
 def bind(package_root,run_root,*,execution_context=None):
     from handoff_zip import audit_index,reference,inside,files,sha,write
     from runtime_snapshot import verify

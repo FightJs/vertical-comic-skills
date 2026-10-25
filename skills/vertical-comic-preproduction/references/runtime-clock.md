@@ -29,6 +29,7 @@
 - 明确等待用户：wait_user；得到必要答复且恢复实际执行时resume。
 - 多次相同event_id幂等，冲突动作拒绝；不同ID的重复pause/resume不会重复扣时。
 - 已通过真实完整交付校验后记录finish；未完成但停止工作时pause，不用finish伪装完成。
+- 启动标识为空不视为同一启动周期：按可核对的事件时间检查相邻区间，单调回退或时钟冲突保持TIME_UNCERTAIN。confirmed_closed_seconds只表示异常前已确认的闭合有效区间；不确定时active_seconds与remaining_seconds为未知，不能用下界重新发放额度。旧事件不补造启动身份。
 - 单调时钟与墙钟共同核对时间；可取得boot标识时校验重启。宿主/boot变化、计时不连续或墙钟明显跳变报告TIME_UNCERTAIN，不伪造精确时长。异常退出且没有中断事件不能自动扣除离线时间，需核对时间证据，不能重建账本清零。
 
 ## 暂停与生产边界

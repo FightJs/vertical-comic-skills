@@ -290,7 +290,13 @@ def check_delivery_directory(package_root):
 def pack(root,output):
     root=Path(root).resolve();output=Path(output).resolve()
     if output.suffix.lower()!='.zip' or output.exists() or output.is_relative_to(root):raise ValueError('输出须为包外不存在的ZIP，不覆盖原包')
-    data=audit_index(root);rows=files(root);manifest={'policy':POLICY,'package_id':data['package_id'],'files':rows}
+    rows=files(root)
+    data=audit_index(root)
+    if episode_mode(data):
+        from handoff_delivery import formal_context_errors
+        errors=formal_context_errors(root,data)
+        if errors:raise ValueError(';'.join(errors))
+    manifest={'policy':POLICY,'package_id':data['package_id'],'files':rows}
     output.parent.mkdir(parents=True,exist_ok=True)
     try:
         with zipfile.ZipFile(output,'x',compression=zipfile.ZIP_DEFLATED,compresslevel=3,allowZip64=True) as z:

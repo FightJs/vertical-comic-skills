@@ -105,6 +105,25 @@ class ValidationPoolTests(unittest.TestCase):
             path.write_text('changed')
             with self.assertRaisesRegex(ValueError,'CHECK_SNAPSHOT_CHANGED'):verify_read_snapshot(snapshot)
 
+class GrowingProofTests(unittest.TestCase):
+    def test_growing_cross_episode_scopes_reuse_proofs_and_detect_revocation(self):
+        from audit_fixtures import contexts
+        from continuity_context import load_context
+        import staged_workflow
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);packets=contexts(root,40,multiple_proofs=True)
+            pool=ValidationPool();actual=staged_workflow._approval_identity
+            with patch.object(staged_workflow,'_approval_identity',wraps=actual) as proof_check,session(pool):
+                for _ in range(2):
+                    with file_session():
+                        for packet in packets:self.assertEqual(load_context(packet,root)[1],[])
+                # Each of eight scoped proofs and two shared visual proofs is
+                # interpreted once, irrespective of the growing panel queries.
+                self.assertLessEqual(proof_check.call_count,10)
+                proof=root/'E000/proof-0.json';value=json.loads(proof.read_text())
+                value['status']='REVOKED';proof.write_text(json.dumps(value))
+                with file_session():self.assertTrue(load_context(packets[-1],root)[1])
+
 class OptimisticCommitTests(unittest.TestCase):
     def fixture(self):
         f=commit_fixtures.RuntimeTests();f.setUp();self.addCleanup(f.doCleanups)

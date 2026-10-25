@@ -27,6 +27,55 @@ class EpisodeHandoffTests(unittest.TestCase):
         self.fixture.save()
         self.ids = episode['panel_ids']
 
+    def context_proofs(self, mode):
+        f=self.fixture
+        for row in f.state['panels']:
+            packet=fixtures.f.fixtures.read(f.template,row['package_manifest'])
+            if not packet.get('continuity_context'):continue
+            ctx=fixtures.f.fixtures.read(f.template,packet['continuity_context'])
+            for source in ctx['sources']:
+                proof=copy.deepcopy(source['shot_approval'])
+                source['shot_approval']=None
+                source['shot_approvals']=[] if mode=='missing' else [proof]
+                if mode=='revoked':proof['status']='REVOKED'
+                if mode=='wrong_scope':proof['panel_ids']=['P999']
+            packet['continuity_context']=fixtures.f.fixtures.write(f.template,row['panel_id']+'-test-context.json',ctx)
+            row['package_manifest']=fixtures.f.fixtures.write(f.template,row['panel_id']+'-test-packet.json',packet)
+            row['shot_subset']=row['package_manifest']
+        f.refresh_template()
+
+    def assert_context_rejected(self,mode):
+        self.context_proofs(mode)
+        output=self.fixture.base/(mode+'.zip')
+        with self.assertRaisesRegex(ValueError,'FORMAL_CONTEXT_HOLD.*P002'):
+            fixtures.h.pack(self.fixture.package,output)
+        self.assertFalse(output.exists())
+
+    def test_missing_formal_context_blocks_before_zip(self):self.assert_context_rejected('missing')
+    def test_revoked_formal_context_blocks_before_zip(self):self.assert_context_rejected('revoked')
+    def test_wrong_scope_formal_context_blocks_before_zip(self):self.assert_context_rejected('wrong_scope')
+
+    def test_formal_check_cannot_inherit_candidate_scope(self):
+        from panel_readiness import review_context
+        f=self.fixture
+        with review_context(f.state,f.template,True):self.assert_context_rejected('missing')
+
+    def test_content_changed_after_formal_check_cannot_be_archived(self):
+        f=self.fixture;check=fixtures.d.formal_context_errors
+        def changed(*args):
+            result=check(*args)
+            (f.package/'binding-plan.md').write_text('changed after verification',encoding='utf-8')
+            return result
+        output=f.base/'changed.zip'
+        with patch.object(fixtures.d,'formal_context_errors',side_effect=changed):
+            with self.assertRaisesRegex(ValueError,'源文件变化'):fixtures.h.pack(f.package,output)
+        self.assertFalse(output.exists())
+
+    def test_null_single_proof_with_valid_original_collection_can_pack(self):
+        self.context_proofs('valid')
+        result=fixtures.h.pack(self.fixture.package,self.fixture.base/'valid.zip')
+        self.assertEqual(result['status'],'CANDIDATE_ZIP_NOT_RELEASED')
+
     def test_one_compile_same_full_decisions_no_half_scope(self):
         f = self.fixture
         before = fixtures.h.files(f.package)

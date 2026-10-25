@@ -1310,8 +1310,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/tests/test_runtime_pipeline.py",
-      "sha256": "bd130649bb499ec31c15963d2c7667db697876f8b42c105d6eeb40feaf09e154",
-      "bytes": 21555
+      "sha256": "7b623aff6cf94d6fbea36be3cda93da658d72e6f77971ab724be19fab3111173",
+      "bytes": 21588
     },
     {
       "path": "skills/vertical-comic-preproduction/tests/test_scoped_lifecycle.py",

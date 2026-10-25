@@ -170,7 +170,7 @@ class OptimisticCommitTests(unittest.TestCase):
         original=runtime_pipeline.state_write_lock;qa=f.root/f.r['qa_report']['path']
         @contextmanager
         def conflict(*args,**kwargs):
-            qa.write_text(qa.read_text()+' ')
+            qa.write_text(qa.read_text(encoding='utf-8')+' ',encoding='utf-8')
             with original(*args,**kwargs):yield
         before=path.read_bytes()
         with patch.object(runtime_pipeline,'state_write_lock',conflict):

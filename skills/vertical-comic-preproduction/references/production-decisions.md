@@ -36,6 +36,8 @@ regenerate仍是原格第二次attempt，operation=repair、repair_method=regene
 
 ## 在现有账本登记决定和采用版本
 
+新版任务优先走[审核与QA修订入口](incremental-pipeline.md#看图后一次保存-qa问题和采用)，一次保存实际QA、问题与采用，工具填写引用，原观察与旧版本保留。以下独立登记仍兼容。
+
 生产流程panels原行增加production_decisions={attempt_id:相对path/sha256}，adoption={attempt_id,decision:同一引用,reason}。执行status/output/attempt_history/UNKNOWN不变。决定文件携policy、panel_id、attempt_id、image、qa_report、reviewer、reason、action、issues及三个问题ID列表。每个issue写id、category=1/2/3、kind、certainty=confirmed/unverified、location、problem、target、basis、handling、observations（原单格QA item内JSON pointer数组）。所有原FAIL和未核实观察须有去向；inspection_plan仅组织观察，不是额外审核结论。类别和处理动作分别保存。
 
 调用动作另记method_key、可复用cause_key、preserve_constraints；第二类附factors={impact,distribution,scope,preservation_risk,history,manual_cost}，各项一句短语即可。动作取complete/defer_manual/needs_user/stop_diagnose/local_edit/regenerate/rebuild_inputs/crop_candidate。已发现问题不得声明complete。

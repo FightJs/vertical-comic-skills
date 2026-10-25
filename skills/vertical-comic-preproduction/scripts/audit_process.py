@@ -4,11 +4,16 @@ from pathlib import Path
 import subprocess
 import sys
 import threading
+import time
 
 
-def run(argv, *, cwd, timeout, stdout_path, stderr_path, progress_stream=None):
+def run(argv, *, cwd, timeout, stdout_path, stderr_path, progress_stream=None, budget_path=None):
     """Stdout remains machine JSON. No pipe can fill while the parent waits."""
     sink=progress_stream if progress_stream is not None else sys.stderr
+    from runtime_clock import require_running
+    budget_root=budget_path or cwd
+    budget=require_running(budget_root)
+    admitted_timeout=min(timeout,budget['remaining_seconds']) if budget and budget.get('state')=='RUNNING' else timeout
     stdout_path,stderr_path=Path(stdout_path),Path(stderr_path)
     with stdout_path.open('x',encoding='utf-8',newline='\n') as output, \
          stderr_path.open('x',encoding='utf-8',newline='\n') as diagnostic:
@@ -32,7 +37,13 @@ def run(argv, *, cwd, timeout, stdout_path, stderr_path, progress_stream=None):
         reader.start()
         timed_out=False
         try:
-            process.wait(timeout=timeout)
+            deadline=time.monotonic()+admitted_timeout
+            while process.poll() is None:
+                remaining=deadline-time.monotonic()
+                if remaining<=0:raise subprocess.TimeoutExpired(argv,admitted_timeout)
+                try:process.wait(timeout=min(0.5,remaining))
+                except subprocess.TimeoutExpired:
+                    if budget and budget.get('state')=='RUNNING':require_running(budget_root)
         except subprocess.TimeoutExpired:
             timed_out=True
             process.kill();process.wait()
@@ -46,7 +57,7 @@ def run(argv, *, cwd, timeout, stdout_path, stderr_path, progress_stream=None):
             raise OSError('Audit stderr evidence could not be saved completely: '+str(log_errors[0])) from log_errors[0]
     stdout=stdout_path.read_text(encoding='utf-8')
     stderr=stderr_path.read_text(encoding='utf-8')
-    if timed_out:raise subprocess.TimeoutExpired(argv,timeout,output=stdout,stderr=stderr)
+    if timed_out:raise subprocess.TimeoutExpired(argv,admitted_timeout,output=stdout,stderr=stderr)
     return subprocess.CompletedProcess(argv,process.returncode,stdout,stderr)
 
 

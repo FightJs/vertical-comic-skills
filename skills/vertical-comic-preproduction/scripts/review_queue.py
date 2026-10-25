@@ -35,6 +35,11 @@ def build_queue(state,root,batch,*,incremental=False,processed=None):
                     if incremental: continue
             except (OSError, ValueError, TypeError, KeyError):
                 pass
+        if status=='GENERATED' and r.get('quality_review',{}).get('qa_report')==r.get('qa_report') and r.get('quality_review',{}).get('status')=='PASS':
+            # The QA is still revalidated; a stale cursor never proves quality.
+            if not qa_errors(root,{**r,'status':'VISUAL_PASS'}):
+                item.update(action='COMPLETE_RELATED_COMPARISONS',qa_report=r['qa_report'],
+                            pending_comparisons=r['quality_review'].get('pending_comparisons',[]))
         item['priority']='DEPENDENCY_OR_STATE' if pid in anchors else 'NORMAL'
         if status in {'VISUAL_PASS','USER_ACCEPTED'}:
             try:

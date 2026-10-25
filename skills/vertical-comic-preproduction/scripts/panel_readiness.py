@@ -100,7 +100,7 @@ def artifacts_covered(state,root,proof,artifacts,ids,phase=None):
     if revocation_errors(proof, state['book_id'], state['episode_id']): return False
     key=content_key([str(resolve_path(Path(root))), state['book_id'], state['episode_id'], state.get('shot_manifest'), proof, artifacts, ids, phase, revocation_token()])
     return derived('approval_coverage',key,
-                   lambda:_artifacts_covered(state,root,proof,artifacts,ids,phase),accept=lambda value:value is True)
+                   lambda:_artifacts_covered(state,root,proof,artifacts,ids,phase),accept=lambda value:True)
 
 def _artifacts_covered(state,root,proof,artifacts,ids,phase=None):
     """Narrow technical reuse of exact approved rows from preserved source files."""

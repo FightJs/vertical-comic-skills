@@ -10,6 +10,7 @@ import hashlib
 import json
 import shutil
 import tempfile
+import time
 import uuid
 import zipfile
 from pathlib import Path
@@ -159,7 +160,9 @@ def _publish(identity,output,operation,*,source=None):
         raise ValueError('DELIVERY_OUTPUT_HOLD:发送目录须在协调记录之外')
     key=fingerprint({'requirements':value,'states':state_bindings(value),
         'source':reference(source) if source is not None else None})
+    waiting=time.monotonic()
     with file_lock(identity.parent/'delivery-publish.lock'):
+        acquired=time.monotonic()
         if output.exists():
             if (output/REPORT).is_file():
                 report=validate_receipt(value,output/REPORT);verify_receipt_content(value,report)
@@ -178,12 +181,17 @@ def _publish(identity,output,operation,*,source=None):
         log['attempts'].append(attempt);atomic_json(attempts_path,log)
         before=state_bindings(value)
         try:
+            operation_started=time.monotonic()
             report=operation(value,output)
+            operation_finished=time.monotonic()
             if before!=state_bindings(value):raise ValueError('DELIVERY_CHANGED_HOLD:打包期间权威状态变化')
             report.update(policy=POLICY,status='DELIVERY_READY',role=value['role'],scope=value['scope'],
                 requirements_sha256=fingerprint(value),states=before,image_calls=0,images_reencoded=False)
             report['total_bytes']=sum(r['bytes'] for r in report['artifacts'])
             validate_artifact_set(value,report['artifacts'])
+            report['observed_packaging_timing']={'lock_wait_seconds':acquired-waiting,
+                'pack_and_content_validation_seconds':operation_finished-operation_started,
+                'postpack_verification_seconds':time.monotonic()-operation_finished}
             atomic_json(output/REPORT,report)
             validate_receipt(value,output/REPORT)
             attempt['status']='PASS';attempt['receipt']=reference(output/REPORT)

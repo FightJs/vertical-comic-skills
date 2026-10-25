@@ -224,13 +224,37 @@ def priority(state, record, shot, root):
 
 
 def register(state_path, expected_sha256, proposal_ref):
+    from runtime_pipeline import POLICY, record
+    from codex_reference_contract import file_session,verify_read_snapshot
+    from authority_updates import state_write_lock
+    import time
+    path=Path(state_path).resolve();state=read_json(path)
+    if state.get('runtime_pipeline_policy')!=POLICY or 'dispatch_consistency' in state:
+        return _register(path,expected_sha256,proposal_ref)
+    started=time.monotonic()
+    with file_session() as snapshot:
+        updated,seen=_register(path,expected_sha256,proposal_ref,_prepare_only=True)
+    validated=time.monotonic()
+    with state_write_lock(path):
+        acquired=time.monotonic();verify_read_snapshot(snapshot)
+        result=_persist_register(path,expected_sha256,updated,seen)
+        written=time.monotonic()
+    timing={'validation':validated-started,'lock_wait':acquired-validated,'lock_hold':written-acquired}
+    result['pipeline_timing']=timing
+    try:result['pipeline_metric']=record(path,'decisions-register',timing,panel_ids=seen)
+    except OSError as exc:result['timing_record_error']=str(exc)
+    return result
+
+
+def _register(state_path, expected_sha256, proposal_ref, *, _prepare_only=False):
     """CAS-register immutable decisions/adoption; preserve every execution field."""
     from authority_updates import state_write_lock
     from dispatch_publication import require_legacy
     from platform_io import atomic_json
     from batch_round import attempt_errors
     state_path = Path(state_path).resolve(); root = state_path.parent.parent
-    with state_write_lock(state_path):
+    from contextlib import nullcontext
+    with (nullcontext() if _prepare_only else state_write_lock(state_path)):
         state = read_json(state_path); require_legacy(state)
         if not enabled(state) or digest(state_path) != expected_sha256:
             raise ValueError('STATE_CHANGED或原运行未声明新合同；不迁移旧RV')
@@ -262,11 +286,17 @@ def register(state_path, expected_sha256, proposal_ref):
             updated['delivery_review'] = ref
         if not seen and not proposal.get('delivery_review'):
             raise ValueError('没有待登记决定')
-        history = state_path.parent / 'runtime_history'; history.mkdir(exist_ok=True)
-        original = history / (expected_sha256 + '.json')
-        if not original.exists(): original.write_bytes(state_path.read_bytes())
-        if digest(state_path) != expected_sha256:
-            raise ValueError('STATE_CHANGED')
-        atomic_json(state_path, updated)
-        return {'status': 'DECISIONS_RECORDED', 'panel_ids': sorted(seen),
-                'state_sha256': digest(state_path), 'image_calls': 0, 'user_approval': 'NOT_GRANTED'}
+        if _prepare_only:return updated, sorted(seen)
+        return _persist_register(state_path, expected_sha256, updated, sorted(seen))
+
+
+def _persist_register(state_path, expected_sha256, updated, seen):
+    from platform_io import atomic_json
+    history = state_path.parent / 'runtime_history'; history.mkdir(exist_ok=True)
+    original = history / (expected_sha256 + '.json')
+    if not original.exists(): original.write_bytes(state_path.read_bytes())
+    if digest(state_path) != expected_sha256:
+        raise ValueError('STATE_CHANGED')
+    atomic_json(state_path, updated)
+    return {'status': 'DECISIONS_RECORDED', 'panel_ids': seen,
+            'state_sha256': digest(state_path), 'image_calls': 0, 'user_approval': 'NOT_GRANTED'}

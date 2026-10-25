@@ -51,11 +51,11 @@ def approval_errors(approval, root, artifacts, book, episode, *, phase=None, pan
     key=content_key([str(resolve_path(Path(root))), approval, artifacts, book, episode, phase, panel_ids, revocation_token()])
     value=derived('approval_validation',key,
                   lambda:_approval_errors(approval,root,artifacts,book,episode,phase=phase,panel_ids=panel_ids),
-                  accept=lambda errors:not errors)
+                  accept=lambda errors:True)
     return list(value)
 
 
-def _approval_errors(approval, root, artifacts, book, episode, *, phase=None, panel_ids=None):
+def _approval_identity(approval, root, book, episode, *, phase=None):
     errors = []
     if not isinstance(approval, dict):
         return ["缺少用户批准记录"]
@@ -65,8 +65,6 @@ def _approval_errors(approval, root, artifacts, book, episode, *, phase=None, pa
         if errors:return errors
         if phase is None or approval.get('phase') != phase:
             errors.append('AUTHORITY_HOLD:执行者决定须从准确阶段入口核验')
-        if panel_ids is not None and not set(panel_ids) <= set(approval.get('panel_ids', [])):
-            errors.append('AUTHORITY_HOLD:决定未覆盖本次格号')
     elif approval.get("status") != "APPROVED" or approval.get("source_kind") != "user_message" or not approval.get("quote") or not approval.get("source_locator"):
         errors.append("须有实际用户批准原文和消息来源；技术PASS不能代替")
     if approval.get("book_id") != book or not (approval.get("episode_id") == episode or isinstance(approval.get("episode_ids"), list) and episode in approval["episode_ids"]):
@@ -79,6 +77,22 @@ def _approval_errors(approval, root, artifacts, book, episode, *, phase=None, pa
             checked_file(root, item)
         except (OSError, ValueError, TypeError) as exc:
             errors.append(f"批准依赖已失效: {exc}")
+    return errors
+
+
+def _approval_errors(approval, root, artifacts, book, episode, *, phase=None, panel_ids=None):
+    from audit_cache import derived
+    # Identity, delegation and exact original artifact bytes are common to all
+    # queried panel subsets. Scope and requested-version coverage remain local.
+    errors = list(derived('approval_proof',
+        [str(resolve_path(Path(root))), approval, book, episode, phase, revocation_token()],
+        lambda: _approval_identity(approval, root, book, episode, phase=phase)))
+    if not isinstance(approval, dict):return errors
+    if (approval.get('source_kind') == 'agent_decision' and panel_ids is not None
+            and not set(panel_ids) <= set(approval.get('panel_ids', []))):
+        errors.append('AUTHORITY_HOLD:决定未覆盖本次格号')
+    bound = approval.get('artifacts')
+    if not isinstance(bound, list):return errors
     def covered(item):
         if item in bound:return True
         try:
@@ -157,7 +171,11 @@ def _qa_errors(root, record):
 
 def qa_errors(root, record):
     from review_reuse import cached_qa
-    return cached_qa(root,record,lambda:_qa_errors(root,record))
+    from audit_cache import derived
+    # The original checks still own all observations. Reuse only after the
+    # actual package, image, QA, rules and transitive dependencies are rehashed.
+    return cached_qa(root,record,lambda:list(derived('qa_evidence',
+        [str(resolve_path(Path(root))),record],lambda:_qa_errors(root,record))))
 
 
 def _evaluate_impl(state, root, check="status", requested=None):

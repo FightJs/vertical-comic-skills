@@ -606,6 +606,7 @@ def verify_exported_read_set(proof, allowed_roots):
     """Rehash all bytes and replay path/negative/directory observations on resume."""
     if proof.get('policy')!='receiver_read_set_v1' or proof.get('reusable') is not True or proof.get('dispatch_authorized') is not False:
         return False
+    if not isinstance(proof.get('files'),list) or not proof['files'] or not isinstance(proof.get('observations'),list):return False
     roots=[Path(r).resolve() for r in allowed_roots]
     def allowed(path):
         return Path(path).is_absolute() and any(Path(path).resolve().is_relative_to(root) for root in roots)

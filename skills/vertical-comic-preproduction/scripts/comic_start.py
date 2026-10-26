@@ -107,6 +107,31 @@ def prepare(project,book,ids,*,script=None,assets=None,output=None,workers=None,
     result.update(clock)
     write(run/'启动摘要.json',result);return result
 
+def inspect_received_runtime(run_root, run_index, report_dir):
+    from handoff_zip import inside
+    local_index=read(run_index);entrypoints=[];compatibility=[]
+    folder=Path(report_dir);folder.mkdir(parents=True,exist_ok=False)
+    for episode in local_index['episodes']:
+        state_path=inside(Path(run_root),episode['state']);state=read(state_path)
+        runtime_manifest=Path(state['runtime_snapshot']['path'])
+        scripts=runtime_manifest.parent/'skills/vertical-comic-preproduction/scripts'
+        entry={'episode_id':episode['episode_id'],'state':str(state_path),
+               'frozen_runtime_manifest':str(runtime_manifest),'frozen_scripts':str(scripts),
+               'runtime_script':str(scripts/'production_runtime.py'),'execution_mode':state.get('execution_mode'),
+               'optimization_policy':state.get('optimization_policy'),
+               'generation_host':str(Path(__file__).resolve().parent/'generation_host.py')}
+        entrypoints.append(entry)
+        proc=subprocess.run([sys.executable,'-X','utf8','-B',entry['generation_host'],'inspect-runtime','--state',entry['state']],
+            capture_output=True,text=True,encoding='utf-8')
+        (folder/(episode['episode_id']+'_stdout.json')).write_text(proc.stdout,encoding='utf-8')
+        (folder/(episode['episode_id']+'_stderr.txt')).write_text(proc.stderr,encoding='utf-8')
+        try:item=json.loads(proc.stdout)
+        except ValueError:item={'status':'HOLD','error':'INVALID_HOST_RESULT: see preserved stdout/stderr'}
+        if proc.returncode:item['status']='HOLD'
+        compatibility.append({'episode_id':episode['episode_id'],**item})
+    return entrypoints,compatibility
+
+
 def receive(zip_path=None,*,package_root=None,output=None,runtime_limit_seconds=14400,clock_session_id=None,_started=None,audit_timeout=900):
     from runtime_clock import instant
     started=_started or instant()
@@ -146,8 +171,13 @@ def receive(zip_path=None,*,package_root=None,output=None,runtime_limit_seconds=
         'run_root':bound['run_root'],'run_index':bound['run_index'],
         'run_index_sha256':__import__('handoff_zip').sha(bound['run_index']),
         'inventory_sha256':__import__('handoff_zip').sha(originals/'ZIP文件清单.json'),'audit_timeout':audit_timeout})
-    result=rehearse(archive,originals,bound['run_root'],bound['run_index'],target/'接包预检',
-                    timeout=audit_timeout,budget_path=target)
+    entrypoints,compatibility=inspect_received_runtime(bound['run_root'],bound['run_index'],target/'接包兼容检查')
+    if any(item['status']!='RUNTIME_COMPATIBLE' for item in compatibility):
+        result={'status':'HOLD','results':[{'episode_id':item['episode_id'],'status':'HOLD',
+                'reason_code':'PROTOCOL_HOLD','errors':[item.get('error','接包协议不兼容，未启动耗时输入审计')]} for item in compatibility]}
+    else:
+        result=rehearse(archive,originals,bound['run_root'],bound['run_index'],target/'接包预检',
+                        timeout=audit_timeout,budget_path=target)
     local_index = read(bound['run_index'])
     from delivery_contract import initialize as initialize_delivery
     delivery_identity=initialize_delivery(target,'production',[Path(bound['run_root'])/e['state'] for e in local_index['episodes']],
@@ -155,23 +185,6 @@ def receive(zip_path=None,*,package_root=None,output=None,runtime_limit_seconds=
     progress = start_display(target/'00_显示进度','production',[Path(bound['run_root'])/e['state'] for e in local_index['episodes']],rehearsal=result)
     # A received run is already configured by its verified package, not a new book.
     package_index=read(originals/INDEX)
-    entrypoints=[]
-    for episode in local_index['episodes']:
-        state_path=Path(bound['run_root'])/episode['state'];state=read(state_path)
-        runtime_manifest=Path(state['runtime_snapshot']['path'])
-        scripts=runtime_manifest.parent/'skills/vertical-comic-preproduction/scripts'
-        entrypoints.append({'episode_id':episode['episode_id'],'state':str(state_path),
-                            'frozen_runtime_manifest':str(runtime_manifest),'frozen_scripts':str(scripts),
-                            'runtime_script':str(scripts/'production_runtime.py'),
-                            'execution_mode':state.get('execution_mode'),
-                            'optimization_policy':state.get('optimization_policy'),
-                            'generation_host':str(Path(__file__).resolve().parent/'generation_host.py')})
-    compatibility=[]
-    for entry in entrypoints:
-        proc=subprocess.run([sys.executable,'-X','utf8','-B',entry['generation_host'],'inspect-runtime','--state',entry['state']],
-                            capture_output=True,text=True,encoding='utf-8')
-        item=json.loads(proc.stdout);compatibility.append({'episode_id':entry['episode_id'],**item})
-        if proc.returncode:result['status']='HOLD'
     return {**progress,**clock,'runtime_compatibility':compatibility,'status':'READY_FOR_PRODUCTION_ROUTING' if result['status']=='RELEASE_CANDIDATE' else 'HOLD',
             'delivery_identity':delivery_identity,
             'input_mode':'package_only_production','external_inputs_required':False,'book_profile_required':False,
@@ -197,9 +210,10 @@ def receive_resume(run_root, *, audit_timeout=900):
     originals=Path(receipt['originals_root']);checked=check_delivery_directory(originals)
     if sha(originals/'ZIP文件清单.json')!=receipt.get('inventory_sha256'):raise ValueError('恢复原件清单变化')
     if checked.get('package_id')!=receipt.get('package_id'):raise ValueError('恢复原件身份变化')
+    entries,compatibility=inspect_received_runtime(local_root,index_path,target/('接包兼容检查_恢复_'+uuid.uuid4().hex[:10]))
+    if any(item['status']!='RUNTIME_COMPATIBLE' for item in compatibility):
+        return {'status':'HOLD','runtime_compatibility':compatibility,'run_root':str(target),'image_calls':0}
     started=any(read(p).get('parallel_context') or any(r['status'] not in {'PENDING','REPAIR_AUTHORIZED'} for r in read(p)['panels']) for p in states)
-    entries=[{'episode_id':read(p)['episode_id'],'state':str(p),
-              'generation_host':str(Path(__file__).resolve().parent/'generation_host.py')} for p in states]
     if started:
         return {'status':'CONTINUE_ORIGINAL_PRODUCTION','run_root':str(target),'production_entrypoints':entries,
                 'dispatch_authorized':False,'image_calls':0,

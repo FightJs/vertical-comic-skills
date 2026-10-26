@@ -1,5 +1,6 @@
 """Content-bound audit reuse and original-run recovery, without services."""
 import copy,json,sys,tempfile,unittest
+from unittest.mock import patch
 from pathlib import Path
 sys.path[:0]=[str(Path(__file__).resolve().parents[1]/'scripts'),str(Path(__file__).parent)]
 from codex_reference_contract import file_session,read_json,path_exists,scan_directory,export_read_set,verify_exported_read_set
@@ -23,6 +24,8 @@ class ReadSetTests(unittest.TestCase):
             root=Path(d);p=root/'input.json';p.write_text('{}')
             with file_session() as memo:read_json(p);proof=export_read_set(memo)
             self.assertFalse(verify_exported_read_set(proof,[root/'other']))
+            empty={**proof,'files':[]}
+            self.assertFalse(verify_exported_read_set(empty,[root]))
             proof['reusable']=False;self.assertFalse(verify_exported_read_set(proof,[root]))
 
 class ResumeTests(unittest.TestCase):
@@ -47,5 +50,13 @@ class ResumeTests(unittest.TestCase):
         state=local/'E000/00_输入审计/生产流程.json';value=json.loads(state.read_text());value['panels'][0]['status']='RESULT_UNKNOWN';state.write_text(json.dumps(value))
         before=state.read_bytes();result=comic_start.receive_resume(root)
         self.assertEqual(result['status'],'CONTINUE_ORIGINAL_PRODUCTION');self.assertEqual(before,state.read_bytes())
+
+    def test_protocol_hold_precedes_expensive_rehearsal(self):
+        self.f.test_direct_bound_run_real_full_episode_gates_and_conditional_release()
+        incompatible=([{'episode_id':'E000'}],[{'episode_id':'E000','status':'HOLD','error':'Unsupported test protocol'}])
+        with patch.object(comic_start,'inspect_received_runtime',return_value=incompatible),patch.object(comic_start,'rehearse') as audit:
+            result=comic_start.receive(self.f.base/'正式交接包.zip',runtime_limit_seconds=None,output=self.f.base/'unsupported')
+        self.assertEqual(result['status'],'HOLD');audit.assert_not_called()
+
 
 if __name__=='__main__':unittest.main()

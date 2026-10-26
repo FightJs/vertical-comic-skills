@@ -417,7 +417,7 @@ def rehearse(zip_path,package_root,run_root,run_index,report,*,timeout=900,budge
             state_path=inside(run_root,run['state']);state=read(state_path)
             if state.get('book_id')!=data['book_id'] or state.get('episode_id')!=eid:raise ValueError('本地状态书话失配')
             old=previous.get(eid,{})
-            if old.get('status')=='REHEARSED' and old.get('input_read_set'):
+            if old.get('status')=='REHEARSED' and old.get('input_read_set') and old.get('input_state_sha256')==sha(state_path):
                 from codex_reference_contract import verify_exported_read_set
                 if verify_exported_read_set(old['input_read_set'],[package_root,run_root]):
                     results.append({**old,'audit_reuse':'CONTENT_REVERIFIED',
@@ -538,7 +538,8 @@ def rehearse(zip_path,package_root,run_root,run_index,report,*,timeout=900,budge
                     'PROCESS_ERROR' if rc not in (None,0) else 'CONTENT_HOLD')
         row={'episode_id':eid,'status':'HOLD' if errors else 'REHEARSED',ready_key(data):job_ids if not errors else [],
              'errors':errors,'reason_code':reason,'argv':argv,'returncode':rc}
-        if not errors and combined and bundle.get('input_read_set'):row['input_read_set']=bundle['input_read_set']
+        if not errors and combined and bundle.get('input_read_set'):
+            row['input_read_set']=bundle['input_read_set'];row['input_state_sha256']=sha(state_path)
         results.append(row)
         remaining.remove(run);publish_read_scopes()
     activity.unlink(missing_ok=True)

@@ -66,6 +66,17 @@ class HostTests(unittest.TestCase):
         packet['memory_source']['index']='another-index.json'
         with self.assertRaisesRegex(ValueError,'CONTENT_CHANGED'):local_execution_view(state,self.root,packet,self.root)
 
+    def test_audit_dependency_blocks_only_affected_submit(self):
+        job=self.host('compile','--panels','P001')['jobs'][0]
+        jp=self.write(self.root/'job.json',job);before=self.state_path.read_bytes()
+        marker=self.root.parent/'接收审计活动.json'
+        self.write(marker,{'policy':'receiver_active_read_scopes_v1','protected_state_paths':[str(self.state_path)]})
+        held=self.host('prepare-submit','--job',jp,ok=False)
+        self.assertIn('RECEIVER_READ_CONFLICT',held['error']);self.assertEqual(before,self.state_path.read_bytes())
+        self.write(marker,{'policy':'receiver_active_read_scopes_v1','protected_state_paths':[str(self.root.parent/'independent.json')]})
+        self.assertEqual(self.host('prepare-submit','--job',jp)['status'],'SUBMISSION_REGISTERED')
+
+
 if __name__=='__main__':unittest.main()
 
 class WorkerTests(unittest.TestCase):

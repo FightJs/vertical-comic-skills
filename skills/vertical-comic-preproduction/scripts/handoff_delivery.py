@@ -243,3 +243,33 @@ def copy_assembly_plan(source,destination,plan):
         shutil.move(str(stage),str(destination))
     return {'status':'ASSEMBLED_CANDIDATE_NOT_APPROVED','path':str(destination),'files':len(rows),
         'image_calls':0,'approval_created':False}
+
+
+def local_execution_view(state, root, packet, package_root):
+    """Derive only local rule addresses; approved packet bytes remain untouched."""
+    import copy
+    from rule_memory import same_source_identity, source_index
+    from production_runtime import package_signature
+    from input_semantics import actual_input, fingerprint
+    from codex_reference_contract import checked_file, read_json, file_session
+    bound=copy.deepcopy(packet);old=packet.get('memory_source');local=state.get('memory_source')
+    if not same_source_identity(old,local):raise ValueError('MEMORY_BINDING_CONTENT_CHANGED')
+    with file_session():
+        if local is not None:
+            from runtime_snapshot import verify
+            frozen=verify(state['runtime_snapshot'])
+            if frozen['memory_source']!=local:raise ValueError('MEMORY_BINDING_SNAPSHOT_MISMATCH')
+            source_index(local);bound['memory_source']=copy.deepcopy(local)
+        if package_signature(packet,package_root)!=package_signature(bound,package_root):
+            raise ValueError('MEMORY_BINDING_ACTUAL_INPUT_CHANGED')
+        before=after=None
+        if old is not None and state.get('input_semantics_policy'):
+            shots=read_json(checked_file(Path(root),state['shot_manifest']))
+            shot=next(p for p in shots['panels'] if p['panel_id']==packet['panels'][0]['panel_id'])
+            before=fingerprint(actual_input(state,Path(root),shot,packet,Path(package_root)))
+            after=fingerprint(actual_input(state,Path(root),shot,bound,Path(package_root)))
+            if before!=after:raise ValueError('MEMORY_BINDING_SEMANTICS_CHANGED')
+    return bound,{'policy':'local_execution_memory_binding_v1','same_rule_content_identity':True,
+                  'actual_input_signature_equal':True,'semantic_digest_before':before,
+                  'semantic_digest_after':after,'old_memory_source':old,'local_memory_source':local,
+                  'image_calls':0,'visual_review':'UNREVIEWED'}

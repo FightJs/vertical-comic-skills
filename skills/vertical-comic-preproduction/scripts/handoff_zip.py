@@ -351,7 +351,7 @@ def extract(zip_path,destination,*,reserve_bytes=256*1024*1024,checksum_file=Non
     return {'status':'EXTRACTED_CHECKED_NOT_PRODUCTION_APPROVAL','root':str(root),'archive_sha256':sha(zip_path)}
 
 
-def rehearse(zip_path,package_root,run_root,run_index,report,*,timeout=180,budget_path=None):
+def rehearse(zip_path,package_root,run_root,run_index,report,*,timeout=900,budget_path=None,resume_report=None):
     from runtime_snapshot import verify
     if timeout<=0:raise ValueError('预检超时须大于零')
     package_root=Path(package_root).resolve();run_root=Path(run_root).resolve()
@@ -372,7 +372,14 @@ def rehearse(zip_path,package_root,run_root,run_index,report,*,timeout=180,budge
     if [e.get('episode_id') for e in runs]!=[e['episode_id'] for e in data['episodes']]:raise ValueError('接包演练必须覆盖全部交接话')
     report=Path(report).resolve()
     if report.exists() or report.is_relative_to(package_root):raise ValueError('报告目录须为原包外新目录')
-    report.mkdir(parents=True);results=[]
+    report.mkdir(parents=True);results=[];previous={}
+    if resume_report is not None:
+        prior_path=Path(resume_report).resolve();prior=read(prior_path)
+        if prior.get('package_id')!=data['package_id']:raise ValueError('恢复报告属于其他交接包')
+        for item in prior.get('evidence_files',[]):
+            reference(prior_path.parent,item)
+        shutil.copytree(prior_path.parent,report/'previous')
+        previous={r['episode_id']:r for r in prior.get('results',[])}
     def run_gate(argv,eid,label,state_path):
         from audit_process import run,last_progress
         out_name=eid+'_stdout.json' if label=='h001' else eid+'_'+label+'.json'
@@ -385,11 +392,38 @@ def rehearse(zip_path,package_root,run_root,run_index,report,*,timeout=180,budge
                   {'status':'HOLD','argv':argv,'timeout_seconds':timeout,
                    'last_progress':last_progress(exc.stderr or ''),'stdout':out_name,'stderr':err_name})
             raise ValueError('冻结预检超时；未记通过，原始输出和最后进度已保存') from exc
+    # Advisory scheduling scope, not a permit or second request ledger. Actual
+    # read transactions still reject concurrent writes from older callers.
+    activity=run_root/'接收审计活动.json'
+    remaining=list(runs)
+    def publish_read_scopes():
+        from platform_io import atomic_json
+        protected=set()
+        for item in remaining:
+            path=inside(run_root,item['state']);protected.add(str(path))
+            state=read(path);episode_root=path.parent.parent
+            for source in state.get('continuity_sources',[]):
+                if source.get('approval_resolution')=='source_runtime_gates_v1':
+                    base=Path(source['root'])
+                    if source.get('root_mode')=='context_relative_v1':base=episode_root/base
+                    target=(base/source.get('source_state_file','00_输入审计/生产流程.json')).resolve()
+                    if target.is_relative_to(run_root):protected.add(str(target))
+        atomic_json(activity,{'policy':'receiver_active_read_scopes_v1','protected_state_paths':sorted(protected),
+                             'report_directory':str(report),'dispatch_authorized':False})
+    publish_read_scopes()
     for episode,run in zip(data['episodes'],runs):
         eid=episode['episode_id'];errors=[];job_ids=[];raw=None;argv=None;rc=None
         try:
             state_path=inside(run_root,run['state']);state=read(state_path)
             if state.get('book_id')!=data['book_id'] or state.get('episode_id')!=eid:raise ValueError('本地状态书话失配')
+            old=previous.get(eid,{})
+            if old.get('status')=='REHEARSED' and old.get('input_read_set') and old.get('input_state_sha256')==sha(state_path):
+                from codex_reference_contract import verify_exported_read_set
+                if verify_exported_read_set(old['input_read_set'],[package_root,run_root]):
+                    results.append({**old,'audit_reuse':'CONTENT_REVERIFIED',
+                                    'prior_report':{'path':'previous/'+prior_path.name,'sha256':sha(prior_path)}})
+                    remaining.remove(run);publish_read_scopes()
+                    continue
             scoped=handoff_history_errors(package_root,episode,data.get('task_context'),state,state_path.parent.parent)
             if scoped:raise ValueError(';'.join(scoped))
             mapping=reference(run_root,run['binding_evidence'])
@@ -474,6 +508,13 @@ def rehearse(zip_path,package_root,run_root,run_index,report,*,timeout=180,budge
                     for value in job.get('arguments',{}).get('referenced_image_paths',[]):
                         path=Path(value).resolve()
                         if not path.is_file() or not (path.is_relative_to(package_root) or path.is_relative_to(run_root)):raise ValueError('全话参考仍缺失或依赖来源机器；当前生图人员须报告准确受影响格并直接询问用户')
+            if combined and bundle.get('technical_compatibility',{}).get('local_rule_bindings')!='VERIFIED':
+                # Old frozen input audits did not traverse the QA address source.
+                # Use the installed read-only adapter; never patch frozen tools.
+                host=Path(__file__).resolve().parent/'generation_host.py'
+                checked_binding=run_gate([sys.executable,'-X','utf8','-B',str(host),
+                    'check-bindings','--state',str(state_path)],eid,'local_bindings',state_path)
+                if checked_binding.returncode:raise ValueError('LOCAL_EXECUTION_BINDING_HOLD: '+checked_binding.stdout)
             pre=raw.get('preflight') or {}
             expected=ready_ids(data,episode)
             job_ids=[j.get('panel_id') for j in raw.get('jobs',[])]
@@ -490,7 +531,18 @@ def rehearse(zip_path,package_root,run_root,run_index,report,*,timeout=180,budge
                     if not (p.is_relative_to(package_root) or p.is_relative_to(run_root)):errors.append('实际请求仍引用旧电脑/外部参考路径')
                     if not p.is_file():errors.append('实际请求参考不存在')
         except (OSError,ValueError,KeyError,TypeError) as exc:errors.append(str(exc))
-        results.append({'episode_id':eid,'status':'HOLD' if errors else 'REHEARSED',ready_key(data):job_ids if not errors else [],'errors':errors,'argv':argv,'returncode':rc})
+        reason=None
+        if errors:
+            reason=('AUDIT_TIMEOUT' if any('超时' in e for e in errors) else
+                    'SNAPSHOT_CHANGED' if any('SNAPSHOT_CHANGED' in e for e in errors) else
+                    'PROCESS_ERROR' if rc not in (None,0) else 'CONTENT_HOLD')
+        row={'episode_id':eid,'status':'HOLD' if errors else 'REHEARSED',ready_key(data):job_ids if not errors else [],
+             'errors':errors,'reason_code':reason,'argv':argv,'returncode':rc}
+        if not errors and combined and bundle.get('input_read_set'):
+            row['input_read_set']=bundle['input_read_set'];row['input_state_sha256']=sha(state_path)
+        results.append(row)
+        remaining.remove(run);publish_read_scopes()
+    activity.unlink(missing_ok=True)
     if files(package_root)!=before:raise ValueError('演练改动收到原件，禁止发布')
     if zip_path is None and sha(package_root/INVENTORY)!=receipt['inventory_sha256']:raise ValueError('演练期间交接清单变化')
     ready=sum(len(r[ready_key(data)]) for r in results)
@@ -579,7 +631,7 @@ def main():
     q=sub.add_parser('review');q.add_argument('--root',required=True)
     q=sub.add_parser('pack');q.add_argument('--root',required=True);q.add_argument('--output',required=True)
     q=sub.add_parser('extract');q.add_argument('--zip',required=True);q.add_argument('--destination',required=True);q.add_argument('--reserve-bytes',type=int,default=256*1024*1024);q.add_argument('--sha256-file')
-    q=sub.add_parser('rehearse');q.add_argument('--zip',help='省略时核验已解压正式目录及内置发布证据');q.add_argument('--package-root',required=True);q.add_argument('--run-root',required=True);q.add_argument('--run-index',required=True);q.add_argument('--report-dir',required=True);q.add_argument('--timeout',type=int,default=180);q.add_argument('--budget-root',help='实际职责计时根目录；所有话共用剩余预算，不重置')
+    q=sub.add_parser('rehearse');q.add_argument('--zip',help='省略时核验已解压正式目录及内置发布证据');q.add_argument('--package-root',required=True);q.add_argument('--run-root',required=True);q.add_argument('--run-index',required=True);q.add_argument('--report-dir',required=True);q.add_argument('--timeout',type=int,default=900);q.add_argument('--budget-root',help='实际职责计时根目录；所有话共用剩余预算，不重置')
     q=sub.add_parser('release');q.add_argument('--zip',required=True);q.add_argument('--rehearsal-report',required=True);q.add_argument('--approval',required=True);q.add_argument('--output',required=True);q.add_argument('--transport-output',help='正式发布后自动导出微信运输包到全新目录')
     q=sub.add_parser('assemble');q.add_argument('--root',required=True);q.add_argument('--plan',required=True);q.add_argument('--output',required=True)
     q=sub.add_parser('publish');q.add_argument('--zip',required=True);q.add_argument('--contract',required=True);q.add_argument('--output',required=True)

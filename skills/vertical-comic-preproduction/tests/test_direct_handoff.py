@@ -133,7 +133,7 @@ class DirectHandoffTests(unittest.TestCase):
         import comic_start
         # Isolated tiny fixture: simulate receiver capacity, independent of host free space.
         with patch.object(h.shutil,'disk_usage',return_value=SimpleNamespace(free=10*1024**3)):
-            reception=comic_start.receive(out,output=self.base/'接包输出')
+            reception=comic_start.receive(out,runtime_limit_seconds=None,output=self.base/'接包输出')
         self.assertEqual(reception['status'],'READY_FOR_PRODUCTION_ROUTING',reception)
         self.assertEqual(reception['image_calls'],0)
         formal=Path(h.extract(out,self.base/'received-on-another-path',reserve_bytes=0)['root'])
@@ -145,7 +145,7 @@ class DirectHandoffTests(unittest.TestCase):
         import comic_start
         z=self.base/'candidate.zip';h.pack(self.package,z)
         with self.assertRaisesRegex(ValueError,'旧版正式ZIP'):
-            comic_start.receive(z,output=self.base/'must-not-exist')
+            comic_start.receive(z,runtime_limit_seconds=None,output=self.base/'must-not-exist')
         self.assertFalse((self.base/'must-not-exist').exists())
 
     def test_internal_hash_failure_stops_before_receiver_creates_run(self):
@@ -153,7 +153,7 @@ class DirectHandoffTests(unittest.TestCase):
         z=self.base/'damaged.zip';h.pack(self.package,z)
         with zipfile.ZipFile(z,'a') as archive:archive.writestr('package/extra.txt','unlisted')
         with self.assertRaisesRegex(ValueError,'清单'):
-            comic_start.receive(z,output=self.base/'must-not-exist')
+            comic_start.receive(z,runtime_limit_seconds=None,output=self.base/'must-not-exist')
         self.assertFalse((self.base/'must-not-exist').exists())
 
     def test_one_ready_cannot_hide_later_hold_or_unknown(self):

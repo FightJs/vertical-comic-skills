@@ -62,3 +62,7 @@ python <scripts>/slot_leases.py --state <生产流程.json> --expected-sha256 <�
 
 
 总控任务记录、真实等待、收尾检查与中断恢复统一见[任务协调与恢复](task-recovery.md)。新运行最终交付使用task_coordination.py finish-check，不能以进度摘要、子任务口头完成或等待超时结束轮次。
+
+## 不同批准画风表述的容量衔接
+
+新control可明确`style_binding_policy=style_basis_by_job_v1`，每个job的style_basis为shared_files中已冻结的path/sha256引用；各job按自己的批准style完整匹配。所有画风样例字节仍纳入shared_files，同一control统一核对容量、租约和owner。不以同图哈希推定traits等价。无此合同的旧control继续唯一共用style_basis，不能只加job字段绕过旧规则。

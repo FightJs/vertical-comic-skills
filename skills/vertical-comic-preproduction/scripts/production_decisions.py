@@ -224,6 +224,8 @@ def priority(state, record, shot, root):
 
 
 def register(state_path, expected_sha256, proposal_ref):
+    from runtime_clock import require_step
+    require_step(state_path)
     from runtime_pipeline import POLICY, record
     from codex_reference_contract import file_session,verify_read_snapshot
     from authority_updates import state_write_lock
@@ -236,7 +238,7 @@ def register(state_path, expected_sha256, proposal_ref):
         updated,seen=_register(path,expected_sha256,proposal_ref,_prepare_only=True)
     validated=time.monotonic()
     with state_write_lock(path):
-        acquired=time.monotonic();verify_read_snapshot(snapshot)
+        acquired=time.monotonic();verify_read_snapshot(snapshot,refresh_views=False)
         result=_persist_register(path,expected_sha256,updated,seen)
         written=time.monotonic()
     timing={'validation':validated-started,'lock_wait':acquired-validated,'lock_hold':written-acquired}
@@ -297,6 +299,8 @@ def _persist_register(state_path, expected_sha256, updated, seen):
     if not original.exists(): original.write_bytes(state_path.read_bytes())
     if digest(state_path) != expected_sha256:
         raise ValueError('STATE_CHANGED')
+    from runtime_clock import require_step
+    require_step(state_path)
     atomic_json(state_path, updated)
     return {'status': 'DECISIONS_RECORDED', 'panel_ids': seen,
             'state_sha256': digest(state_path), 'image_calls': 0, 'user_approval': 'NOT_GRANTED'}

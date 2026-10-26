@@ -36,3 +36,5 @@ description: Review actual comic images against approved evidence, preserve trut
 空间相关格沿已选关系和实际修复目标检查；按[二轮分流](../vertical-comic-preproduction/references/execution-quality.md#建筑与视角畸形的二轮分流)记录范围及原QA证据。局部改善不等于整体通过，未见连接不推定正确；修后核对核心线索、批准光线和此前正确内容。
 
 逐格成品的最终ZIP还须执行[完整交付与容量门禁](../vertical-comic-preproduction/references/delivery-contract.md)：按准确采用图封装普通ZIP，保持图片原字节；成品不设1GB容量门禁、不因体积自动分包；ZIP根目录必须包含图片问题总览.csv和问题明细.csv。只有交付验收.json、CSV对应校验和原内容门禁同时通过才结束；打包不降质、不追加生图、不改预算。
+
+接包QA读取已核验本机规则地址的实际执行副本，并绑定其SHA256；原批准包及旧QA留存。地址修复不改变规则身份、比例FAIL或视觉观察，执行副本与采用版本的问题清单必须一致。

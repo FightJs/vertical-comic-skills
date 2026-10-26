@@ -155,6 +155,8 @@ def artifact(path):
 
 
 def _publish(identity,output,operation,*,source=None):
+    from runtime_clock import require_step
+    require_step(identity)
     identity=Path(identity).resolve();value=load_identity(identity);output=Path(output).resolve()
     if output==identity.parent or output.is_relative_to(identity.parent):
         raise ValueError('DELIVERY_OUTPUT_HOLD:发送目录须在协调记录之外')
@@ -181,9 +183,11 @@ def _publish(identity,output,operation,*,source=None):
         log['attempts'].append(attempt);atomic_json(attempts_path,log)
         before=state_bindings(value)
         try:
+            require_step(identity)
             operation_started=time.monotonic()
             report=operation(value,output)
             operation_finished=time.monotonic()
+            require_step(identity)
             if before!=state_bindings(value):raise ValueError('DELIVERY_CHANGED_HOLD:打包期间权威状态变化')
             report.update(policy=POLICY,status='DELIVERY_READY',role=value['role'],scope=value['scope'],
                 requirements_sha256=fingerprint(value),states=before,image_calls=0,images_reencoded=False)

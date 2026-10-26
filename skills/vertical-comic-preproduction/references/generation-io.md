@@ -125,3 +125,11 @@ v2技术来源包括源格映射、上下文、忠实图集、校准第二轮与
 新整话实际输入必须符合[服饰与单画面](appearance-and-single-frame.md)：每个panel携appearance_policy、frame_policy及frame_plan；当前入画衣装核心与可见细节实际随参考携带并编译进visual_execution_block。原源文保留，但双画面源只绘制已选一幅，不把忽略场面再次拼进prompt。身份/画风等原块不得被新约束块覆盖。
 
 新任务最终交付必须执行[完整交付与容量门禁](delivery-contract.md)：前期交接单ZIP优先、超限自动连续分卷，每文件不超过900000000字节；成品ZIP无容量上限、不因体积自动分包，并必须包含图片问题总览.csv及问题明细.csv。前期内容release之后走publish，成品目录export之后走普通ZIP发布；统一交付验收.json通过后才能finish-check/100%。容量失败只修装配与容器，不重新生图或降质；旧冻结运行不热升级。
+
+## 正式返回持久化
+
+宿主将真实返回直接以文件或字节流保存，不把base64插入shell命令。使用`generation_host.py save-return --state <原状态> --job <原单job文件> --raw-result <真实返回JSON> --call-locator <实际调用定位> --result-locator <实际返回定位>`。该命令不调用图像服务，使用原冻结GENERATED转换，原始返回先保存，图片和证据原子落盘；视觉状态仍为未审。
+
+image_return_io.py优先读取结构化本地artifact或data URL，hint解析兜底；多图要求明确`--selected-index`，HTTP-only准确报告没有可保存字节，不扫描“最近图片”猜结果。data URL与单一本地文件同时存在时比较完整字节摘要，长度及首尾不算完整证明。原JSON字节、原图及摘要保留，重复保存仅复用相同结果。
+
+保存、QA或状态CAS失败时恢复同一返回，不重发生图。UNKNOWN需原协议查证，不能自行回退PENDING。迟到返回照常保留，但不冒充按时完成。规则地址问题通过本地执行副本解决；QA与交付绑定其实际SHA256，已批准输入原件保持原字节。

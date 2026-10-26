@@ -156,6 +156,9 @@ def recheck_dependencies(dependencies):
             recursive, suffixes, parts, names, excluded_suffixes, excluded_paths = options
             scan_directory(name, recursive=recursive, suffixes=suffixes, excluded_parts=parts,
                            excluded_names=names, excluded_suffixes=excluded_suffixes, excluded_paths=excluded_paths)
+        elif kind == 'source_inputs':
+            from source_input_contract import read
+            read(name)
         elif kind == 'resolve':
             resolve_path(name, strict=options[0])
         else:
@@ -210,11 +213,12 @@ def file_session():
         _FILE_SESSION.reset(token)
 
 
-def verify_read_snapshot(memo):
+def verify_read_snapshot(memo, *, refresh_views=True):
     """Recheck captured input versions before an optimistic state CAS.
 
-    No validator, image decoding or fresh content hash runs here. A changed
-    stamp/target/query rejects the commit; it never refreshes stale evidence.
+    Outside locks, opted-in source views may refresh unchanged formal inputs.
+    Writers pass refresh_views=False: changed stamps reject without JSON reads.
+    Whole-file dependencies always retain strict snapshot semantics.
     """
     active = _FILE_SESSION.get()
     if active is not None and active is not memo:
@@ -222,7 +226,9 @@ def verify_read_snapshot(memo):
     token = _FILE_SESSION.set(memo)
     try:
         _valid()
-        recheck_dependencies(tuple(memo['observations']))
+        recheck_dependencies(tuple(t for t in memo['observations'] if t[0]!='source_inputs'))
+        from source_input_contract import verify
+        verify(memo,refresh=refresh_views)
         # A cached result may not reread every file before the caller returns.
         # Recheck the complete read set at the outer transaction boundary.
         for name, target in memo['paths'].items():
@@ -586,3 +592,42 @@ if __name__ == "__main__":
     from platform_io import configure_stdio
     configure_stdio()
     raise SystemExit(main())
+
+
+def export_read_set(memo):
+    """Content-bound receiver evidence, never a reusable dispatch permission."""
+    return {'policy':'receiver_read_set_v1','reusable':not bool(memo.get('source_views')) and _READ_VIEW.get() is None,
+            'files':[{'path':name,'sha256':value[1]} for name,value in sorted(memo['files'].items())],
+            'observations':[[kind,path,list(options),value] for (kind,path,options),value in memo['observations'].items()],
+            'dispatch_authorized':False}
+
+
+def verify_exported_read_set(proof, allowed_roots):
+    """Rehash all bytes and replay path/negative/directory observations on resume."""
+    if proof.get('policy')!='receiver_read_set_v1' or proof.get('reusable') is not True or proof.get('dispatch_authorized') is not False:
+        return False
+    if not isinstance(proof.get('files'),list) or not proof['files'] or not isinstance(proof.get('observations'),list):return False
+    roots=[Path(r).resolve() for r in allowed_roots]
+    def allowed(path):
+        return Path(path).is_absolute() and any(Path(path).resolve().is_relative_to(root) for root in roots)
+    try:
+        with file_session():
+            for row in proof['files']:
+                if not allowed(row['path']) or digest(Path(row['path']))!=row['sha256']:return False
+            for kind,path,options,expected in proof['observations']:
+                if not allowed(path):return False
+                if kind=='resolve':actual=str(resolve_path(path,strict=options[0]))
+                elif kind=='exists':actual=path_exists(path)
+                elif kind=='is_file':actual=is_file(path)
+                elif kind=='is_dir':actual=is_dir(path)
+                elif kind=='is_symlink':actual=is_symlink(path)
+                elif kind=='directory':
+                    recursive,suffixes,parts,names,extensions,paths=options
+                    scan_directory(path,recursive=recursive,suffixes=tuple(suffixes),excluded_parts=tuple(parts),
+                                   excluded_names=tuple(names),excluded_suffixes=tuple(extensions),excluded_paths=tuple(paths))
+                    key=(kind,os.path.abspath(path),(recursive,tuple(suffixes),tuple(parts),tuple(names),tuple(extensions),tuple(paths)))
+                    actual=_FILE_SESSION.get()['observations'][key]
+                else:return False
+                if json.dumps(actual,sort_keys=True)!=json.dumps(expected,sort_keys=True):return False
+        return True
+    except (OSError,ValueError,TypeError,KeyError):return False

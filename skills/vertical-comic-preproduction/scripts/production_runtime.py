@@ -86,7 +86,8 @@ def compile_jobs(state, root, panel_ids=None, *, candidate=False, input_audit=Fa
             if state.get('input_semantics_policy') == PREPARED_POLICY:
                 shot = next(p for p in shots if p['panel_id'] == pid)
                 prepared = {'prepared_input_digest': fingerprint(actual_input(state, root, shot, packet, path.parent))}
-            jobs.append({**prepared,
+            from style_contract import output_capability_observation
+            jobs.append({'output_capabilities':output_capability_observation(panel,arguments),**prepared,
                 **__import__('submission_contract').panel_job(
                     state,root,{**record,'batch_id':report['batch_id']},packet,arguments,
                     candidate=candidate,input_audit=input_audit),
@@ -110,7 +111,7 @@ def compile_jobs(state, root, panel_ids=None, *, candidate=False, input_audit=Fa
                 "dispatch_authorized": False if input_audit or candidate else None,
                 "audit_policy": 'receiver_input_audit_v1' if input_audit else None,
                 "jobs": jobs, "preflight": report,
-                "file_reuse_statistics": {k: memo[k] for k in ("hash_reads", "hash_hits","validation_runs","validation_hits")},
+                "file_reuse_statistics": {k: memo.get(k,0) for k in ("hash_reads", "hash_hits","validation_runs","validation_hits","source_input_reads","source_input_bytes","source_progress_refreshes")},
                 "audit_reuse_statistics": copy.deepcopy(memo['audit_statistics']),
                 "preflight_elapsed_seconds":round(time.monotonic()-started,4),
                 "user_approval": "NOT_GRANTED", "image_calls": 0}
@@ -213,6 +214,14 @@ def receiver_audit(state, root, h001_ids, all_ids):
         from input_semantics import enabled as semantics_enabled, coverage as semantic_coverage
         if semantics_enabled(state):
             value['final_input_semantics'] = semantic_coverage(state, root)
+        from handoff_delivery import local_execution_view
+        for record in state['panels']:
+            packet_path=checked_file(Path(root),record['package_manifest'])
+            local_execution_view(state,root,read_json(packet_path),packet_path.parent)
+        value['technical_compatibility']={'local_rule_bindings':'VERIFIED',
+            'return_replay':'NOT_OBSERVED','visual_review':'NOT_PERFORMED','image_calls':0}
+        from codex_reference_contract import export_read_set
+        value['input_read_set']=export_read_set(memo)
         mark('snapshot_verification',completed=len(order),total=len(order),force=True)
     value.update(elapsed_seconds=round(time.monotonic()-started,4),cpu_seconds=round(time.process_time()-cpu_started,4))
     return value
@@ -588,9 +597,12 @@ def _commit_updates(state_path, expected_sha256, updates, *, resolution_ref=None
     }
     if not isinstance(updates,list) or not updates or len({u.get("panel_id") for u in updates}) != len(updates):
         raise ValueError("updates须明确不重复格号")
+    if any(u.get('status') not in {'GENERATED','CALL_FAILED','RESULT_UNKNOWN','CANCELLED'} for u in updates):
+        from runtime_clock import require_step
+        require_step(state_path)
     if any(u.get('status') == 'IN_FLIGHT' for u in updates):
-        from runtime_clock import require_running
-        require_running(state_path)
+        from runtime_clock import require_dispatch
+        require_dispatch(state_path)
     from contextlib import nullcontext
     with (nullcontext() if _prepare_only else state_write_lock(state_path)):
         state = read_json(state_path); require_legacy(state)
@@ -702,8 +714,11 @@ def _persist_updates(state_path, root, expected_sha256, updates, new,
     if operation is not None:
         new.setdefault('runtime_operations', {})[operation] = {'panel_ids': [u['panel_id'] for u in updates]}
     if any(u.get('status')=='IN_FLIGHT' for u in updates):
-        from runtime_clock import require_running
-        require_running(state_path)  # Locks/preflight may have waited through a pause.
+        from runtime_clock import require_dispatch
+        require_dispatch(state_path)  # Locks/preflight may have waited through a pause.
+    if any(u.get('status') not in {'GENERATED','CALL_FAILED','RESULT_UNKNOWN','CANCELLED'} for u in updates):
+        from runtime_clock import require_step
+        require_step(state_path)
     if submission_record is not None:
         new.setdefault('submission_registrations',{})[submission_record['registration_id']]=submission_record
     atomic_json(state_path, new)
@@ -728,8 +743,8 @@ def _persist_updates(state_path, root, expected_sha256, updates, new,
             except (OSError,ValueError,TypeError) as exc:monitored.append(f"PROGRESS_RECORD_ERROR:{exc}")
     if submission_record is not None:
         # If this fails after commit, retain registration and never grant a replay.
-        from runtime_clock import require_running
-        try: require_running(state_path)
+        from runtime_clock import require_dispatch
+        try: require_dispatch(state_path)
         except (OSError,ValueError) as exc:
             raise ValueError('SUBMISSION_REGISTERED_NO_INVOKE: '+str(exc)) from exc
         return acknowledgement(actual,submission_record,fresh=True,state_sha256=digest(state_path))

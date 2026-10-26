@@ -103,3 +103,14 @@ def review_errors(panel, item):
     if review.get("status") != "PASS" or not isinstance(review.get("reviewer"), str) or not review["reviewer"].strip() or not isinstance(review.get("evidence"), str) or not review["evidence"].strip():
         return ["IMAGE_STYLE_HOLD:画风未审/失败或缺少实际观察依据"]
     return []
+
+
+def output_capability_observation(panel, arguments):
+    """Describe the actual compiled controls, never relax approved output checks."""
+    spec=panel.get('output_spec') or {}
+    exact=spec.get('exact_size') is not None or panel.get('ratio_tolerance')==0
+    controls=[key for key in ('width','height','size') if key in arguments]
+    return {'policy':'observed_output_controls_v1','exact_pixels_required':exact,
+            'native_pixel_arguments':controls,'hard_pixel_guarantee':'NOT_ESTABLISHED',
+            'action':'VERIFY_RETURN_AND_EXISTING_DERIVATION_AUTHORITY' if exact and not controls else 'VERIFY_ACTUAL_RETURN',
+            'approved_tolerance_unchanged':True,'not_visual_approval':True}

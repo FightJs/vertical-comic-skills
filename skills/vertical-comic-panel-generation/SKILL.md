@@ -37,4 +37,6 @@ B和实际包按[合并审查](../vertical-comic-preproduction/references/groupe
 
 逐格成品的最终ZIP还须执行[完整交付与容量门禁](../vertical-comic-preproduction/references/delivery-contract.md)：按准确采用图封装普通ZIP，保持图片原字节；成品不设1GB容量门禁、不因体积自动分包；ZIP根目录必须包含图片问题总览.csv和问题明细.csv。只有交付验收.json、CSV对应校验和原内容门禁同时通过才结束；打包不降质、不追加生图、不改预算。
 
-正文和返修均按[统一提交登记](../vertical-comic-preproduction/references/submission-runtime.md)提供真实onBeforeInvoke；编译/领取通过不是稍后调用的长期许可。
+新协议正文和返修按[统一提交登记](../vertical-comic-preproduction/references/submission-runtime.md)提供真实onBeforeInvoke；编译/领取通过不是稍后调用的长期许可。
+
+接包使用receive返回的配套冻结执行器与generation_host，旧协议按[接收端配套接线](../vertical-comic-preproduction/references/submission-runtime.md#接收端配套接线)执行。实际返回通过正式save-return保存；持久化失败恢复原返回，不新增生图。

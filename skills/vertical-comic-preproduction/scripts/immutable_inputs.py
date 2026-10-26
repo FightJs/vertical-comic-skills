@@ -53,7 +53,9 @@ def capture(state_path, store, *, check='reservation_batch', requested=None):
     if requested is None and check == 'reservation_batch':
         requested = {'limit': len(contract.read_json(state_path)['panels']), 'excluded': []}
     files = {}
-    with contract.file_session() as memo:
+    from source_input_contract import strict_reads
+    from validation_pool import session as pool_session
+    with strict_reads(), pool_session(None), contract.file_session() as memo:
         state, result = _run(state_path, check, requested)
         # Files are already content-validated by the real gate, not a guessed
         # traversal of arbitrary JSON. Include failures/negative queries too.

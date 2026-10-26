@@ -334,3 +334,30 @@ class DispatchTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class PerJobStyleTests(unittest.TestCase):
+    setUp=DispatchTests.setUp
+    write=DispatchTests.write
+    flush=DispatchTests.flush
+    check=DispatchTests.check
+    assertError=DispatchTests.assertError
+    def test_job_style_keeps_strict_traits_and_global_capacity(self):
+        self.control['style_binding_policy']='style_basis_by_job_v1'
+        ref=next(r for r in self.control['shared_files'] if r.get('role')=='style_basis')
+        self.control['jobs'][0]['style_basis']={k:ref[k] for k in ('path','sha256')}
+        self.assertEqual(self.check(),[])
+        # Same image bytes with a genuinely different approved wording: still
+        # cannot use the first job's style. No hash-only equality shortcut.
+        self.style['traits']['linework']='different approved wording'
+        style_ref=self.write(self.root,'job-style.json',{'book_id':'book','style':self.style})
+        self.control['shared_files'].append(style_ref);self.control['jobs'][0]['style_basis']=style_ref
+        self.assertError('画风')
+        updated=self.write(self.episode,'basis.json',{'book_id':'book','episode_id':'E021','style':self.style})
+        self.state['visual_basis']=updated;self.control['jobs'][0]['frozen_inputs']['visual_basis']=updated
+        self.assertEqual(self.check(),[])
+        self.control['max_inflight']=1
+        self.control['permits'].append({**self.control['permits'][0],'permit_id':'second','panel_id':'P002'})
+        self.assertError('超过max_inflight')
+    def test_per_job_style_requires_declared_protocol(self):
+        self.control['jobs'][0]['style_basis']=self.control['shared_files'][1]
+        self.assertError('不能降级')

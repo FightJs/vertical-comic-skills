@@ -213,7 +213,7 @@ class PreparationPublishTests(unittest.TestCase):
         self.assertEqual(receipt['recovery']['file_count'],receipt['original_files'])
         import comic_start
         first=Path(report['artifacts'][0]['path']);self.assertIn('第001卷',first.name)
-        received=comic_start.receive(first,output=task/'receiver')
+        received=comic_start.receive(first,runtime_limit_seconds=None,output=task/'receiver')
         self.assertEqual(received['status'],'READY_FOR_PRODUCTION_ROUTING')
         received_contract=dc.load_identity(received['delivery_identity']['path'])
         self.assertIsNone(received_contract['max_file_bytes'])

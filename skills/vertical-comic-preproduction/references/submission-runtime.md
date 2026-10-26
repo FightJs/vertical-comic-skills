@@ -56,3 +56,9 @@ SUBMISSION_REGISTERED_NO_INVOKE表示登记已经落盘、当前适配器未向�
 到期/暂停不拦已有返回、证据发布、QA和落账。正文沿原commit/save；资产save不调用计时门禁，相同结果重复登记幂等，冲突结果拒绝。资产未知结果保持原attempt与容量，查证后save须提供resolution引用，证据绑定registration_id、attempt_id、source_kind=observed_resolution、source_locator及目标结果的result_digest；不新增生图。
 
 旧冻结工具、状态、预算及在途请求不热升级。旧job没有本协议时新版执行器明确拒绝；不得只补一个标志、复制新版脚本或重签批准来绕过。继续原冻结接线时按原合同并在每次实际调用前核对安装版时钟，其强制覆盖范围须如实报告；需要新协议的旧包另建明确适配/迁移候选，先验证原冻结门禁，不能默认宣称已支持。
+
+## 接收端配套接线
+
+receive通过generation_host.py inspect-runtime检查冻结能力与工具字节，给出准确submission_protocol和executor路径。`prepare-submit`对新版返回原submit回执；对明确支持的旧版只执行其原commit IN_FLIGHT并保留UPDATES_SAVED事实。旧接线将该动作放在旧冻结执行器的invoke回调内，再调用实际图片工具一次；不向旧执行器传需要新协议回执的onBeforeInvoke，不把旧回执包装成新回执。
+
+新协议继续提供onBeforeInvoke并原样返回prepare-submit真实JSON，ALREADY_REGISTERED不调用。宿主在独立安装进程检查当前时钟，再由原冻结门禁决定；缺旧协议能力、未知状态或不兼容组合提前HOLD。已执行任务不复制新版脚本进入快照。

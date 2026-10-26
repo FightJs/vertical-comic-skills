@@ -47,3 +47,9 @@ onProgress: async event => {
 总控任务记录、真实等待、收尾检查与中断恢复统一见[任务协调与恢复](task-recovery.md)。新运行最终交付使用task_coordination.py finish-check，不能以进度摘要、子任务口头完成或等待超时结束轮次。
 
 正文、返修及资产均须使用原始编译job和真实onBeforeInvoke；缺登记接线、审计/候选job及登记回执不符时，执行器不触达图片工具。不能用手写成功对象替代登记。协议、CLI及恢复见[统一提交登记](submission-runtime.md)。
+
+## 接包执行器选择与保存
+
+按receive返回的runtime_compatibility选择冻结executor及submission_protocol，新版onBeforeInvoke规则只适用于durable_image_submission_v1；已验证旧普通job沿其冻结invoke接线，具体见submission-runtime.md。不要让执行者临时修改回执格式。实际返回交给generation_host.py save-return，先持久化再排QA。
+
+新策略每话可启动`generation_host.py serve --state <准确本话状态>`，通过JSONL复用冻结workflow_session与有界validation_pool；请求与响应保留request_id。工作进程不能换话、换工具链，reserve/submit仍即时核对时钟及审计写冲突。旧运行不因启动常驻包装器获得新版缓存合同。进程本身不调用图片工具，服务回调仍由宿主注入。

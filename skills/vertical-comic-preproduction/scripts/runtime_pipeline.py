@@ -21,7 +21,9 @@ def budget(path,enabled=True):
     value=require_running(path) if enabled else None
     active={'path':path,'next_check':time.monotonic()+.5} if value and value.get('state')=='RUNNING' else None
     token=_BUDGET.set(active)
-    try:yield
+    try:
+        yield
+        if active:require_running(path)
     finally:_BUDGET.reset(token)
 
 def poll_budget():
@@ -58,7 +60,7 @@ def commit(state_path, expected_sha256, updates, *, resolution_ref=None, submiss
     if 'prepared_state' not in prepared:return prepared  # Existing idempotent receipt.
     with state_write_lock(path):
         acquired=time.monotonic()
-        verify_read_snapshot(snapshot)
+        verify_read_snapshot(snapshot,refresh_views=False)
         if digest(path)!=expected_sha256:raise ValueError('STATE_CHANGED')
         writing=time.monotonic()
         result=_persist_updates(path,path.parent.parent,expected_sha256,updates,prepared['prepared_state'],
@@ -77,7 +79,7 @@ def reserve(state_reference,path,control_reference,control_path,context,expected
             expected_control,max_count,metrics,locks):
     """Lease-only: stage packets outside shared locks, then one episode state CAS."""
     from episode_dispatch_queue import _prepare,_commit,_timed_locks,_atomic_json
-    from runtime_clock import require_running
+    from runtime_clock import require_dispatch
     started=time.perf_counter()
     with file_session() as snapshot:
         prepared=_prepare(state_reference,path,control_reference,control_path,context,
@@ -89,10 +91,10 @@ def reserve(state_reference,path,control_reference,control_path,context,expected
     # CAS failure leaves unpublished orphan evidence, never a reserved request.
     # It cannot authorize an invocation and is not blindly deleted during recovery.
     with _timed_locks(locks,metrics):
-        verify_read_snapshot(snapshot)
+        verify_read_snapshot(snapshot,refresh_views=False)
         if digest(path)!=expected_state or digest(control_path)!=expected_control:
             raise ValueError('STATE_OR_CONTROL_CHANGED')
-        require_running(path)
+        require_dispatch(path)
         writing=time.perf_counter();_atomic_json(path,staged['new_state'])
         committed=time.perf_counter()
     metrics.update(preflight_seconds=staged_at-started,write_seconds=committed-writing,

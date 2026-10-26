@@ -8,7 +8,7 @@ from pathlib import Path
 from codex_reference_contract import checked_file, digest, read_json, file_session
 from platform_io import atomic_json, file_lock, configure_stdio
 from submission_contract import POLICY, fingerprint, registration, acknowledgement, validate_job
-from runtime_clock import execution_context, require_running
+from runtime_clock import execution_context, require_dispatch
 
 LEDGER = 'asset_requests.json'
 
@@ -75,7 +75,7 @@ def ledger_path(root):
 
 
 def submit(run_root, job):
-    root=Path(run_root).resolve();require_running(root)
+    root=Path(run_root).resolve();require_dispatch(root)
     definition=job.get('submission',{}).get('definition')
     if not isinstance(definition,dict): raise ValueError('SUBMISSION_HOLD: asset definition missing')
     path=ledger_path(root)
@@ -107,13 +107,13 @@ def submit(run_root, job):
             raise ValueError('ASSET_HOLD: repair source must be a saved original attempt')
         if spec['operation']=='retry' and not any(r['attempt_id']==spec['source_attempt_id'] and r['status']=='CALL_FAILED' for r in previous):
             raise ValueError('ASSET_HOLD: retry requires confirmed failed call; never unknown')
-        require_running(root)
+        require_dispatch(root)
         attempts[key]={**record,'asset_id':actual['asset_id'],'episode_id':actual['episode_id'],
                        'attempt_id':actual['attempt_id'],'status':'IN_FLIGHT','budget_scope':scope,
                        'definition':definition,'operation':spec['operation'],
                        'source_attempt_id':spec.get('source_attempt_id'),'observed_tool_call':False}
         atomic_json(path,ledger)
-        try: require_running(root)
+        try: require_dispatch(root)
         except (OSError,ValueError) as exc:
             raise ValueError('SUBMISSION_REGISTERED_NO_INVOKE: '+str(exc)) from exc
         return acknowledgement(actual,record,fresh=True,state_sha256=digest(path))

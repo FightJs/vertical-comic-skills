@@ -175,6 +175,8 @@ def reserve(state_path, expected_state, expected_control, *, max_count=None, req
     Retry only preflight conflicts, at most two, never image calls. Request IDs
     are persisted with receipts; lost success responses cannot reserve again.
     """
+    from runtime_clock import require_dispatch
+    require_dispatch(state_path)
     from episode_dispatch_queue import _prepare, _commit, _dispatch_reads, _timed_locks
     from dispatch_publication import publish
     if file_session_active(): raise ValueError('RESERVATION_REQUIRES_OWN_TRANSACTION')
@@ -360,6 +362,8 @@ def save(state_path, updates, save_id, *, resolution_ref=None):
 
 def submit(state_path, panel_id=None, attempt_id=None, round_id=None, permit_id=None, *, job=None):
     """Use the same durable registration under the admitted writer authority."""
+    from runtime_clock import require_dispatch
+    require_dispatch(state_path)
     path=Path(state_path).resolve()
     with authority([path]):
         if job is None:

@@ -371,6 +371,9 @@ def _evaluate_with_session(state, root, check="status", requested=None):
 
 @authority_scoped
 def evaluate(state, root, check="status", requested=None):
+    if check=="deliver":
+        from runtime_clock import require_step
+        require_step(root)
     from codex_reference_contract import file_session
     from codex_reference_contract import _READ_VIEW
     view = _READ_VIEW.get()
@@ -378,7 +381,10 @@ def evaluate(state, root, check="status", requested=None):
     if check=='input_audit_batch' and (state.get('execution_mode')!='episode_async_v1' or state.get('parallel_context')):
         raise ValueError('接包输入审计不能用于旧模式或线上调度上下文')
     from task_context import state_errors
-    with file_session() as memo:
+    from contextlib import nullcontext
+    from source_input_contract import strict_reads
+    from validation_pool import session as pool_session
+    with (strict_reads() if check=='deliver' else nullcontext()), (pool_session(None) if check=='deliver' else nullcontext()), file_session() as memo:
         scoped=state_errors(state,root)
         if scoped:
             return {'status':'HOLD','next_action':'TASK_SCOPE_HOLD','errors':scoped,

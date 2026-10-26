@@ -103,19 +103,38 @@ def context_errors(context, episode_root, book_id, episode_id, panel_id=None, *,
         shared_paths = [_file(control_path.parent, ref) for ref in shared]
         if len(set(shared_paths)) != len(shared_paths):
             errors.append("共用冻结文件路径重复")
-        style_refs = [path for ref, path in zip(shared, shared_paths) if ref.get("role") == "style_basis"]
-        if len(style_refs) != 1:
-            return errors + ["共用style_basis须唯一"]
+        style_mode=control.get('style_binding_policy')
+        if style_mode not in (None,'style_basis_by_job_v1'):
+            return errors+['未知逐任务画风合同']
         if not any(ref.get("role") == "state_registry" for ref in shared):
             errors.append("缺少冻结的共用状态账本state_registry")
-        shared_basis = _read(style_refs[0])
-        shared_style = shared_basis.get("style", {})
-        hashes = shared_style.get("reference_sha256")
-        traits = shared_style.get("traits")
-        if shared_basis.get("book_id") != book_id or not isinstance(hashes, list) or not hashes or not isinstance(traits, dict) or not traits:
-            errors.append("共用画风基准的书名、样例或特征缺失")
-        elif not set(hashes).issubset({ref.get("sha256") for ref in shared}):
-            errors.append("共用样例实际文件未全部纳入冻结校验")
+        if style_mode=='style_basis_by_job_v1':
+            jobs=control.get('jobs',[])
+            if not isinstance(jobs,list) or not jobs:return errors+['逐任务画风缺少jobs']
+            style_bases={}
+            for job in jobs:
+                ref=job.get('style_basis')
+                if not isinstance(ref,dict) or not any(ref.get('path')==r.get('path') and ref.get('sha256')==r.get('sha256') for r in shared):
+                    return errors+['逐任务style_basis未纳入共用冻结校验']
+                basis=_read(_file(control_path.parent,ref));style=basis.get('style',{})
+                if (basis.get('book_id')!=book_id or not isinstance(style.get('reference_sha256'),list)
+                        or not style['reference_sha256'] or not isinstance(style.get('traits'),dict) or not style['traits']
+                        or not set(style['reference_sha256']).issubset({r.get('sha256') for r in shared})):
+                    return errors+['逐任务画风基准/样例无效']
+                style_bases[job['job_id']]=style
+            if context.get('job_id') not in style_bases:return errors+['任务不存在']
+            shared_style=style_bases[context['job_id']]
+        else:
+            if any('style_basis' in j for j in control.get('jobs',[])):
+                return errors+['逐任务画风须明确style_basis_by_job_v1，不能降级']
+            style_refs = [path for ref, path in zip(shared, shared_paths) if ref.get("role") == "style_basis"]
+            if len(style_refs) != 1:return errors + ["共用style_basis须唯一"]
+            shared_basis = _read(style_refs[0]);shared_style = shared_basis.get("style", {})
+            hashes = shared_style.get("reference_sha256");traits = shared_style.get("traits")
+            if shared_basis.get("book_id") != book_id or not isinstance(hashes, list) or not hashes or not isinstance(traits, dict) or not traits:
+                errors.append("共用画风基准的书名、样例或特征缺失")
+            elif not set(hashes).issubset({ref.get("sha256") for ref in shared}):
+                errors.append("共用样例实际文件未全部纳入冻结校验")
 
         jobs = control.get("jobs")
         permits = control.get("permits")

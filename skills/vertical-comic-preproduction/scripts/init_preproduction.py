@@ -123,6 +123,8 @@ def main() -> int:
         extra["timing_policy"] = TIMING_POLICY
         if (Path(frozen_runtime["scripts"]) if frozen_runtime else Path(__file__).parent).joinpath("runtime_pipeline.py").is_file():
             extra["runtime_pipeline_policy"] = "observed_incremental_pipeline_v1"
+        if (Path(frozen_runtime["scripts"]) if frozen_runtime else Path(__file__).parent).joinpath("source_input_contract.py").is_file():
+            extra["source_input_policy"] = "formal_source_inputs_v1"
         from visual_evidence import POLICY as VISUAL_POLICY
         extra["visual_evidence_policy"] = (config or {}).get("quality", {}).get("policy", VISUAL_POLICY)
     if mode == 'episode_async_v1':

@@ -1,5 +1,7 @@
 """Local JSON-line worker for a single skill run. Never invokes image services."""
 from pathlib import Path
+from contextlib import nullcontext
+from source_input_contract import strict_reads
 import argparse,json,sys,time
 from codex_reference_contract import read_json,file_session,digest
 from validation_pool import ValidationPool,session
@@ -11,10 +13,21 @@ class WorkflowSession:
     def execute(self,request):
         if not isinstance(request,dict):raise ValueError('request must be an object')
         action=request['action'];path=Path(request['state']).resolve();root=path.parent.parent
+        from runtime_clock import require_step
+        schedule=require_step(path,action,optional=request.get('optional',False)) if action not in {'commit','context-rebind-status'} else None
         started=time.monotonic()
         # Final delivery always reruns the full existing gate in a fresh pool.
-        with session(None if action=='final-check' else self.pool), budget(path,enabled=action in {'compile','receiver-audit','preparation-review'}):
-            if action=='submit':
+        with (strict_reads() if action=='final-check' else nullcontext()), session(None if action=='final-check' else self.pool), budget(path,enabled=bool(schedule) or action in {'compile','receiver-audit','preparation-review'}):
+            if action=='context-rebind-plan':
+                from context_rebind import plan
+                result=plan(path,request['replacements'])
+            elif action=='context-rebind-apply':
+                from context_rebind import apply
+                result=apply(path,request['plan'])
+            elif action=='context-rebind-status':
+                from context_rebind import status
+                result=status(path,request['plan_id'])
+            elif action=='submit':
                 from production_runtime import submit
                 result=submit(path,request['job'])
             elif action=='commit':
@@ -45,10 +58,14 @@ class WorkflowSession:
                         result=evaluate(state,root,'deliver')
                     elif action=='pilot-check':result=pilot(state,root,request)
                     else:raise ValueError('unsupported workflow action: '+str(action))
+        from runtime_clock import execution_context,status
+        context=execution_context(path)
+        if context and context.get('clock_required'):
+            result['runtime_schedule']=status(context['clock_directory'])
         elapsed=time.monotonic()-started
         result['workflow_timing']={'action':action,'elapsed_seconds':elapsed,
                                    'validation_pool':dict(self.pool.statistics)}
-        if request.get('record_timing',True) and read_json(path).get('runtime_pipeline_policy')==POLICY:
+        if action not in {'context-rebind-plan','context-rebind-status'} and request.get('record_timing',True) and read_json(path).get('runtime_pipeline_policy')==POLICY:
             try:result['workflow_metric']=record(path,action,{'operation':elapsed},panel_ids=request.get('panels',[]))
             except OSError as exc:result['timing_record_error']=str(exc)
         return result

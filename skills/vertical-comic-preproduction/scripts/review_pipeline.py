@@ -47,6 +47,8 @@ def overlay(target,patch,reviewer,path=''):
     if 'reviewer' in target and patch:target['reviewer']=reviewer
 
 def save(state_path,expected_state,proposal):
+    from runtime_clock import require_step
+    require_step(state_path)
     """No CAS retries; a conflict cannot silently overwrite a peer's review."""
     if _FILE_SESSION.get() is not None:raise ValueError('WRITE_REQUIRES_OWN_READ_TRANSACTION')
     path=Path(state_path).resolve();root=path.parent.parent;started=time.monotonic()
@@ -172,11 +174,12 @@ def save(state_path,expected_state,proposal):
     observe(new,row,'qa_registered')
     validated=time.monotonic()
     with state_write_lock(path):
-        acquired=time.monotonic();verify_read_snapshot(initial_snapshot);verify_read_snapshot(snapshot)
+        acquired=time.monotonic();verify_read_snapshot(initial_snapshot,refresh_views=False);verify_read_snapshot(snapshot,refresh_views=False)
         if digest(path)!=expected_state:raise ValueError('STATE_CHANGED')
         history=path.parent/'runtime_history';history.mkdir(exist_ok=True)
         old=history/(expected_state+'.json')
         if not old.exists():old.write_bytes(path.read_bytes())
+        require_step(path)
         atomic_json(path,new);written=time.monotonic()
     segments={'review_validation':validated-started,'lock_wait':acquired-validated,
               'lock_hold':written-acquired,'registration_total':written-started}

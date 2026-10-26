@@ -102,7 +102,7 @@ class EpisodeHandoffTests(unittest.TestCase):
         from handoff_transport import export
         # Use the public transport API, followed by the real package-only receiver.
         transported = export(f.base / '正式交接包.zip', f.base / 'transport', max_file_bytes=1024 * 1024)
-        result = receive(f.base / 'transport' / transported['files'][0]['path'], output=f.base / 'transport-received')
+        result = receive(f.base / 'transport' / transported['files'][0]['path'], runtime_limit_seconds=None, output=f.base / 'transport-received')
         self.assertEqual(result['status'], 'READY_FOR_PRODUCTION_ROUTING', result)
 
     def test_mixed_formats_and_relabelled_old_approval_rejected(self):

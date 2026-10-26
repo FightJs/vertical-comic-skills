@@ -47,10 +47,16 @@ class SyncTests(unittest.TestCase):
         project=Path(self.tmp.name)/'project';project.mkdir();script=project/'source.xlsx';script.write_bytes(b'SYNTHETIC configuration-only fixture, not production input');assets=project/'assets';assets.mkdir()
         start=self.home/'skills/vertical-comic-preproduction/scripts/comic_start.py'
         command=[sys.executable, '-X', 'utf8','-B',str(start),'prepare','--project',str(project),'--book','SYNTHETIC','--episodes','E001-E002','--script',str(script),'--assets',str(assets)]
-        process=subprocess.run(command,capture_output=True,text=True, encoding='utf-8');self.assertEqual(process.returncode,0,process.stdout+process.stderr)
+        # Supply isolated synthetic host receipts; never bind the real session.
+        from runtime_clock_context import observe
+        env={**os.environ,'CODEX_HOME':str(self.home),'CODEX_THREAD_ID':'synthetic-profile-1'}
+        observe({'session_id':env['CODEX_THREAD_ID'],'hook_event_name':'PreToolUse'},self.home)
+        process=subprocess.run(command,capture_output=True,text=True, encoding='utf-8',env=env);self.assertEqual(process.returncode,0,process.stdout+process.stderr)
         first=json.loads(process.stdout);self.assertEqual(first['image_calls'],0);self.assertTrue(Path(first['profile']).is_file())
         state=json.loads((Path(first['run_root'])/'E001/00_输入审计/生产流程.json').read_text(encoding='utf-8-sig'));self.assertEqual(state['gates'],{})
-        second=subprocess.run([sys.executable, '-X', 'utf8','-B',str(start),'prepare','--project',str(project),'--book','SYNTHETIC','--episodes','E003'],capture_output=True,text=True, encoding='utf-8')
+        env['CODEX_THREAD_ID']='synthetic-profile-2'
+        observe({'session_id':env['CODEX_THREAD_ID'],'hook_event_name':'PreToolUse'},self.home)
+        second=subprocess.run([sys.executable, '-X', 'utf8','-B',str(start),'prepare','--project',str(project),'--book','SYNTHETIC','--episodes','E003'],capture_output=True,text=True, encoding='utf-8',env=env)
         self.assertEqual(second.returncode,0,second.stdout+second.stderr);reused=json.loads(second.stdout);self.assertEqual(reused['profile'],first['profile']);self.assertEqual(reused['episode_ids'],['E003'])
 
     def test_path_traversal_is_rejected(self):

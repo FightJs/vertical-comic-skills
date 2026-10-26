@@ -13,7 +13,7 @@ from task_context import fresh, validate as validate_task
 
 BASE=Path(__file__).resolve().parents[1]
 
-def start_clock(run, role, limit, session):
+def start_clock(run, role, limit, session, *, started=None):
     from runtime_clock import initialize_context
     if limit is None:
         return {'runtime_execution_context': initialize_context(run, role, limit)}
@@ -21,13 +21,15 @@ def start_clock(run, role, limit, session):
     from runtime_clock_context import resolve
     context=resolve(explicit_session=session)
     directory = Path(run)/'00_任务协调'
-    initialize(directory, role, limit)
+    initialize(directory, role, limit, hard_deadline=True, at=started)
     binding=bind(directory,context['session_id'],identity_source='host:PreToolUse+CODEX_THREAD_ID')
-    event(directory, 'start', 'initial-start')
-    reference = initialize_context(run, role, limit)
+    event(directory, 'start', 'initial-start', at=started)
+    reference = initialize_context(run, role, limit, hard_deadline=True)
     result = {'clock_directory': str(directory), 'runtime_clock': status(directory)}
     result['runtime_execution_context'] = reference
     result['clock_binding']=binding
+    if result['runtime_clock']['remaining_seconds'] is None or result['runtime_clock']['remaining_seconds']<=0:
+        raise ValueError('RUNTIME_CLOCK_LIMIT_REACHED: initialization consumed the available active budget')
     return result
 
 def start_display(directory,role,states,*,config=None,rehearsal=None):
@@ -58,7 +60,9 @@ def episodes(values):
     if not out or len(set(out))!=len(out):raise ValueError('话号缺失或重复')
     return out
 
-def prepare(project,book,ids,*,script=None,assets=None,output=None,workers=None,request_source=None,reuse_selection=None,runtime_limit_seconds=None,clock_session_id=None,delivery_mode='allow_parts',max_file_bytes=900000000):
+def prepare(project,book,ids,*,script=None,assets=None,output=None,workers=None,request_source=None,reuse_selection=None,runtime_limit_seconds=14400,clock_session_id=None,delivery_mode='allow_parts',max_file_bytes=900000000):
+    from runtime_clock import instant
+    started=instant()
     project=Path(project).resolve();ids=episodes(ids)
     if not project.is_dir():raise ValueError('项目目录不存在')
     require_ready(probe_root=project)
@@ -85,7 +89,7 @@ def prepare(project,book,ids,*,script=None,assets=None,output=None,workers=None,
     output_base=Path(output).resolve() if output else project/'条漫输出'/book_directory(book)/('_'.join((ids[0],ids[-1])))
     stamp=datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=8))).strftime('%Y%m%d_%H%M%S')
     run=output_base/('RV_'+stamp+'_'+uuid.uuid4().hex[:6]);run.mkdir(parents=True)
-    clock = start_clock(run, 'preparation', runtime_limit_seconds, clock_session_id)
+    clock = start_clock(run, 'preparation', runtime_limit_seconds, clock_session_id, started=started)
     task_path=run/'任务来源.json';write(task_path,task)
     cfg=run/'本次配置.json';write(cfg,config);read_config(cfg)
     snap=create(run/'00_总控/运行版本',memory_source=memory_source(config))
@@ -103,7 +107,9 @@ def prepare(project,book,ids,*,script=None,assets=None,output=None,workers=None,
     result.update(clock)
     write(run/'启动摘要.json',result);return result
 
-def receive(zip_path=None,*,package_root=None,output=None,runtime_limit_seconds=None,clock_session_id=None):
+def receive(zip_path=None,*,package_root=None,output=None,runtime_limit_seconds=14400,clock_session_id=None,_started=None,audit_timeout=900):
+    from runtime_clock import instant
+    started=_started or instant()
     if (zip_path is None)==(package_root is None):raise ValueError('接包提供ZIP或已解压包根目录其中一个')
     require_ready()
     if zip_path is not None:
@@ -119,7 +125,7 @@ def receive(zip_path=None,*,package_root=None,output=None,runtime_limit_seconds=
                 import shutil
                 shutil.rmtree(holder)
                 raise
-            return receive(package_root=restored['root'],output=base,runtime_limit_seconds=runtime_limit_seconds,clock_session_id=clock_session_id)
+            return receive(package_root=restored['root'],output=base,runtime_limit_seconds=runtime_limit_seconds,clock_session_id=clock_session_id,_started=started,audit_timeout=audit_timeout)
     if package_root is not None:
         checked=check_delivery_directory(package_root);originals=Path(checked['root']);archive=None
         base=Path(output).resolve() if output else originals.parent/'接包生产'
@@ -131,11 +137,17 @@ def receive(zip_path=None,*,package_root=None,output=None,runtime_limit_seconds=
         checked={**checked,'source_type':'zip','archive_crc':'PASS'}
         base=Path(output).resolve() if output else archive.parent/'接包生产'
     target=base/('RV_'+uuid.uuid4().hex[:12]);target.mkdir(parents=True)
-    clock = start_clock(target, 'production', runtime_limit_seconds, clock_session_id)
+    clock = start_clock(target, 'production', runtime_limit_seconds, clock_session_id, started=started)
     if archive is not None:originals=Path(extract(archive,target/'收到原件',checksum_file=checksum)['root'])
     write(target/'接收校验.json',checked)
     bound=bind(originals,target/'本地运行',execution_context=clock['runtime_execution_context'])
-    result=rehearse(archive,originals,bound['run_root'],bound['run_index'],target/'接包预检')
+    write(target/'接包恢复索引.json',{'policy':'receiver_resume_v1','package_id':checked.get('package_id'),
+        'originals_root':str(originals),'archive':str(archive) if archive else None,
+        'run_root':bound['run_root'],'run_index':bound['run_index'],
+        'run_index_sha256':__import__('handoff_zip').sha(bound['run_index']),
+        'inventory_sha256':__import__('handoff_zip').sha(originals/'ZIP文件清单.json'),'audit_timeout':audit_timeout})
+    result=rehearse(archive,originals,bound['run_root'],bound['run_index'],target/'接包预检',
+                    timeout=audit_timeout,budget_path=target)
     local_index = read(bound['run_index'])
     from delivery_contract import initialize as initialize_delivery
     delivery_identity=initialize_delivery(target,'production',[Path(bound['run_root'])/e['state'] for e in local_index['episodes']],
@@ -152,8 +164,15 @@ def receive(zip_path=None,*,package_root=None,output=None,runtime_limit_seconds=
                             'frozen_runtime_manifest':str(runtime_manifest),'frozen_scripts':str(scripts),
                             'runtime_script':str(scripts/'production_runtime.py'),
                             'execution_mode':state.get('execution_mode'),
-                            'optimization_policy':state.get('optimization_policy')})
-    return {**progress,**clock,'status':'READY_FOR_PRODUCTION_ROUTING' if result['status']=='RELEASE_CANDIDATE' else 'HOLD',
+                            'optimization_policy':state.get('optimization_policy'),
+                            'generation_host':str(Path(__file__).resolve().parent/'generation_host.py')})
+    compatibility=[]
+    for entry in entrypoints:
+        proc=subprocess.run([sys.executable,'-X','utf8','-B',entry['generation_host'],'inspect-runtime','--state',entry['state']],
+                            capture_output=True,text=True,encoding='utf-8')
+        item=json.loads(proc.stdout);compatibility.append({'episode_id':entry['episode_id'],**item})
+        if proc.returncode:result['status']='HOLD'
+    return {**progress,**clock,'runtime_compatibility':compatibility,'status':'READY_FOR_PRODUCTION_ROUTING' if result['status']=='RELEASE_CANDIDATE' else 'HOLD',
             'delivery_identity':delivery_identity,
             'input_mode':'package_only_production','external_inputs_required':False,'book_profile_required':False,
             'package_id':package_index['package_id'],'book_id':package_index['book_id'],
@@ -165,24 +184,61 @@ def receive(zip_path=None,*,package_root=None,output=None,runtime_limit_seconds=
             'episode_results':result['results'],'dispatch_authorized':False,'image_calls':0,
             'next':('使用production_entrypoints中的本地状态和包内冻结脚本，按包内执行模式、生产窗口、有效授权及真实依赖生产。无需填写外部脚本、资产或本书配置；复用未变输入审查，不重新进行前期设计。' if result['status']=='RELEASE_CANDIDATE' else '按episode_results修复准确HOLD并继续独立工作；未放行范围不生图。不要求重新配置外部脚本、资产或本书profile。')}
 
+
+def receive_resume(run_root, *, audit_timeout=900):
+    """Continue the original reception without binding, clock creation or state writes."""
+    target=Path(run_root).resolve();receipt=read(target/'接包恢复索引.json')
+    if receipt.get('policy')!='receiver_resume_v1':raise ValueError('缺少原接包恢复索引，不推测或重建运行')
+    local_root=Path(receipt['run_root']).resolve();index_path=Path(receipt['run_index']).resolve()
+    if not local_root.is_relative_to(target) or not index_path.is_relative_to(local_root):raise ValueError('恢复运行路径越界')
+    from handoff_zip import sha,inside
+    if sha(index_path)!=receipt.get('run_index_sha256'):raise ValueError('恢复索引变化')
+    index=read(index_path);states=[inside(local_root,e['state']) for e in index['episodes']]
+    originals=Path(receipt['originals_root']);checked=check_delivery_directory(originals)
+    if sha(originals/'ZIP文件清单.json')!=receipt.get('inventory_sha256'):raise ValueError('恢复原件清单变化')
+    if checked.get('package_id')!=receipt.get('package_id'):raise ValueError('恢复原件身份变化')
+    started=any(read(p).get('parallel_context') or any(r['status'] not in {'PENDING','REPAIR_AUTHORIZED'} for r in read(p)['panels']) for p in states)
+    entries=[{'episode_id':read(p)['episode_id'],'state':str(p),
+              'generation_host':str(Path(__file__).resolve().parent/'generation_host.py')} for p in states]
+    if started:
+        return {'status':'CONTINUE_ORIGINAL_PRODUCTION','run_root':str(target),'production_entrypoints':entries,
+                'dispatch_authorized':False,'image_calls':0,
+                'next':'已有许可/调用历史；沿原冻结生产门禁继续，不能重新bind或把接收审计当新提交许可。未完成接收审计需静止范围后单独重验。'}
+    from runtime_clock import require_running
+    require_running(target)
+    reports=sorted(target.glob('接包预检*/演练报告.json'),key=lambda p:p.stat().st_mtime_ns)
+    prior=reports[-1] if reports else None
+    archive=receipt.get('archive')
+    if archive and not Path(archive).is_file():archive=None
+    result=rehearse(archive,originals,local_root,index_path,target/('接包预检_恢复_'+uuid.uuid4().hex[:10]),
+                    timeout=audit_timeout,budget_path=target,resume_report=prior)
+    return {'status':'READY_FOR_PRODUCTION_ROUTING' if result['status']=='RELEASE_CANDIDATE' else 'HOLD',
+            'run_root':str(target),'episode_results':result['results'],'production_entrypoints':entries,
+            'dispatch_authorized':False,'image_calls':0,'rebound':False}
+
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__);sub=parser.add_subparsers(dest='action',required=True)
     p=sub.add_parser('prepare');p.add_argument('--project',required=True);p.add_argument('--book',required=True);p.add_argument('--episodes',nargs='+',required=True);p.add_argument('--script');p.add_argument('--assets');p.add_argument('--output');p.add_argument('--workers',type=int)
     p.add_argument('--request-source',help='真实用户原话及source_locator的JSON；程序调用不冒充批准')
     p.add_argument('--reuse-selection',help='用户明确选中的旧成果来源、准确格号与证据引用JSON数组；不自动发现旧任务')
-    p=sub.add_parser('receive');source=p.add_mutually_exclusive_group(required=True);source.add_argument('--zip');source.add_argument('--package-root',help='已解压正式交接包根目录，含ZIP文件清单.json');p.add_argument('--output')
+    p=sub.add_parser('receive');source=p.add_mutually_exclusive_group(required=True);source.add_argument('--zip');source.add_argument('--package-root',help='已解压正式交接包根目录，含ZIP文件清单.json');p.add_argument('--output');p.add_argument('--audit-timeout',type=int,default=900)
+    p=sub.add_parser('receive-resume');p.add_argument('--run-root',required=True);p.add_argument('--audit-timeout',type=int,default=900)
     preparation=sub.choices['prepare']
     preparation.add_argument('--delivery-mode',choices=['single_zip','allow_parts'],default='allow_parts',help='默认单包优先、超限自动分包；仅用户明确限制单文件时选择single_zip')
     preparation.add_argument('--max-file-bytes',type=int,default=900000000,help='微信单文件上限，最大900000000字节')
     for command in sub.choices.values():
-        command.add_argument('--runtime-limit-seconds', type=int, help='显式启用累计有效运行计时，例如14400；不改变旧RV')
+        command.add_argument('--runtime-limit-seconds', type=int, default=14400, help='新任务默认四小时累计有效时长硬限、三小时效率目标；暂停不计时，三小时后可继续生图；只能缩短，不能超过14400秒')
         command.add_argument('--clock-session-id', help='经核实的宿主session_id；需已信任Interrupt Hook')
     a=parser.parse_args()
     try:
+        if a.action=='receive-resume':
+            result=receive_resume(a.run_root,audit_timeout=a.audit_timeout)
+            print(json.dumps(result,ensure_ascii=False));return int(result['status']=='HOLD')
         if a.runtime_limit_seconds is not None:
             from runtime_clock_context import resolve
             resolve(explicit_session=a.clock_session_id)
-        result=prepare(a.project,a.book,a.episodes,script=a.script,assets=a.assets,output=a.output,workers=a.workers,request_source=read(a.request_source) if a.request_source else None,reuse_selection=read(a.reuse_selection) if a.reuse_selection else None,runtime_limit_seconds=a.runtime_limit_seconds,clock_session_id=a.clock_session_id,delivery_mode=a.delivery_mode,max_file_bytes=a.max_file_bytes) if a.action=='prepare' else receive(a.zip,package_root=a.package_root,output=a.output,runtime_limit_seconds=a.runtime_limit_seconds,clock_session_id=a.clock_session_id)
+        result=prepare(a.project,a.book,a.episodes,script=a.script,assets=a.assets,output=a.output,workers=a.workers,request_source=read(a.request_source) if a.request_source else None,reuse_selection=read(a.reuse_selection) if a.reuse_selection else None,runtime_limit_seconds=a.runtime_limit_seconds,clock_session_id=a.clock_session_id,delivery_mode=a.delivery_mode,max_file_bytes=a.max_file_bytes) if a.action=='prepare' else receive(a.zip,package_root=a.package_root,output=a.output,runtime_limit_seconds=a.runtime_limit_seconds,clock_session_id=a.clock_session_id,audit_timeout=a.audit_timeout)
         print(json.dumps(result,ensure_ascii=False));return int(result['status']=='HOLD')
     except (OSError,ValueError,KeyError,TypeError,zipfile.BadZipFile) as e:print(json.dumps({'status':'HOLD','error':str(e)},ensure_ascii=False));return 1
 if __name__=='__main__':

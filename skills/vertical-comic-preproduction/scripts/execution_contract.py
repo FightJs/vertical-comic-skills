@@ -24,6 +24,8 @@ def state_errors(state,root):
         from dispatch_publication import require_legacy
         require_legacy(state)
         from authority_updates import state_errors as authority_errors
+        if state.get('source_input_policy') not in (None,'formal_source_inputs_v1'):
+            raise ValueError('未知来源输入校验协议')
         if state.get('runtime_pipeline_policy') not in (None,'observed_incremental_pipeline_v1'):
             raise ValueError('未知增量流水线合同，不能降级')
         errors = authority_errors(state)

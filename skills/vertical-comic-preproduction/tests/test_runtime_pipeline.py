@@ -340,10 +340,12 @@ class AuditBudgetTests(unittest.TestCase):
 
     def test_long_lived_operation_polls_original_budget_during_validation(self):
         from runtime_pipeline import budget,_BUDGET
-        with patch('runtime_clock.require_running',side_effect=[{'state':'RUNNING'},ValueError('CLOCK_LIMIT_REACHED')]):
-            with budget('synthetic'):
-                _BUDGET.get()['next_check']=0
-                with self.assertRaisesRegex(ValueError,'CLOCK_LIMIT_REACHED'):
-                    derived('approval_proof','budget',lambda:True)
+        with patch('runtime_clock.require_running',side_effect=[{'state':'RUNNING'},ValueError('CLOCK_LIMIT_REACHED'),ValueError('CLOCK_LIMIT_REACHED')]):
+            # Catching a nested timeout must not publish a successful operation.
+            with self.assertRaisesRegex(ValueError,'CLOCK_LIMIT_REACHED'):
+                with budget('synthetic'):
+                    _BUDGET.get()['next_check']=0
+                    with self.assertRaisesRegex(ValueError,'CLOCK_LIMIT_REACHED'):
+                        derived('approval_proof','budget',lambda:True)
 
 if __name__=='__main__':unittest.main()

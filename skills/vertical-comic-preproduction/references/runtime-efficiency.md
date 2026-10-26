@@ -99,3 +99,7 @@ production_runtime.py编译现有逐格包，负责完整预检、审查队列�
 新版交接索引使用rehearsed_zip_handoff_v2；receiver-audit --episode-scope保留全话源序，在一个读取事务内完成准备和一次实际输入编译，不重复编译首半话。旧接口及格式保留。报告仅用于输入审计，不授予生产许可。
 
 新建整话运行自动声明timing_policy=observed_execution_timing_v1。实际领取通过后记录ready_at及timing_observations（本次观察，不是历史最早就绪时间）；真实提交、返回和保存沿异步执行器的实际事件记录。实际QA经原门禁校验后登记qa_recorded_at，并绑定QA版本。qa_completed_at只接受实际审图结束记录，缺失时不以登记时间补造。production_metrics分别报告save_to_qa和save_to_qa_registration及timestamp_coverage，均不是主动工作时长，不能相加并发区间冒充总耗时。返修新attempt清除旧时间，原attempt完整留在历史中。旧冻结运行不自动加策略或补历史时间。
+
+## 接包性能定位
+
+先区分冻结协议与安装版本。旧包在共享锁内做公共检查时，更新安装目录或启动普通常驻解释器不会自动改变该实现；不得承诺提速。新版通过generation_host serve接通既有workflow_session/validation_pool和短锁分支，使用原指标比较冷启动、复用、锁等待与持锁；包含关系的耗时不相加。未有完整可比真实生产计时前不报告吞吐提升倍数。

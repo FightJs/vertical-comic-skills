@@ -38,13 +38,13 @@ class ExtractedHandoffTests(unittest.TestCase):
         (self.root/h.INVENTORY).write_text(json.dumps(data,ensure_ascii=False),encoding='utf-8')
 
     def rejected_before_run(self,pattern):
-        with self.assertRaisesRegex(ValueError,pattern):start.receive(package_root=self.root,output=self.output)
+        with self.assertRaisesRegex(ValueError,pattern):start.receive(runtime_limit_seconds=None,package_root=self.root,output=self.output)
         self.assertFalse(self.output.exists())
 
     def test_directory_without_zip_real_frozen_rehearsal_preserves_originals_and_scope(self):
         before={p.relative_to(self.root).as_posix():h.sha(p) for p in self.root.rglob('*') if p.is_file()}
         with patch.object(h.zipfile,'ZipFile',side_effect=AssertionError('must not access or rebuild ZIP')):
-            result=start.receive(package_root=self.root,output=self.output)
+            result=start.receive(runtime_limit_seconds=None,package_root=self.root,output=self.output)
         self.assertEqual(result['status'],'READY_FOR_PRODUCTION_ROUTING',result)
         self.assertEqual(result['image_calls'],0)
         self.assertEqual(result['reception']['archive_crc'],'NOT_AVAILABLE_EXTRACTED_DIRECTORY')
@@ -57,9 +57,14 @@ class ExtractedHandoffTests(unittest.TestCase):
         self.assertFalse(list(self.base.rglob('*.zip')))
 
     def test_cli_accepts_extracted_path_with_spaces_and_unicode(self):
+        import os
+        from runtime_clock_context import observe
+        home=self.base/'synthetic-host';session='synthetic-receiver'
+        observe({'session_id':session,'hook_event_name':'PreToolUse'},home)
+        env={**os.environ,'CODEX_HOME':str(home),'CODEX_THREAD_ID':session}
         proc=subprocess.run([sys.executable,'-X','utf8','-B',str(Path(start.__file__)),
                              'receive','--package-root',str(self.root),'--output',str(self.output)],
-                            capture_output=True,text=True,encoding='utf-8')
+                            capture_output=True,text=True,encoding='utf-8',env=env)
         self.assertEqual(proc.returncode,0,proc.stdout+proc.stderr)
         self.assertEqual(json.loads(proc.stdout)['reception']['source_type'],'extracted_directory')
 
@@ -108,7 +113,7 @@ class ExtractedHandoffTests(unittest.TestCase):
 
     def test_output_inside_originals_rejected_without_mutation(self):
         with self.assertRaisesRegex(ValueError,'原件目录之外'):
-            start.receive(package_root=self.root,output=self.root/'out')
+            start.receive(runtime_limit_seconds=None,package_root=self.root,output=self.root/'out')
         self.assertFalse((self.root/'out').exists())
 
     def test_os_metadata_is_not_treated_as_a_missing_production_file(self):

@@ -36,7 +36,7 @@ class EasyStartTests(unittest.TestCase):
     def test_prepared_config_uses_frozen_rules_without_resolving_live_cache(self):
         script=self.root/'source.xlsx';script.write_bytes(b'SYNTHETIC');assets=self.root/'assets';assets.mkdir()
         with patch.dict(b.os.environ,{'CODEX_HOME':str(self.root/'custom-home')}):
-            result=start.prepare(self.root,'SYNTHETIC',['E001'],script=script,assets=assets)
+            result=start.prepare(self.root,'SYNTHETIC',['E001'],runtime_limit_seconds=None,script=script,assets=assets)
         config=b.read(result['config']);origin=config['inputs']['memory_root']
         state=b.read(Path(result['run_root'])/'E001/00_输入审计/生产流程.json')
         with patch.object(b,'resolve',side_effect=AssertionError('must not resolve live rules from a frozen run')):
@@ -81,7 +81,7 @@ class EasyStartTests(unittest.TestCase):
         with self.assertRaises(ValueError):read_config(self.put('config.json',config))
     def test_prepare_creates_one_book_profile_and_batch_snapshot_no_approval(self):
         script=self.root/'source.xlsx';script.write_bytes(b'SYNTHETIC');assets=self.root/'assets';assets.mkdir()
-        result=start.prepare(self.root,'SYNTHETIC',['E001-E002'],script=script,assets=assets)
+        result=start.prepare(self.root,'SYNTHETIC',['E001-E002'],runtime_limit_seconds=None,script=script,assets=assets)
         self.assertEqual(result['image_calls'],0);root=Path(result['run_root']);state=b.read(root/'E001/00_输入审计/生产流程.json')
         self.assertEqual(state['gates'],{});self.assertTrue(state['memory_source']['index_sha256']);self.assertTrue((Path(state['memory_source']['root'])/'内置规则/规则记忆输入与增添规范.md').is_file())
         self.assertEqual(state['task_context'],result['task_context'])
@@ -89,19 +89,19 @@ class EasyStartTests(unittest.TestCase):
         self.assertEqual(state['task_context']['origin'],'fresh')
         self.assertEqual(state['task_context']['imports'],[])
         self.assertEqual(state['task_context']['request_source']['source_kind'],'tool_invocation')
-        newer=start.prepare(self.root,'SYNTHETIC',['E003']);self.assertNotEqual(result['run_root'],newer['run_root'])
+        newer=start.prepare(self.root,'SYNTHETIC',['E003'],runtime_limit_seconds=None);self.assertNotEqual(result['run_root'],newer['run_root'])
         self.assertEqual(b.read(newer['config'])['production']['episodes'],['E003'])
         self.assertNotEqual(newer['task_context']['task_id'],result['task_context']['task_id'])
         # Even the same book/episode is a separate task when explicitly prepared afresh.
         (self.root/'old-production-with-missing-ledger').mkdir()
-        remake=start.prepare(self.root,'SYNTHETIC',['E001'])
+        remake=start.prepare(self.root,'SYNTHETIC',['E001'],runtime_limit_seconds=None)
         self.assertNotEqual(remake['task_context']['task_id'],result['task_context']['task_id'])
         self.assertEqual(b.read(Path(remake['run_root'])/'E001/00_输入审计/生产流程.json')['panels'],[])
 
     def test_reinitializing_existing_episode_cannot_reset_task_identity(self):
         import subprocess
         script=self.root/'source.xlsx';script.write_bytes(b'SYNTHETIC');assets=self.root/'assets';assets.mkdir()
-        result=start.prepare(self.root,'SYNTHETIC',['E001'],script=script,assets=assets)
+        result=start.prepare(self.root,'SYNTHETIC',['E001'],runtime_limit_seconds=None,script=script,assets=assets)
         root=Path(result['run_root']);state=root/'E001/00_输入审计/生产流程.json';before=state.read_bytes()
         cmd=[sys.executable, '-X', 'utf8','-B',str(root/'00_总控/运行版本/skills/vertical-comic-preproduction/scripts/init_preproduction.py'),
              '--book','SYNTHETIC','--episode','E001','--config',result['config'],

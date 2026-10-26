@@ -7,18 +7,24 @@ from platform_io import atomic_json, file_lock, configure_stdio
 
 POLICY = 'active_runtime_clock_v1'
 CONTEXT_POLICY = 'local_execution_context_v1'
+DEADLINE_POLICY = 'three_hour_target_four_hour_active_v1'
 
-def initialize_context(run, role, limit):
+def initialize_context(run, role, limit, *, hard_deadline=False):
     """Local receiver/owner metadata, never portable creative approval evidence."""
     run = Path(run).resolve(); directory = run/'00_任务协调'
     directory.mkdir(parents=True, exist_ok=True)
     path = directory/'execution-context.json'
     value = {'policy': CONTEXT_POLICY, 'run_id': uuid.uuid4().hex,
              'run_root': str(run), 'role': role, 'clock_required': limit is not None,
-             'clock_directory': str(directory), 'limit_seconds': limit}
+             'clock_directory': str(directory), 'limit_seconds': limit,
+             **({'deadline_policy':DEADLINE_POLICY} if hard_deadline else {})}
+    if hard_deadline:
+        ledger=json.loads((directory/'runtime-clock.json').read_text(encoding='utf-8'))
+        if ledger.get('deadline_policy')!=DEADLINE_POLICY or ledger['limit_seconds']!=limit:raise ValueError('CLOCK_CONTEXT_CONFLICT')
+        value['clock_origin']=ledger['created']
     if path.exists():
         old = json.loads(path.read_text(encoding='utf-8'))
-        if any(old.get(k) != value[k] for k in ('policy','run_root','role','clock_required','clock_directory','limit_seconds')):
+        if any(old.get(k) != value.get(k) for k in ('policy','run_root','role','clock_required','clock_directory','limit_seconds','deadline_policy','clock_origin')):
             raise ValueError('CLOCK_CONTEXT_CONFLICT: preserve original owner policy')
     else: atomic_json(path, value)
     return {'path': str(path), 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
@@ -69,18 +75,23 @@ def elapsed(a, b):
         raise ValueError('CLOCK_TIME_UNCERTAIN: system clock changed')
     return delta
 
-def initialize(directory, role, limit=14400, *, at=None):
+def initialize(directory, role, limit=14400, *, at=None, hard_deadline=False):
     directory = Path(directory).resolve(); directory.mkdir(parents=True, exist_ok=True)
     if role not in {'preparation', 'production'} or type(limit) is not int or limit < 1:
         raise ValueError('invalid role/limit')
+    if hard_deadline and limit>14400:raise ValueError('HARD_LIMIT_MAX_14400: cannot extend the four-hour active-time budget')
     with file_lock(directory/'clock.lock'):
         path = directory/'runtime-clock.json'
         if path.exists():
             old = json.loads(path.read_text(encoding='utf-8'))
-            if old['role'] != role or old['limit_seconds'] != limit: raise ValueError('CLOCK_SCOPE_CONFLICT')
+            if (old['role'] != role or old['limit_seconds'] != limit or
+                old.get('deadline_policy') != (DEADLINE_POLICY if hard_deadline else None)):
+                raise ValueError('CLOCK_SCOPE_CONFLICT')
         else:
             atomic_json(path, {'policy': POLICY, 'role': role, 'limit_seconds': limit,
-                              'created': at or instant(), 'events': []})
+                              'created': at or instant(), 'events': [],
+                              **({'deadline_policy':DEADLINE_POLICY,'target_seconds':min(10800,limit),
+                                  'converge_seconds':min(9000,int(limit*.625))} if hard_deadline else {})})
     return status(directory, at=at)
 
 def event(directory, action, event_id, *, source='explicit', at=None):
@@ -111,8 +122,9 @@ def _read(directory):
     same_boot = (all(e['at'].get('boot') for e in events) and
                  len({(e['at']['host'], e['at']['boot']) for e in events}) <= 1)
     events.sort(key=lambda e: (e['at']['mono'] if same_boot else e['at']['wall'], e['event_id']))
-    value['events'] = events
-    atomic_json(directory/'runtime-clock.json', value)
+    if value['events'] != events:
+        value['events'] = events
+        atomic_json(directory/'runtime-clock.json', value)
     return value
 
 def status(directory, *, at=None):
@@ -148,8 +160,16 @@ def status(directory, *, at=None):
         if opened is not None: total += elapsed(opened, now)
     except ValueError as exc:
         uncertain = str(exc); state = 'TIME_UNCERTAIN'
-    try: wall = elapsed(value['created'], now)
+    try: wall = elapsed(value['created'], previous if state=='FINISHED' and value.get('deadline_policy')==DEADLINE_POLICY else now)
     except ValueError: wall = None
+    hard=value.get('deadline_policy')==DEADLINE_POLICY
+    if value.get('deadline_policy') not in (None,DEADLINE_POLICY):raise ValueError('UNKNOWN_DEADLINE_POLICY')
+    if hard and (value['limit_seconds']>14400 or value.get('target_seconds')!=min(10800,value['limit_seconds'])):
+        raise ValueError('DEADLINE_CONTRACT_CHANGED')
+    charged=total
+    remaining=None if uncertain else round(max(0,value['limit_seconds']-charged),3)
+    stage=('HARD_STOP' if remaining==0 else 'TARGET_OVERRUN' if hard and not uncertain and total>=value['target_seconds']
+           else 'CONVERGE' if hard and not uncertain and total>=value['converge_seconds'] else 'PRODUCE')
     from runtime_clock_context import binding_status
     binding=binding_status(directory)
     return {'binding':binding,'policy': POLICY, 'role': value['role'], 'state': state,
@@ -157,7 +177,17 @@ def status(directory, *, at=None):
             'confirmed_closed_seconds': round(closed, 3),
             'wall_seconds': round(wall, 3) if wall is not None else None,
             'excluded_seconds': round(max(0,wall-total), 3) if wall is not None and not uncertain else None,
-            'remaining_seconds': round(max(0,value['limit_seconds']-total),3) if not uncertain else None,
+            'remaining_seconds': remaining,
+            'deadline_policy':value.get('deadline_policy'),'target_seconds':value.get('target_seconds'),
+            'clock_origin':value['created'] if hard else None,
+            'schedule_stage':stage,'optional_work_allowed':stage=='PRODUCE',
+            'deadline_includes_pauses':False,
+            'schedule_actions':({'PRODUCE':['reuse_verified_inputs','generate_ready_panels','incremental_review_and_delivery'],
+              'CONVERGE':['stop_optional_work','repair_common_causes_once','clear_returned_image_review_queue','prepare_delivery_index'],
+              'TARGET_OVERRUN':['continue_required_generation_and_review','diagnose_repeated_work','reuse_verified_inputs','incremental_delivery'],
+              'HARD_STOP':['no_new_steps','preserve_inflight_identity','save_late_returns_only','report_incomplete_scope']}[stage]),
+            'new_calls_allowed':state=='RUNNING' and remaining is not None and remaining>0 and stage!='HARD_STOP',
+            'target_remaining_seconds':max(0,round(value['target_seconds']-total,3)) if hard and not uncertain else None,
             'limit_seconds': value['limit_seconds'], 'time_error': uncertain,
             'hook_event_observed': hook_seen, 'last_interrupt_wall': last_interrupt,
             'automatic_pause_verified': False,
@@ -181,8 +211,12 @@ def require_running(path):
     if not (directory/'runtime-clock.json').is_file(): raise ValueError('CLOCK_REQUIRED_LEDGER_MISSING')
     value = status(directory)
     if context:
-        if value['role'] != context['role'] or value['limit_seconds'] != context['limit_seconds']:
+        if (value['role'] != context['role'] or value['limit_seconds'] != context['limit_seconds'] or
+            value.get('deadline_policy')!=context.get('deadline_policy')):
             raise ValueError('CLOCK_CONTEXT_SCOPE_MISMATCH')
+        if context.get('deadline_policy')==DEADLINE_POLICY and (
+            context.get('clock_origin')!=value['clock_origin']):
+            raise ValueError('DEADLINE_ORIGIN_CHANGED')
         from runtime_clock_context import require_bound
         require_bound(directory)
     if value['state'] != 'RUNNING': raise ValueError('RUNTIME_CLOCK_'+value['state'])
@@ -191,6 +225,30 @@ def require_running(path):
         require_bound(directory)
     if value['remaining_seconds'] <= 0: raise ValueError('RUNTIME_CLOCK_LIMIT_REACHED: save returns and report; no new calls')
     return value
+
+def require_step(path, action=None, *, optional=False):
+    """New hard-deadline runs only; preserve legacy return/review behavior."""
+    context=execution_context(path)
+    directory=Path(context['clock_directory']) if context else locate(path)
+    if directory is None or not (directory/'runtime-clock.json').is_file():
+        if context and context.get('deadline_policy')==DEADLINE_POLICY:raise ValueError('CLOCK_REQUIRED_LEDGER_MISSING')
+        return None
+    if context:
+        if context.get('deadline_policy')!=DEADLINE_POLICY:return None
+    else:
+        marker=json.loads((directory/'runtime-clock.json').read_text(encoding='utf-8')).get('deadline_policy')
+        if marker is None:return None
+        if marker!=DEADLINE_POLICY:raise ValueError('UNKNOWN_DEADLINE_POLICY')
+    value=require_running(path)
+    if optional and value['schedule_stage']!='PRODUCE':
+        raise ValueError('RUNTIME_CONVERGE: optional work stopped; finish required review and delivery')
+    return value
+
+
+def require_dispatch(path):
+    # Three hours is a target, never an image admission barrier.
+    return require_running(path)
+
 
 def registry(home=None):
     return Path(home or os.environ.get('CODEX_HOME', Path.home()/'.codex'))/'skill-bundles/vertical-comic-skills/clock-bindings'
@@ -258,7 +316,7 @@ def main():
     p.add_argument('--directory', required=True); p.add_argument('--role', choices=['preparation','production'])
     p.add_argument('--limit-seconds',type=int,default=14400); p.add_argument('--event-id'); p.add_argument('--session-id'); p.add_argument('--codex-home')
     a=p.parse_args(); directory=Path(a.directory).resolve()
-    if a.action=='init': result=initialize(directory,a.role,a.limit_seconds)
+    if a.action=='init': result=initialize(directory,a.role,a.limit_seconds,hard_deadline=True)
     elif a.action in {'bind','attach'}: result=attach_current(directory,home=a.codex_home,explicit_session=a.session_id)
     elif a.action=='unbind':
         release(directory,a.session_id,a.codex_home)
@@ -268,7 +326,7 @@ def main():
         if (directory/'clock-session.json').exists():
             from runtime_clock_context import require_bound
             require_bound(directory,a.codex_home)
-        if result['state']!='RUNNING' or not result['remaining_seconds']: raise ValueError('RUNTIME_CLOCK_NOT_ADMITTED')
+        if result['state']!='RUNNING' or not result['remaining_seconds'] or not result['new_calls_allowed']: raise ValueError('RUNTIME_CLOCK_NOT_ADMITTED')
     else:
         if a.action=='resume' and (directory/'clock-session.json').exists():
             attach_current(directory,home=a.codex_home,explicit_session=a.session_id)

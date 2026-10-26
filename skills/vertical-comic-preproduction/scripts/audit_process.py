@@ -1,5 +1,6 @@
 """Run a frozen read-only checker with live stderr and durable partial logs."""
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -18,7 +19,8 @@ def run(argv, *, cwd, timeout, stdout_path, stderr_path, progress_stream=None, b
     with stdout_path.open('x',encoding='utf-8',newline='\n') as output, \
          stderr_path.open('x',encoding='utf-8',newline='\n') as diagnostic:
         process=subprocess.Popen(argv,cwd=cwd,stdout=output,stderr=subprocess.PIPE,
-                                 text=True,encoding='utf-8',errors='replace')
+                                 text=True,encoding='utf-8',errors='replace',
+                                 env={**os.environ,'PYTHONDONTWRITEBYTECODE':'1'})
         log_errors=[]
         def drain():
             try:

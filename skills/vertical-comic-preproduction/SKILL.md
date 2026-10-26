@@ -1,11 +1,13 @@
 ---
 name: vertical-comic-preproduction
-description: Coordinate first-batch per-panel comic production for further human editing, preserving real QA, scoped repair decisions and annotated delivery. Use for single or multiple episodes, whole-episode asynchronous generation, split preparation/production handoff, stage routing, resuming production, or explaining the comic skills. Also routes comic-bundle setup, updates, and user-requested prompt contributions. Excludes script rewriting, strip assembly, bubbles, lettering and PSD finishing.
+description: Coordinate first-batch per-panel comic production for further human editing, preserving real QA, scoped repair decisions and annotated delivery. Use for single or multiple episodes, whole-episode asynchronous generation, split preparation/production handoff, stage routing, resuming production, or explaining the comic skills. Also routes comic-bundle setup, updates, user-requested prompt contributions, and legacy instructions referencing 条漫Skill使用提示词.md even when that external guide is unavailable. Excludes script rewriting, strip assembly, bubbles, lettering and PSD finishing.
 ---
 
 # 条漫第一批逐格图片生产总控
 
 **五类短指令**：用户要求条漫Skill“更新”“初次配置”“前期制作与交接”“接包生图与完整交付”或“提炼指定提示词到用户增补”时，先读[内置使用模板](references/user-prompts.md)的对应章节并执行，不要求引用外部Markdown。此入口采用所选模板的main预览更新、内部审查及4小时默认值，用户明确覆盖时按其要求；仅操作所选职责，配置不启动生产、用户增补不主动选材。
+
+**兼容已发出的文档引用指令**：用户沿用“根据《条漫Skill使用提示词.md》，帮我……”时，文档名已明确条漫上下文，按[旧文档路径兼容](references/user-prompts.md#旧文档路径兼容)识别实际职责。该标准说明文档未附带、不存在或链接属于其他电脑而不可访问时，直接使用本Skill内置对应模板，不要求补传说明文档、修改链接或重写指令，也不因说明文件缺失停工；真实任务输入缺失仍按原规则处理。不得声称读过无法访问的外部文档。
 
 阶段开始时按[规则归属](references/rule-ownership.md)读取共同规则与本阶段合同；授权和进度沿用该页入口，同一运行不重复加载未变内容。新制作按[前期提速](references/preparation-efficiency.md)先贯通代表格，再用[唯一主表](references/draft-authoring.md)增量派生。接包直接使用已审输入。
 

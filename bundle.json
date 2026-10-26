@@ -30,8 +30,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/SKILL.md",
-      "sha256": "ba915d55990cb357088c673ddfb0e3be710486fc3aba5ecf633edf3d839cbca7",
-      "bytes": 14839
+      "sha256": "82865589ade9986177e6f531429ec1600d44e5295f502babc767f88eb06b0581",
+      "bytes": 15528
     },
     {
       "path": "skills/vertical-comic-preproduction/agents/openai.yaml",
@@ -455,8 +455,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/references/user-prompts.md",
-      "sha256": "13176ab6f0c87e8973dbb389a516d965fbe017ac1c9fe19bbb13c99aab690cdb",
-      "bytes": 10049
+      "sha256": "5b5a840a616c84f2bc3879ca3e7433cf235dfe0518db122e37f7cb786871c479",
+      "bytes": 11853
     },
     {
       "path": "skills/vertical-comic-preproduction/references/visual-continuity.md",

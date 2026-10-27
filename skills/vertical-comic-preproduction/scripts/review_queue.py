@@ -25,6 +25,8 @@ def build_queue(state,root,batch,*,incremental=False,processed=None):
         if status not in {'GENERATED','VISUAL_PASS','USER_ACCEPTED','VISUAL_FAIL'}:continue
         image=checked_file(root,r.get('output'))
         action='REVIEW_SIX_DIMENSIONS' if status=='GENERATED' else 'DIAGNOSE_FAILED_IMAGE' if status=='VISUAL_FAIL' else 'VERIFY_RECORDED_QA'
+        from light_review import enabled as light_enabled
+        if action == 'REVIEW_SIX_DIMENSIONS' and light_enabled(state): action = 'REVIEW_STORY_ONCE'
         item={'panel_id':pid,'attempt_id':r.get('attempt_id'),'round_id':r.get('round_id'),'image':str(image),'image_sha256':digest(image),'action':action}
         if state.get('production_policy') == 'first_batch_production_v1' and status == 'VISUAL_FAIL':
             from production_decisions import load_decision

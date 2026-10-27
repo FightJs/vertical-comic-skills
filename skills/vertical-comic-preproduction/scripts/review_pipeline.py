@@ -78,7 +78,15 @@ def save(state_path,expected_state,proposal):
             raise ValueError('QA_TEMPLATE_CHANGED: template is not bound to the current saved image/package')
         from production_decisions import findings
         previous_findings=findings(items[0])
-    overlay(items[0],proposal.get('observations',{}),proposal['reviewer'])
+    from light_review import enabled as light_enabled, prepare_observations, FIELD, POLICY as LIGHT_POLICY
+    light = light_enabled(state)
+    if light:
+        if template.get(FIELD) != LIGHT_POLICY: raise ValueError('LIGHT_QA: template profile mismatch')
+        if proposal.get('observations'): raise ValueError('LIGHT_QA: use light_observations')
+        prepare_observations(items[0], proposal, original)
+    else:
+        if template.get(FIELD) or proposal.get('light_observations'): raise ValueError('Frozen full review cannot be downgraded')
+        overlay(items[0],proposal.get('observations',{}),proposal['reviewer'])
     # Observation views refer to this actual image; comparison records bind
     # the exact adopted predecessor. The reviewer supplies observations, not hashes.
     def bind_view(value):
@@ -120,7 +128,7 @@ def save(state_path,expected_state,proposal):
         errors=attempt_errors(new,root,row)
         if errors:raise ValueError('QA_VALIDATION: '+';'.join(errors))
         pending=[]
-        if proposal['verdict']=='PASS' and state.get('visual_evidence_policy'):
+        if proposal['verdict']=='PASS' and state.get('visual_evidence_policy') and not light:
             from visual_evidence import comparison_errors
             packet=read_json(checked_file(root,row['package_manifest']))
             pending=comparison_errors(packet['panels'][0],items[0],{r['panel_id']:r for r in new['panels']},root)

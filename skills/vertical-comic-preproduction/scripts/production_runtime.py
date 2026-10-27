@@ -856,7 +856,7 @@ def prepare_review(state, root, queue):
     root=Path(root);records={r["panel_id"]:r for r in state["panels"]}
     for item in queue["items"]:
         row=records[item["panel_id"]]
-        if item["action"] != "REVIEW_SIX_DIMENSIONS":
+        if item["action"] not in {"REVIEW_SIX_DIMENSIONS", "REVIEW_STORY_ONCE"}:
             continue
         if row.get("qa_report"):
             path=checked_file(root,row["qa_report"]);qa=read_json(path)
@@ -868,7 +868,13 @@ def prepare_review(state, root, queue):
         parent=root/"06_图片验收";parent.mkdir(exist_ok=True)
         out=parent/(row["panel_id"]+"_"+uuid.uuid4().hex[:12])
         try:
-            with redirect_stdout(io.StringIO()):
+            from light_review import enabled as light_enabled, template as light_template, FIELD, POLICY as LIGHT_POLICY
+            if light_enabled(state):
+                out.mkdir()
+                (out/"生成图QA报告.json").write_text(json.dumps({FIELD: LIGHT_POLICY, "status": "HOLD_UNREVIEWED",
+                    "source_manifest_sha256": row["package_manifest"]["sha256"], "panels": [light_template(row)]}, ensure_ascii=False), encoding="utf-8")
+            else:
+              with redirect_stdout(io.StringIO()):
                 _main(["--package",str(package.parent),"--manifest",package.name,"--images",str(image.parent),
                        "--image-path",str(image),"--output",str(out),"--episode-root",str(root),
                        "--panel-ids",row["panel_id"],"--skip-contact-sheet"])

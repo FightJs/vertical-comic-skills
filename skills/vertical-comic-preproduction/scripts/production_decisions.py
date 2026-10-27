@@ -119,7 +119,11 @@ def decision_errors(decision, attempt, item):
     if any(not isinstance(i,dict) for i in issues): return errors
     if len(ids) != len(set(ids)):
         errors.append('问题ID须唯一')
-    if not findings(item) <= covered:
+    light = item.get('light_review', {}).get('policy') == 'light_story_review_v1'
+    if light:
+        from light_review import decision_errors as light_decision_errors
+        errors.extend(light_decision_errors(decision, attempt, item))
+    if not light and not findings(item) <= covered:
         errors.append('所有FAIL和未核实项须有准确问题去向:' + ','.join(sorted(findings(item) - covered)))
     groups = [decision.get(k, []) for k in ('fix_now', 'opportunistic', 'manual')]
     if any(not isinstance(g, list) or any(not text(x) for x in g) for g in groups):
@@ -169,6 +173,9 @@ def load_decision(root, record, attempt_id):
     item = report['panels'][0]
     if item.get('panel_id') != attempt['panel_id'] or item.get('image_sha256') != attempt['output']['sha256']:
         raise ValueError('QA与实际采用图不一致')
+    from light_review import at_root, FIELD, POLICY as LIGHT_POLICY
+    if at_root(root) != (report.get(FIELD) == LIGHT_POLICY):
+        raise ValueError('QA review profile differs from the frozen run')
     errors = decision_errors(decision, attempt, item)
     if errors:
         raise ValueError(';'.join(errors))

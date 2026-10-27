@@ -5,6 +5,10 @@ description: Compile approved inputs and generate first-batch comic panels with 
 
 # 条漫第一批逐格生图
 
+
+
+**新任务默认速度优先、轻审核成品**：先按[轻审核流程](../vertical-comic-preproduction/references/light-review.md)执行。每图快速看一次人物与剧情可读性，仅严重剧情问题最多返修一轮；普通瑕疵留人工。此模式不执行下文旧全面审核的六项细节取证、逐MEM记录及整话/跨话重复复审，不为测试返修另做生图。工具以冻结状态的 `image_review_profile` 分支登记和交付；无该字段的旧任务仍按原合同，不能热改。
+
 阶段开始时按[规则归属](../vertical-comic-preproduction/references/rule-ownership.md)读取共同规则与本阶段合同；授权和进度沿用该页入口，同一运行不重复加载未变内容。新制作按[前期提速](../vertical-comic-preproduction/references/preparation-efficiency.md)先贯通代表格，再用[唯一主表](../vertical-comic-preproduction/references/draft-authoring.md)增量派生。接包直接使用已审输入。
 
 接包生产优先执行[免外部配置接包](../vertical-comic-preproduction/references/quick-start.md#接包生产免外部配置)：安装版receive取得本地逐话state和包内冻结runtime_script后直接按已审输入生产。首次安装或没有本书profile不构成缺件，不索要外部脚本/资产，不调用prepare、read_config或重新进入主表/代表格/A/B设计流程。下文前期创作指导只用于尚未制作输入的新任务或真实受影响范围修复；包内历史usage_config_path不作本机配置。

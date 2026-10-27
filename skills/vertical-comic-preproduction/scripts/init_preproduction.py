@@ -42,6 +42,7 @@ def main() -> int:
     parser.add_argument("--batch-size", type=int, choices=range(1, 6), default=None)
     parser.add_argument("--execution-mode", choices=("episode_async_v1", "half_episode_async_v1", "batch5_v1", "sequential_v1"), default=None, help="新任务默认整话异步；旧任务不自动迁移")
     parser.add_argument("--preparation-policy", choices=("episode_preparation_v1", "half_scoped_v1"), help="新整话模式使用全话准备一次；half_scoped_v1仅供旧半话兼容")
+    parser.add_argument("--image-review-profile", choices=("full", "light_story_review_v1"), default="full", help="低层兼容入口默认原审核；新任务短启动默认轻审核")
     parser.add_argument("--backend", choices=("codex_builtin_imagegen",), default=None, help="预选Codex入口；能力证据仍需实际核实")
     args = parser.parse_args()
 
@@ -141,6 +142,9 @@ def main() -> int:
         extra.update(appearance_policy=APPEARANCE,frame_policy=FRAME)
         from production_decisions import POLICY as PRODUCTION
         extra['production_policy'] = PRODUCTION
+        from light_review import FIELD, POLICY as LIGHT_POLICY, enabled as light_enabled
+        if args.image_review_profile != 'full': extra[FIELD] = args.image_review_profile
+        light_enabled(extra)
     if memory_source is not None:
         extra["memory_source"] = memory_source
     if config:

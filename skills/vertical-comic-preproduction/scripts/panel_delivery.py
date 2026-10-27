@@ -17,6 +17,8 @@ from authority_updates import authority_scoped, state_write_lock
 
 @authority_scoped
 def build(state, root):
+    from light_review import enabled as light_enabled
+    light = light_enabled(state)
     from execution_contract import state_errors
     from task_context import state_errors as task_errors
     from batch_workflow import completed_errors
@@ -101,42 +103,44 @@ def build(state, root):
                 if old.get(key): checked_file(root, old[key]); refs.append(old[key])
         if row.get('status') in {'RESULT_UNKNOWN', 'IN_FLIGHT', 'GENERATED', 'REPAIR_AUTHORIZED', 'PENDING', 'CANCELLED'}:
             incomplete.append('当前尝试尚未闭合；采用旧图不清除在途/未知/待审/取消记录')
-        for field in ('camera_match','shot_scale_match','background_view_match','body_crop_match',
-                      'required_visible_information_preserved','no_extra_offscreen_characters'):
-            if type(item.get(field)) is not bool:
-                incomplete.append('原QA必审项尚未完成：'+field)
+        if not light:
+            for field in ('camera_match','shot_scale_match','background_view_match','body_crop_match',
+                          'required_visible_information_preserved','no_extra_offscreen_characters'):
+                if type(item.get(field)) is not bool:
+                    incomplete.append('原QA必审项尚未完成：'+field)
         if any(i['certainty'] == 'unverified' for i in decision['issues']):
             incomplete.append('存在尚未核实的观察；疑点不当成已确认错误')
         if decision['action'] in {'needs_user', 'local_edit', 'regenerate', 'rebuild_inputs', 'crop_candidate'}:
             incomplete.append('尚有未完成的处理动作或人工决定')
-        comparisons = item.get('visual_evidence_review', {}).get('continuity_comparisons', [])
-        from visual_evidence import continuity_targets
-        for prior in continuity_targets(shot):
-            comparisons_for = [c for c in comparisons if c.get('panel_id') == prior]
-            if prior not in chosen or len(comparisons_for) != 1:
-                incomplete.append(prior + ':必要连续性比较尚未完成')
-            elif (comparisons_for[0].get('image') != chosen[prior].get('output') or
-                  comparisons_for[0].get('status') not in {'PASS', 'FAIL'} or not text(comparisons_for[0].get('observed'))):
-                incomplete.append(prior + ':比较未绑定采用版本或尚未完成')
-        # Existing episode continuity report is reused, including truthful FAIL.
-        review_ref = state.get('batch_reviews', {}).get('EPISODE')
-        review = read_json(checked_file(root, review_ref)) if review_ref else {}
-        if (review.get('policy') != 'batch_review_v1' or review.get('book_id') != state['book_id'] or
-                review.get('episode_id') != state['episode_id'] or review.get('batch_id') != 'EPISODE' or
-                review.get('panel_ids') != order or review.get('visual_basis') != state['visual_basis'] or
-                review.get('shot_manifest') != state['shot_manifest'] or
-                review.get('outputs') != [chosen.get(p, {}).get('output') for p in order] or
-                review.get('status') not in {'PASS', 'FAIL'} or
-                not text(review.get('reviewer')) or not text(review.get('evidence'))):
-            incomplete.append('原整话连续性报告未覆盖当前采用版本')
-        if review.get('status') == 'FAIL' and not any(
-                i.get('kind') in {'major_continuity', 'space_detail', 'prop_state'} for i in decision['issues']):
-            incomplete.append('整话连续性FAIL尚未定位到本图问题或标明不受影响')
-        if review_ref: refs.append(review_ref)
-        if state.get('parallel_context'):
-            from batch_workflow import cross_episode_errors
-            if cross_episode_errors(state['parallel_context'], first_batch=True):
-                incomplete.append('必要跨话比较尚未闭合')
+        if not light:
+            comparisons = item.get('visual_evidence_review', {}).get('continuity_comparisons', [])
+            from visual_evidence import continuity_targets
+            for prior in continuity_targets(shot):
+                comparisons_for = [c for c in comparisons if c.get('panel_id') == prior]
+                if prior not in chosen or len(comparisons_for) != 1:
+                    incomplete.append(prior + ':必要连续性比较尚未完成')
+                elif (comparisons_for[0].get('image') != chosen[prior].get('output') or
+                      comparisons_for[0].get('status') not in {'PASS', 'FAIL'} or not text(comparisons_for[0].get('observed'))):
+                    incomplete.append(prior + ':比较未绑定采用版本或尚未完成')
+            # Existing episode continuity report is reused, including truthful FAIL.
+            review_ref = state.get('batch_reviews', {}).get('EPISODE')
+            review = read_json(checked_file(root, review_ref)) if review_ref else {}
+            if (review.get('policy') != 'batch_review_v1' or review.get('book_id') != state['book_id'] or
+                    review.get('episode_id') != state['episode_id'] or review.get('batch_id') != 'EPISODE' or
+                    review.get('panel_ids') != order or review.get('visual_basis') != state['visual_basis'] or
+                    review.get('shot_manifest') != state['shot_manifest'] or
+                    review.get('outputs') != [chosen.get(p, {}).get('output') for p in order] or
+                    review.get('status') not in {'PASS', 'FAIL'} or
+                    not text(review.get('reviewer')) or not text(review.get('evidence'))):
+                incomplete.append('原整话连续性报告未覆盖当前采用版本')
+            if review.get('status') == 'FAIL' and not any(
+                    i.get('kind') in {'major_continuity', 'space_detail', 'prop_state'} for i in decision['issues']):
+                incomplete.append('整话连续性FAIL尚未定位到本图问题或标明不受影响')
+            if review_ref: refs.append(review_ref)
+            if state.get('parallel_context'):
+                from batch_workflow import cross_episode_errors
+                if cross_episode_errors(state['parallel_context'], first_batch=True):
+                    incomplete.append('必要跨话比较尚未闭合')
         result.update(attempt_id=attempt['attempt_id'], image=attempt['output'],
                       qa_report=attempt['qa_report'], package_manifest=attempt['package_manifest'],
                       decision=ref, adoption_reason=row['adoption']['reason'],
@@ -154,6 +158,9 @@ def build(state, root):
              'all_usable': all(r['outcome'] in {'DELIVERABLE', 'MANUAL_RETOUCH'} for r in rows),
              'handoff_complete': all(r['outcome'] != 'INCOMPLETE' for r in rows),
              'image_calls': 0, 'visual_qa_changed': False, 'user_approval': 'NOT_GRANTED'}
+    if light:
+        value['image_review_profile'] = 'light_story_review_v1'
+        value['review_scope'] = '每图一次全图轻审核；仅修影响剧情理解的严重问题；未执行六项细节及整话/跨话全面复审'
     value['delivery_digest'] = fingerprint(value)
     return value
 
@@ -216,7 +223,7 @@ def _export_candidate(state, root, review_ref, destination, *, allow_partial=Fal
                 certainty = '已确认' if issue['certainty'] == 'confirmed' else '未核实疑点，请勿据此直接改图'
                 table.append((issue['category'], f"| {link} | {'①②③'[issue['category']-1]} | {cell(issue['location'])} | {cell(issue['problem'])} → {cell(issue['target'])} | {priority} | {cell(issue['handling'])}；{certainty} |"))
         summary = '；'.join(f'{LABELS[k]} {review["counts"].get(k, 0)}格' for k in LABELS)
-        lines = [f"{review['episode_id']}：{summary}。", '',
+        lines = [f"{review['episode_id']}：{summary}。", review.get('review_scope', ''), '',
                  '| 格号／图片 | 类别 | 位置 | 当前问题 → 正确目标 | 优先级 | 处理情况 |',
                  '|---|---|---|---|---|---|', *[line for _, line in sorted(table, key=lambda p: p[0])],
                  '', '所有源格去向见交付索引；原QA中的FAIL保持原样。未完成格：']
@@ -265,7 +272,8 @@ def main():
     if a.publish:
         if not a.contract or any((a.state,a.write,a.review,a.export,a.partial)):p.error('publish仅用contract及输出目录')
         try:
-            print(json.dumps(publish_batch(a.contract,a.publish),ensure_ascii=False));return 0
+            result=publish_batch(a.contract,a.publish)
+            print(json.dumps(result,ensure_ascii=False));return 2 if result.get('policy')=='deadline_delivery_v1' and not result.get('task_completed') else 0
         except (OSError,ValueError,KeyError) as exc:
             print(json.dumps({'status':'DELIVERY_HOLD','error':str(exc)},ensure_ascii=False));return 1
     if not a.state:p.error('目录导出或审查须提供state')

@@ -305,6 +305,14 @@ def refresh(directory, *, activity=None, next_action=None, wait_kind='NONE', sta
                 snapshot['percent'] = math.floor(sum(task['weights'][k]*snapshot['stage_units'][k]/total for k in units))
                 snapshot['stage'] = next((k for k in units if snapshot['stage_units'][k] < total), 'delivery')
             snapshot['files'][delivered['zip']] = delivered['stat']
+    deadline_path=directory/'deadline-delivered.json'
+    if deadline_path.is_file():
+        delivered=read(deadline_path)
+        if delivered['states']=={p:fingerprint(read(p)) for p in task['states']} and all(stat(p)==v for p,v in delivered['dependencies'].items()):
+            snapshot.update(percent=100,stage='delivery',completion_basis='FULL_SOURCE_SCOPE_WITH_RECORDED_QA',
+                activity='完整结果包已按时发布，原QA问题保留',next='交付已核实的完整ZIP')
+            snapshot['files'].update(delivered['dependencies'])
+        snapshot['files'][str(deadline_path)]=stat(deadline_path)
     meaningful = {k: snapshot[k] for k in ('stage_units','total','blockers')}
     snapshot['last_real_progress_at'] = old.get('last_real_progress_at', snapshot['observed_at']) if meaningful == {k: old.get(k) for k in meaningful} else snapshot['observed_at']
     atomic_json(directory/'snapshot.json', snapshot)
@@ -429,6 +437,16 @@ def complete(directory, archive, *, _coordination_checked=False, transport_recei
         from runtime_clock import release
         release(clock_dir)
     return result
+
+
+def finish_deadline(directory,receipt,report):
+    directory=Path(directory);task=read(directory/'task.json')
+    from delivery_contract import reference
+    paths=[str(Path(receipt).resolve()),report['archive']['path'],*task['states']]
+    atomic_json(directory/'deadline-delivered.json',{'policy':'deadline_delivery_v1',
+        'delivery_report':reference(receipt),'states':{p:fingerprint(read(p)) for p in task['states']},
+        'dependencies':{p:stat(p) for p in paths}})
+    return refresh(directory)
 
 
 def complete_validated(directory,archive,task,requirements,identity,delivery_report):

@@ -8,6 +8,7 @@ from platform_io import atomic_json, file_lock, configure_stdio
 POLICY = 'active_runtime_clock_v1'
 CONTEXT_POLICY = 'local_execution_context_v1'
 DEADLINE_POLICY = 'three_hour_target_four_hour_active_v1'
+DELIVERY_SCHEDULE = 'four_hour_wall_delivery_v1'
 
 def initialize_context(run, role, limit, *, hard_deadline=False):
     """Local receiver/owner metadata, never portable creative approval evidence."""
@@ -22,9 +23,11 @@ def initialize_context(run, role, limit, *, hard_deadline=False):
         ledger=json.loads((directory/'runtime-clock.json').read_text(encoding='utf-8'))
         if ledger.get('deadline_policy')!=DEADLINE_POLICY or ledger['limit_seconds']!=limit:raise ValueError('CLOCK_CONTEXT_CONFLICT')
         value['clock_origin']=ledger['created']
+        if ledger.get('delivery_schedule'):
+            value['delivery_schedule']=ledger['delivery_schedule']
     if path.exists():
         old = json.loads(path.read_text(encoding='utf-8'))
-        if any(old.get(k) != value.get(k) for k in ('policy','run_root','role','clock_required','clock_directory','limit_seconds','deadline_policy','clock_origin')):
+        if any(old.get(k) != value.get(k) for k in ('policy','run_root','role','clock_required','clock_directory','limit_seconds','deadline_policy','clock_origin','delivery_schedule')):
             raise ValueError('CLOCK_CONTEXT_CONFLICT: preserve original owner policy')
     else: atomic_json(path, value)
     return {'path': str(path), 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
@@ -75,21 +78,24 @@ def elapsed(a, b):
         raise ValueError('CLOCK_TIME_UNCERTAIN: system clock changed')
     return delta
 
-def initialize(directory, role, limit=14400, *, at=None, hard_deadline=False):
+def initialize(directory, role, limit=14400, *, at=None, hard_deadline=False, delivery_deadline=False):
     directory = Path(directory).resolve(); directory.mkdir(parents=True, exist_ok=True)
     if role not in {'preparation', 'production'} or type(limit) is not int or limit < 1:
         raise ValueError('invalid role/limit')
+    if delivery_deadline and not hard_deadline:raise ValueError('delivery deadline requires hard deadline')
     if hard_deadline and limit>14400:raise ValueError('HARD_LIMIT_MAX_14400: cannot extend the four-hour active-time budget')
     with file_lock(directory/'clock.lock'):
         path = directory/'runtime-clock.json'
         if path.exists():
             old = json.loads(path.read_text(encoding='utf-8'))
             if (old['role'] != role or old['limit_seconds'] != limit or
-                old.get('deadline_policy') != (DEADLINE_POLICY if hard_deadline else None)):
+                old.get('deadline_policy') != (DEADLINE_POLICY if hard_deadline else None) or
+                old.get('delivery_schedule') != (DELIVERY_SCHEDULE if delivery_deadline else None)):
                 raise ValueError('CLOCK_SCOPE_CONFLICT')
         else:
             atomic_json(path, {'policy': POLICY, 'role': role, 'limit_seconds': limit,
                               'created': at or instant(), 'events': [],
+                              **({'delivery_schedule':DELIVERY_SCHEDULE} if delivery_deadline else {}),
                               **({'deadline_policy':DEADLINE_POLICY,'target_seconds':min(10800,limit),
                                   'converge_seconds':min(9000,int(limit*.625))} if hard_deadline else {})})
     return status(directory, at=at)
@@ -166,10 +172,18 @@ def status(directory, *, at=None):
     if value.get('deadline_policy') not in (None,DEADLINE_POLICY):raise ValueError('UNKNOWN_DEADLINE_POLICY')
     if hard and (value['limit_seconds']>14400 or value.get('target_seconds')!=min(10800,value['limit_seconds'])):
         raise ValueError('DEADLINE_CONTRACT_CHANGED')
-    charged=total
+    delivery=value.get('delivery_schedule')==DELIVERY_SCHEDULE
+    if value.get('delivery_schedule') not in (None,DELIVERY_SCHEDULE):raise ValueError('UNKNOWN_DELIVERY_SCHEDULE')
+    if delivery and wall is None:
+        uncertain=uncertain or 'CLOCK_TIME_UNCERTAIN: wall deadline unavailable';state='TIME_UNCERTAIN'
+    charged=wall if delivery else total
     remaining=None if uncertain else round(max(0,value['limit_seconds']-charged),3)
     stage=('HARD_STOP' if remaining==0 else 'TARGET_OVERRUN' if hard and not uncertain and total>=value['target_seconds']
            else 'CONVERGE' if hard and not uncertain and total>=value['converge_seconds'] else 'PRODUCE')
+    if delivery and remaining is not None:
+        reserve=min(1800,value['limit_seconds']*.125)
+        stage=('HARD_STOP' if remaining==0 else 'PACKAGE' if remaining<=reserve/2
+               else 'DRAIN' if remaining<=reserve else 'CONVERGE' if charged>=value['limit_seconds']*.625 else 'PRODUCE')
     from runtime_clock_context import binding_status
     binding=binding_status(directory)
     return {'binding':binding,'policy': POLICY, 'role': value['role'], 'state': state,
@@ -181,12 +195,17 @@ def status(directory, *, at=None):
             'deadline_policy':value.get('deadline_policy'),'target_seconds':value.get('target_seconds'),
             'clock_origin':value['created'] if hard else None,
             'schedule_stage':stage,'optional_work_allowed':stage=='PRODUCE',
-            'deadline_includes_pauses':False,
+            'deadline_includes_pauses':delivery,
+            'delivery_schedule':value.get('delivery_schedule'),
+            'delivery_due_wall':value['created']['wall']+value['limit_seconds'] if delivery else None,
+            'delivery_reserve_seconds':min(1800,value['limit_seconds']*.125) if delivery else 0,
             'schedule_actions':({'PRODUCE':['reuse_verified_inputs','generate_ready_panels','incremental_review_and_delivery'],
               'CONVERGE':['stop_optional_work','repair_common_causes_once','clear_returned_image_review_queue','prepare_delivery_index'],
               'TARGET_OVERRUN':['continue_required_generation_and_review','diagnose_repeated_work','reuse_verified_inputs','incremental_delivery'],
+              'DRAIN':['no_new_calls','save_returns','finish_available_review','publish_current_package'],
+              'PACKAGE':['no_new_calls','publish_current_package','list_missing_and_unknown'],
               'HARD_STOP':['no_new_steps','preserve_inflight_identity','save_late_returns_only','report_incomplete_scope']}[stage]),
-            'new_calls_allowed':state=='RUNNING' and remaining is not None and remaining>0 and stage!='HARD_STOP',
+            'new_calls_allowed':state=='RUNNING' and remaining is not None and remaining>0 and stage not in {'DRAIN','PACKAGE','HARD_STOP'},
             'target_remaining_seconds':max(0,round(value['target_seconds']-total,3)) if hard and not uncertain else None,
             'limit_seconds': value['limit_seconds'], 'time_error': uncertain,
             'hook_event_observed': hook_seen, 'last_interrupt_wall': last_interrupt,
@@ -212,13 +231,14 @@ def require_running(path):
     value = status(directory)
     if context:
         if (value['role'] != context['role'] or value['limit_seconds'] != context['limit_seconds'] or
-            value.get('deadline_policy')!=context.get('deadline_policy')):
+            value.get('deadline_policy')!=context.get('deadline_policy') or
+            value.get('delivery_schedule')!=context.get('delivery_schedule')):
             raise ValueError('CLOCK_CONTEXT_SCOPE_MISMATCH')
         if context.get('deadline_policy')==DEADLINE_POLICY and (
             context.get('clock_origin')!=value['clock_origin']):
             raise ValueError('DEADLINE_ORIGIN_CHANGED')
         from runtime_clock_context import require_bound
-        require_bound(directory)
+        if context.get('delivery_schedule')!=DELIVERY_SCHEDULE:require_bound(directory)
     if value['state'] != 'RUNNING': raise ValueError('RUNTIME_CLOCK_'+value['state'])
     if (directory/'clock-session.json').exists():
         from runtime_clock_context import require_bound
@@ -246,8 +266,10 @@ def require_step(path, action=None, *, optional=False):
 
 
 def require_dispatch(path):
-    # Three hours is a target, never an image admission barrier.
-    return require_running(path)
+    value=require_running(path)
+    if value and not value.get('new_calls_allowed',True):
+        raise ValueError('RUNTIME_DELIVERY_DRAIN: reserve time for returned images and package; no new calls')
+    return value
 
 
 def registry(home=None):

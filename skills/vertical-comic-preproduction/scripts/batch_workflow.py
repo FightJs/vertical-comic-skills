@@ -176,6 +176,8 @@ def cross_episode_errors(context, *, first_batch=False):
 
 
 def completed_errors(state, root, record, shot, basis, records, *, require_pass=True):
+    from light_review import enabled as light_enabled
+    light = light_enabled(state)
     if require_pass:
         errors = qa_errors(root, record)
     else:
@@ -189,7 +191,7 @@ def completed_errors(state, root, record, shot, basis, records, *, require_pass=
             from continuity_context import rule_tags
             tags = rule_tags(packet, packet_path.parent, panel)
         from rule_memory import application_errors
-        errors.extend(application_errors(packet.get('memory_source'), 'image_review', panel,
+        if not light: errors.extend(application_errors(packet.get('memory_source'), 'image_review', panel,
             packet_path.parent, applications=item.get('memory_review', []),
             image_sha256=record['output']['sha256'], context_tags=tags, scope=packet, require_pass=False))
     packet = read(checked_file(root, record.get("package_manifest")))
@@ -231,7 +233,7 @@ def completed_errors(state, root, record, shot, basis, records, *, require_pass=
     if state.get('execution_contract')=='comic_execution_v2' and panel.get('source_panel_id')!=record.get('source_panel_id'):errors.append('SOURCE_ID_HOLD:验收包原格号与准确源映射不一致')
     effective_basis = dependency_basis(root, checked_file(root, record["package_manifest"]), packet, shot, basis, records,state)
     errors.extend(basis_errors(panel, effective_basis))
-    if state.get("visual_evidence_policy") and require_pass:
+    if state.get("visual_evidence_policy") and require_pass and not light:
         from visual_evidence import comparison_errors
         qa = read(checked_file(root, record["qa_report"]))
         item = next((q for q in qa.get("panels", []) if q.get("panel_id") == record["panel_id"]), {})

@@ -100,6 +100,19 @@ def _main(argv=None) -> int:
     if args.image_path and (len(panels) != 1 or not Path(args.image_path).is_file()):
         raise SystemExit("image-path只用于单格真实存在的返回图")
 
+    from light_review import at_root, template as light_template, FIELD, POLICY as LIGHT_POLICY
+    if at_root(episode_root):
+        items = []
+        for panel in panels:
+            image = Path(args.image_path) if args.image_path else find_image(images_root, panel['panel_id'])
+            if image is None: raise SystemExit('LIGHT_QA: actual returned image missing')
+            items.append(light_template({'panel_id': panel['panel_id'], 'output': {'sha256': sha256(image)}}))
+        report = {FIELD: LIGHT_POLICY, 'status': 'HOLD_UNREVIEWED',
+                  'source_manifest_sha256': sha256(manifest_path), 'panels': items}
+        (output/'生成图QA报告.json').write_text(json.dumps(report, ensure_ascii=False, indent=2)+'\n', encoding='utf-8')
+        print(json.dumps({'status': report['status'], 'image_review_profile': LIGHT_POLICY}, ensure_ascii=False))
+        return 0
+
     report: dict[str, Any] = {
         "status": "HOLD_UNREVIEWED",
         "package": str(package),

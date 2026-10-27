@@ -150,6 +150,21 @@ def finish(directory, expected_revision, archive, *, delivery_report=None):
     with file_lock(directory/'coordination.lock'):
         path = directory/'coordination.json'; value = read(path)
         if value['revision'] != expected_revision: raise ValueError('STALE_COORDINATOR')
+        if delivery_report and read(delivery_report).get('policy')=='deadline_delivery_v1':
+            from deadline_delivery import complete
+            identity=value.get('delivery_identity',{}).get('path')
+            if not identity:raise ValueError('缺本任务交付身份')
+            report=complete(identity,delivery_report,archive)
+            value['revision']+=1
+            value['finish']={'status':'READY_TO_DELIVER','archive':report['archive'],
+                'delivery_report':reference(delivery_report),'revision':value['revision'],
+                'completion_basis':'FULL_SOURCE_SCOPE_WITH_RECORDED_QA','task_completed':True}
+            atomic_json(path,value)
+            from production_progress import finish_deadline
+            finish_deadline(value['display'],delivery_report,report)
+            from runtime_clock import event,release
+            event(directory,'finish','full-deadline-delivery-finished');release(directory)
+            return value['finish']
         blockers = pending(value)
         if blockers: return {'status': 'CONTINUE_REQUIRED', 'blockers': blockers}
         # Real delivery validator remains authoritative; no caller-supplied PASS.

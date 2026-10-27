@@ -270,6 +270,11 @@ def pack_panels(value,stage,out):
 
 
 def publish_production(identity,output):
+    from runtime_clock import locate,status,DELIVERY_SCHEDULE
+    directory=locate(identity)
+    if directory and status(directory).get('delivery_schedule')==DELIVERY_SCHEDULE:
+        from deadline_delivery import export
+        return export(identity,output)
     def operation(value,out):
         if value['role']!='production':raise ValueError('DELIVERY_SCOPE_HOLD:不是成品交付任务')
         from panel_delivery import export
@@ -301,7 +306,7 @@ def main():
             if not a.source_zip:p.error('前期交付缺--source-zip')
             result=publish_preparation(a.contract,a.source_zip,a.output)
         else:result=publish_production(a.contract,a.output)
-        print(json.dumps(result,ensure_ascii=False));return 0
+        print(json.dumps(result,ensure_ascii=False));return 2 if result.get('policy')=='deadline_delivery_v1' and not result.get('task_completed') else 0
     except (OSError,ValueError,KeyError,TypeError,zipfile.BadZipFile) as exc:
         print(json.dumps({'status':'DELIVERY_HOLD','error':str(exc),'image_calls':0},ensure_ascii=False));return 1
 

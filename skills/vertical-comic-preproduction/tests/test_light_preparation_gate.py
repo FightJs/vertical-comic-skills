@@ -69,7 +69,7 @@ class SavedObservations(unittest.TestCase):
         h.state.update(execution_mode='episode_async_v1', input_semantics_policy=sem.PREPARED_POLICY)
         h.state[gate.FIELD]=gate.POLICY
         self.path=h.root/'00_输入审计/生产流程.json';self.path.parent.mkdir(exist_ok=True)
-        self.path.write_text(json.dumps(h.state))
+        self.path.write_text(json.dumps(h.state), encoding='utf-8')
     def observations(self, ids=None):
         value=entry.prepare(self.path,ids)
         for row in value['panels']:row['observation']=copy.deepcopy(OBS)
@@ -90,9 +90,9 @@ class SavedObservations(unittest.TestCase):
     def test_changed_actual_prompt_rejects_stale_observation(self):
         h=self.h;value=self.observations(['P002']);record=h.state['panels'][1];p=checked_file(h.root,record['package_manifest']);data=read_json(p)
         data['panels'][0]['prompt']+='\nSYNTHETIC changed action'
-        (h.root/data['panels'][0]['prompt_file']).write_text(data['panels'][0]['prompt'])
+        (h.root/data['panels'][0]['prompt_file']).write_text(data['panels'][0]['prompt'], encoding='utf-8')
         record['package_manifest']=legacy.fixture.fixtures.write(h.root,p.name,data)
-        self.path.write_text(json.dumps(h.state));before=self.path.read_bytes()
+        self.path.write_text(json.dumps(h.state), encoding='utf-8');before=self.path.read_bytes()
         with self.assertRaisesRegex(ValueError,'输入已改变'):entry.save(self.path,value,'SYNTHETIC')
         self.assertEqual(self.path.read_bytes(),before)
     def test_explicit_dependency_plan_without_previous_package(self):
@@ -109,7 +109,7 @@ class SavedObservations(unittest.TestCase):
         plan={'policy':'dependency_completion_plan_v1','scope':'episode',
               **{k:h.state[k] for k in ('book_id','episode_id','visual_basis','shot_manifest')},'inputs':[row]}
         ref=legacy.fixture.fixtures.write(h.root,'dependency-plan.json',plan)
-        self.path.write_text(json.dumps(h.state))
+        self.path.write_text(json.dumps(h.state), encoding='utf-8')
         value=entry.prepare(self.path,['P002'],dependency_plan=ref)
         self.assertEqual(value['panels'][0]['inputs']['references'][-1],{'dependency':'P001'})
         value['panels'][0]['observation']=copy.deepcopy(OBS)
@@ -119,7 +119,7 @@ class SavedObservations(unittest.TestCase):
     def test_broken_prompt_or_duplicate_ids_rejected(self):
         with self.assertRaises(ValueError):entry.prepare(self.path,['P002','P002'])
         h=self.h;p=checked_file(h.root,h.state['panels'][1]['package_manifest']);packet=read_json(p)
-        (h.root/packet['panels'][0]['prompt_file']).write_text('broken')
+        (h.root/packet['panels'][0]['prompt_file']).write_text('broken', encoding='utf-8')
         with self.assertRaises(ValueError):entry.prepare(self.path,['P002'])
 
 class FullGate(unittest.TestCase):

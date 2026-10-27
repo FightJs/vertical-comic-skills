@@ -10,18 +10,18 @@ import comic_start
 class ReadSetTests(unittest.TestCase):
     def test_bytes_negative_paths_and_directory_changes_invalidate_proof(self):
         with tempfile.TemporaryDirectory() as d:
-            root=Path(d);p=root/'input.json';p.write_text('{"approved":true}')
+            root=Path(d);p=root/'input.json';p.write_text('{"approved":true}', encoding='utf-8')
             with file_session() as memo:
                 read_json(p);path_exists(root/'missing.json');scan_directory(root)
                 proof=export_read_set(memo)
             self.assertTrue(verify_exported_read_set(proof,[root]))
-            p.write_text('{"approved":false}')
+            p.write_text('{"approved":false}', encoding='utf-8')
             self.assertFalse(verify_exported_read_set(proof,[root]))
-            p.write_text('{"approved":true}');(root/'missing.json').write_text('{}')
+            p.write_text('{"approved":true}', encoding='utf-8');(root/'missing.json').write_text('{}', encoding='utf-8')
             self.assertFalse(verify_exported_read_set(proof,[root]))
     def test_external_paths_and_nonreusable_proofs_do_not_authorize_reuse(self):
         with tempfile.TemporaryDirectory() as d:
-            root=Path(d);p=root/'input.json';p.write_text('{}')
+            root=Path(d);p=root/'input.json';p.write_text('{}', encoding='utf-8')
             with file_session() as memo:read_json(p);proof=export_read_set(memo)
             self.assertFalse(verify_exported_read_set(proof,[root/'other']))
             empty={**proof,'files':[]}
@@ -42,12 +42,12 @@ class ResumeTests(unittest.TestCase):
     def test_receive_resume_keeps_same_run_state_clock_and_source_files(self):
         self.f.test_direct_bound_run_real_full_episode_gates_and_conditional_release()
         root=next((self.f.base/'接包输出').glob('RV_*'))
-        journal=json.loads((root/'接包恢复索引.json').read_text());local=Path(journal['run_root'])
+        journal=json.loads((root/'接包恢复索引.json').read_text(encoding='utf-8'));local=Path(journal['run_root'])
         before=fixture.h.files(local);clock=(root/'00_任务协调/execution-context.json').read_bytes()
         result=comic_start.receive_resume(root,audit_timeout=20)
         self.assertEqual(result['status'],'READY_FOR_PRODUCTION_ROUTING',result)
         self.assertEqual(before,fixture.h.files(local));self.assertEqual(clock,(root/'00_任务协调/execution-context.json').read_bytes())
-        state=local/'E000/00_输入审计/生产流程.json';value=json.loads(state.read_text());value['panels'][0]['status']='RESULT_UNKNOWN';state.write_text(json.dumps(value))
+        state=local/'E000/00_输入审计/生产流程.json';value=json.loads(state.read_text(encoding='utf-8'));value['panels'][0]['status']='RESULT_UNKNOWN';state.write_text(json.dumps(value), encoding='utf-8')
         before=state.read_bytes();result=comic_start.receive_resume(root)
         self.assertEqual(result['status'],'CONTINUE_ORIGINAL_PRODUCTION');self.assertEqual(before,state.read_bytes())
 

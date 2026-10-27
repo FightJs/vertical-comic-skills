@@ -10,7 +10,7 @@ class ReturnedBytesTests(unittest.TestCase):
         t=tempfile.TemporaryDirectory();self.addCleanup(t.cleanup);self.root=Path(t.name)
         b=io.BytesIO();Image.new('RGB',(9,16),'blue').save(b,format='PNG');self.png=b.getvalue()
     def raw(self,value):
-        p=self.root/'actual.json';p.write_text(json.dumps(value,ensure_ascii=False));return p
+        p=self.root/'actual.json';p.write_text(json.dumps(value,ensure_ascii=False), encoding='utf-8');return p
     def url(self,data=None):return 'data:image/png;base64,'+base64.b64encode(data or self.png).decode()
     def test_two_windows_drives_unicode_spaces_and_newlines(self):
         path=r'C:\工作目录\有 空格\图片.png'

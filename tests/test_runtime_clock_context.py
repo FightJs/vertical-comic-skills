@@ -20,7 +20,7 @@ class ContextTests(unittest.TestCase):
                        'tool_input':{'cmd':'python comic_start.py receive --runtime-limit-seconds 14400'}},self.home)
     def test_wall_deadline_starts_without_optional_host_pause_receipt(self):
         run=self.root/'run'
-        result=start_clock(run,'production',14400,None)
+        result=start_clock(run,'production',14400,None,wall_delivery=True)
         self.assertTrue((run/'00_任务协调/runtime-clock.json').exists())
         self.assertEqual(result['runtime_clock']['delivery_schedule'],clock.DELIVERY_SCHEDULE)
         self.assertTrue(result['runtime_clock']['deadline_includes_pauses'])

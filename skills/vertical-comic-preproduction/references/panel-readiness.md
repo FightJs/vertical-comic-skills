@@ -1,5 +1,8 @@
 # 全话准备、逐格放行
 
+新任务 `essential_preparation_v1` 按[前期轻门禁](preparation-efficiency.md#新任务前期轻门禁一次观察细节留人工)复用一次观察。非剧情细节提醒不阻断就绪/发布；真实输入、来源、权限与完整性仍校验。旧冻结路径维持原判定。
+
+
 新运行优先按[第一批前期提速](preparation-efficiency.md)执行最小充分设计、代表格接线、单次B/包展示及问题分级处理。可选润饰不产生HOLD；真实缺口在现有委托内修复，局部问题只影响真实依赖，其他工作继续。正式输入与接包要求仍按原合同。
 
 新配置使用 `readiness: {"policy":"panel_readiness_v1"}`，初始化到生产流程、全话镜头和执行包的 `readiness_policy`。当前配套 `episode_preparation_v1`、`episode_async_v1`、`scoped_episode_review_v1`，保持一套全话源序、镜头和比例计划；旧半话配套仅用于原RV恢复。不能在运行中的旧文件直接加字段或改工具哈希。

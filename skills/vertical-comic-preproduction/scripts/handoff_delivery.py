@@ -49,8 +49,16 @@ def closure(root,index,*,verify_runtime=True):
                     or audit_data.get('panel_ids')!=e['panel_ids']
                     or [r.get('panel_id') for r in audit_data.get('panels',[])]!=e['panel_ids']):
                 errors.append(eid+':最终输入审查范围不完整')
+            from preparation_gate_policy import FIELD, POLICY as QUICK, observation_errors
+            gate_policy = audit_data.get(FIELD)
+            if gate_policy not in (None, QUICK): errors.append(eid+':未知前期轻门禁策略')
             for row in audit_data.get('panels',[]):
                 review=row.get('execution_review',{})
+                if gate_policy == QUICK:
+                    if (review.get('policy') != e['input_semantics_policy'] or not review.get('input_digest')
+                            or observation_errors(review)):
+                        errors.append(eid+'/'+row['panel_id']+':前期快审未闭合')
+                    continue
                 if (review.get('policy')!=e['input_semantics_policy'] or review.get('status')!='REVIEWED'
                         or not review.get('input_digest') or not review.get('reviewer') or not review.get('evidence')
                         or review.get('unresolved_issues') or any(review.get('checks',{}).get(k,{}).get('status')!='PASS'
@@ -60,6 +68,7 @@ def closure(root,index,*,verify_runtime=True):
                 from handoff_zip import inside
                 template_root=inside(root,plan['root'])
                 state=json.loads(inside(template_root,plan['state_file']).read_text(encoding='utf-8-sig'))
+                if state.get(FIELD) != gate_policy: errors.append(eid+':前期审查策略与运行模板不同')
                 checked=coverage(state,template_root)
                 if checked['status']!='PREPRODUCTION_INPUTS_REVIEWED':
                     errors.append(eid+':最终输入语义审查未闭合:'+json.dumps(checked['errors'],ensure_ascii=False))

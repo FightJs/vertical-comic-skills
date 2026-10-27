@@ -579,7 +579,7 @@ def _episode_bundle(state, root, dependency_plan=None, *, panel_ids=None):
                      design_review_panel_ids=readiness['ready_for_review_ids'],blockers=readiness['blockers'],candidate_technical_errors=technical_errors)
     from issue_disposition import summarize
     local_issues={pid:[*readiness['blockers'].get(pid,[]),*technical_errors.get(pid,[])] for pid in order} if readiness else technical_errors
-    value['issue_disposition']=summarize(local_errors=local_issues,ready_ids=[r['panel_id'] for r in inputs])
+    value['issue_disposition']=summarize(local_errors=local_issues,notes=readiness.get('issue_disposition',{}).get('items',[]) if readiness else [],ready_ids=[r['panel_id'] for r in inputs])
     value['dispatch_authorized']=False
     if panel_ids is not None:
         value.update(requested_panel_ids=[pid for pid in order if pid in panel_ids], representative_only=True)
@@ -917,7 +917,7 @@ def prepare_review(state, root, queue):
         if speed:
             checkpoint(root/'00_输入审计/生产流程.json', 'repair', row['panel_id'], state=state)
             item['stage_budget'] = speed
-            item['review_form'] = 'single_observation' if speed['degraded'] else 'light_observations'
+            item['review_form'] = 'single_observation' if speed['degraded'] or state.get('repair_threshold_policy')=='essential_story_only_v1' else 'light_observations'
         if item["action"] not in {"REVIEW_SIX_DIMENSIONS", "REVIEW_STORY_ONCE"}:
             continue
         if row.get("qa_report"):
@@ -934,7 +934,7 @@ def prepare_review(state, root, queue):
             if light_enabled(state):
                 out.mkdir()
                 (out/"生成图QA报告.json").write_text(json.dumps({FIELD: LIGHT_POLICY, "status": "HOLD_UNREVIEWED",
-                    "source_manifest_sha256": row["package_manifest"]["sha256"], "panels": [light_template(row)]}, ensure_ascii=False), encoding="utf-8")
+                    "source_manifest_sha256": row["package_manifest"]["sha256"], "panels": [light_template(row,state)]}, ensure_ascii=False), encoding="utf-8")
             else:
               with redirect_stdout(io.StringIO()):
                 _main(["--package",str(package.parent),"--manifest",package.name,"--images",str(image.parent),

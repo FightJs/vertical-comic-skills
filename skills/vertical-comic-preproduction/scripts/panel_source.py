@@ -22,6 +22,13 @@ def shared_ref(library,value):
 def expand(value, library):
     if isinstance(value,dict):
         if set(value)=={'$shared'}: return copy.deepcopy(library[value['$shared']])
+        if set(value)=={'$shared','$overrides'}:
+            base=copy.deepcopy(library[value['$shared']]);patch=expand(value['$overrides'],library)
+            if not isinstance(base,dict) or not isinstance(patch,dict):raise ValueError('共用镜头模板及差异须为对象')
+            # Replace each explicit field in full, never merge old actors/actions
+            # into a new panel's lists. This is authoring reuse, not approval reuse.
+            base.update(patch)
+            return base
         return {k:expand(v,library) for k,v in value.items()}
     if isinstance(value,list): return [expand(v,library) for v in value]
     return copy.deepcopy(value)

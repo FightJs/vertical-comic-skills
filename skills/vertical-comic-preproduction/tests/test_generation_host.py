@@ -18,8 +18,8 @@ class HostTests(unittest.TestCase):
         self.f.setUp();self.addCleanup(self.f.doCleanups)
         bound=bind(self.f.package,self.f.base/'host-run')
         self.root=Path(bound['run_root'])/'E000'
-        self.state_path=self.root/'00_输入审计/生产流程.json';self.state=json.loads(self.state_path.read_text())
-    def write(self,path,value):path.write_text(json.dumps(value,ensure_ascii=False));return path
+        self.state_path=self.root/'00_输入审计/生产流程.json';self.state=json.loads(self.state_path.read_text(encoding='utf-8'))
+    def write(self,path,value):path.write_text(json.dumps(value,ensure_ascii=False), encoding='utf-8');return path
     def host(self,action,*args,ok=True):
         p=subprocess.run([sys.executable,'-X','utf8','-B',str(HOST),action,'--state',str(self.state_path),*map(str,args)],capture_output=True,text=True,encoding='utf-8')
         data=json.loads(p.stdout)
@@ -39,7 +39,7 @@ class HostTests(unittest.TestCase):
         raw=self.write(self.root/'return.json',{'image_url':'data:image/png;base64,'+base64.b64encode(stream.getvalue()).decode()})
         saved=self.host('save-return','--job',jp,'--raw-result',raw,'--call-locator','synthetic://call','--result-locator','synthetic://result')
         self.assertEqual(saved['visual_review'],'UNREVIEWED')
-        state=json.loads(self.state_path.read_text());self.assertEqual(state['panels'][0]['status'],'GENERATED')
+        state=json.loads(self.state_path.read_text(encoding='utf-8'));self.assertEqual(state['panels'][0]['status'],'GENERATED')
         again=self.host('save-return','--job',jp,'--raw-result',raw,'--call-locator','synthetic://call','--result-locator','synthetic://result')
         self.assertEqual(again['status'],'RETURN_ALREADY_SAVED')
         before=self.state_path.read_bytes()
@@ -47,7 +47,7 @@ class HostTests(unittest.TestCase):
         self.assertEqual(replay['image_calls'],0);self.assertEqual(replay['qa_status'],'HOLD_UNREVIEWED')
         self.assertEqual(before,self.state_path.read_bytes())
         q=self.host('prepare-qa','--panels','P001');item=next(i for i in q['items'] if i['panel_id']=='P001')
-        qa=json.loads((self.root/item['qa_template']['path']).read_text())
+        qa=json.loads((self.root/item['qa_template']['path']).read_text(encoding='utf-8'))
         self.assertEqual(qa['source_manifest_sha256'],state['panels'][0]['package_manifest']['sha256'])
         self.assertEqual(qa['status'],'HOLD_UNREVIEWED')
     def test_bad_audit_job_does_not_mark_inflight(self):
@@ -84,7 +84,7 @@ class WorkerTests(unittest.TestCase):
     write=HostTests.write
     host=HostTests.host
     def test_new_worker_reuses_verified_facts_and_keeps_source_state(self):
-        state=json.loads(self.state_path.read_text());state['runtime_pipeline_policy']='observed_incremental_pipeline_v1'
+        state=json.loads(self.state_path.read_text(encoding='utf-8'));state['runtime_pipeline_policy']='observed_incremental_pipeline_v1'
         self.write(self.state_path,state);before=self.state_path.read_bytes()
         lines='\n'.join(json.dumps({'request_id':i,'action':'compile','panels':['P001'],'record_timing':False}) for i in (1,2))+'\n'
         p=subprocess.run([sys.executable,'-X','utf8','-B',str(HOST),'serve','--state',str(self.state_path)],

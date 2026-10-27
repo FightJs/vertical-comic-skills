@@ -126,14 +126,64 @@ def previous_receipt(path,source):
             row['input_key']=None
     return value
 
+def receipt_pointer(source_path):
+    source_path=Path(source_path).resolve()
+    return source_path.parent/'.derivation-cache'/(fingerprint(str(source_path))+'.json')
+
+
+def resolve_previous(source_path, source, previous=None, output=None):
+    """Find only this authoring file's receipts; mtime selects, hashes validate reuse."""
+    if previous is not None:
+        return previous_receipt(previous,source), {'mode':'explicit','path':str(Path(previous).resolve())}
+    root=Path(source['run_root']).resolve();source_path=Path(source_path).resolve()
+    if not source_path.is_relative_to(root):
+        return None, {'mode':'external_source_no_automatic_reuse','path':None}
+    pointer=receipt_pointer(source_path);candidates=[];seen=set()
+    if pointer.is_file():
+        try:
+            item=read(pointer);target=Path(item['path']).resolve()
+            if item.get('source_path')==str(source_path) and target.is_relative_to(root) and file_hash(target)==item['sha256']:
+                candidates.append(target)
+        except (OSError,ValueError,KeyError,TypeError):pass
+    # Recovery for pre-index runs: bounded directory depth, never walk the whole RV.
+    parents={root/'04_B提示词包_CANDIDATE'}
+    if output is not None:
+        parent=Path(output).resolve().parent
+        if parent.is_relative_to(root):parents.add(parent)
+    def choices():
+        yield from candidates
+        yield from sorted({p for parent in parents if parent.is_dir() for p in parent.glob('*/派生记录.json')},
+                          key=lambda p:p.stat().st_mtime_ns,reverse=True)
+    for path in choices():
+        if path in seen:continue
+        seen.add(path)
+        try:
+            value=read(path)
+            if (not path.resolve().is_relative_to(root) or
+                Path(value.get('source_file',{}).get('path','')).resolve()!=source_path or
+                value.get('policy')!=POLICY or any(value.get(k)!=source[k] for k in ('book_id','episode_id'))):continue
+            if any(not Path(ref['path']).resolve().is_relative_to(root) for row in value.get('panels',[]) for ref in row.get('artifacts',[])):continue
+            return previous_receipt(path,source), {'mode':'automatic','path':str(path.resolve())}
+        except (OSError,ValueError,KeyError,TypeError):continue
+    return None, {'mode':'first_derivation','path':None}
+
+
+def remember_receipt(source_path,receipt_path):
+    from platform_io import atomic_json,file_lock
+    pointer=receipt_pointer(source_path);pointer.parent.mkdir(parents=True,exist_ok=True)
+    with file_lock(pointer.with_suffix('.lock')):
+        atomic_json(pointer,{'source_path':str(Path(source_path).resolve()),
+            'path':str(Path(receipt_path).resolve()),'sha256':file_hash(receipt_path)})
+
+
 def plan(source_path,previous=None):
-    source=read(source_path);index=build_index(source);old=previous_receipt(previous,source)
-    return {**index,'impact':affected(old,index),'status':'DRAFT_PLAN_ONLY',
+    source=read(source_path);index=build_index(source);old,resolution=resolve_previous(source_path,source,previous)
+    return {**index,'impact':affected(old,index),'previous_derivation':resolution,'status':'DRAFT_PLAN_ONLY',
             'errors':{p['panel_id']:p['dependency_error'] for p in index['panels'] if p.get('dependency_error')}}
 
 def derive(source_path,output,previous=None):
     started=time.monotonic();source=read(source_path);source_hash=file_hash(source_path)
-    index=build_index(source);old=previous_receipt(previous,source);impact=affected(old,index)
+    index=build_index(source);old,resolution=resolve_previous(source_path,source,previous,output);impact=affected(old,index)
     old_rows={p['panel_id']:p for p in (old or {}).get('panels',[])}
     changed=set(impact['affected_panel_ids']);output=Path(output).resolve()
     if output.exists(): raise ValueError('派生输出必须是新目录；不覆盖草稿或批准版本')
@@ -194,12 +244,15 @@ def derive(source_path,output,previous=None):
     write_new(output/'审查展示.json',{'book_id':source['book_id'],'episode_id':source['episode_id'],
                                    'panels':[{'panel_id':r['panel_id'],'artifacts':r['artifacts'],'pending':r.get('pending',False)} for r in results],
                                    'status':'DRAFT_NOT_REVIEWED','dispatch_authorized':False})
-    receipt={**index,'panels':results,'impact':impact,'source_file':{'path':str(Path(source_path).resolve()),'sha256':source_hash},
+    receipt={**index,'panels':results,'impact':impact,'previous_derivation':resolution,'source_file':{'path':str(Path(source_path).resolve()),'sha256':source_hash},
              'status':'DRAFT_PARTIAL' if blocked else 'DRAFT_MATERIALIZED_NOT_APPROVED',
              'pending_panel_ids':[pid for pid in source['panel_ids'] if pid in blocked],'errors':failures,
              'metrics':{'compiled_panels':new_count,'reused_panels':reuse_count,'elapsed_seconds':time.monotonic()-started},
              'next':'核对新镜头与实际输入，更新准确引用，按原候选/语义/批准入口完成实际审查；不要因DRAFT成功跳过门禁'}
     write_new(output/'派生记录.json',receipt)
+    if Path(source_path).resolve().is_relative_to(Path(source['run_root']).resolve()):
+        try:remember_receipt(source_path,output/'派生记录.json')
+        except OSError as exc:receipt['reuse_index_warning']=str(exc)
     return receipt
 
 def main():

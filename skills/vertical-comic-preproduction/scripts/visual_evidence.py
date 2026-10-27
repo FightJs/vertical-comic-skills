@@ -86,10 +86,12 @@ def background_binding_errors(state, *documents):
 
 
 def background_config_errors(value):
-    if not isinstance(value, dict) or value != {
-            'policy': BACKGROUND_POLICY, 'selection': 'content_driven',
-            'closeup_preference': 'scene_flat'}:
-        return ['背景配置须为narrative_background_v1/content_driven/scene_flat']
+    if (not isinstance(value, dict)
+            or set(value) != {'policy', 'selection', 'closeup_preference'}
+            or value.get('policy') != BACKGROUND_POLICY
+            or value.get('selection') != 'content_driven'
+            or value.get('closeup_preference') not in {'scene_softened', 'scene_flat'}):
+        return ['背景配置须为narrative_background_v1/content_driven，近景偏好scene_softened（兼容旧scene_flat）']
     return []
 
 
@@ -162,7 +164,7 @@ def background_execution_lines(panel, context=None):
     wording = {
         'clear_limited': '必要实景：保留本格需要的场景结构与清楚轮廓，无关细节按省略清单处理。',
         'scene_flat': '同色留白：成图采用人物漫画＋场景同色平涂底。人物外轮廓到画幅边界之间的留白区域是一整片均匀实色，仅在下列保留项所在局部绘必要实体；其余区域不重建房间透视或任何未保留的物件轮廓，不用渐变、散景或纹理填充。',
-        'scene_softened': '实景柔化：保留必要结构的位置、轮廓与遮挡，以二维大色块降低后景纹理、边缘和对比；不使用摄影散景或光斑。',
+        'scene_softened': '实景柔化：人物身后仍保留本机位实际可见的场景大轮廓、墙面分区及必要结构，位置与遮挡服从批准参考。以二维低对比色块、简洁轮廓和柔和边缘概括背景，减少材质纹理与小装饰；仍能辨识所在场景，不抹成纯色或无结构渐变。不得为填满背景加入出画物件，不使用摄影散景或新光斑。保持原光向、冷暖、曝光和人物受光，不新增轮廓光；柔化仅作用于背景，人物、手部及接触对象保持清楚。',
         'scene_outline': '轮廓概括：次要对象使用低对比色块和简洁实体轮廓，保持必要数量、位置与遮挡；不得把真实人物画成墙面投影。',
         'approved_depth_of_field': '特殊景深仅执行本格批准设计。',
     }
@@ -173,6 +175,8 @@ def background_execution_lines(panel, context=None):
         '重点清晰：' + '；'.join(plan['sharp_focus']) + '；人物轮廓、服装配饰、手部和动作对象不得因背景处理一起变软。',
         '场景参考职责：提供批准布局、环境色、光向及必要空间关系；宽景、材质与全套陈设不要求完整迁移到本格。',
         '省略仅改变绘制信息量，世界位置、人物在场状态、承托、接触、遮挡和剧情线索保持本格批准依据；不添加新灯具或装饰。']
+    if mode == 'scene_softened':
+        lines.append('相邻镜头沿用同一空间依据；换机位只改变投影和可见范围。保留项是最低必显要求，不是把其余背景清空的清单；无专门保留项时仍概括参考中本机位可见的环境，不凭空补造结构。')
     if mode == 'scene_flat':
         permitted = '；'.join(r['expected'] for r in plan['retain'])
         lines.insert(1, '最终背景绘制范围：' + (permitted if permitted else '没有需要绘出的环境实体或结构线，人物身后完整使用同色实色底') + '。')

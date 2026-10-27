@@ -219,6 +219,15 @@ class BackgroundPolicyTests(unittest.TestCase):
         gate.check_shots({'panels':[p]})
         self.assertTrue(any('BACKGROUND_HOLD' in e for e in gate.errors))
 
+    def test_softened_default_and_explicit_legacy_preference_are_accepted(self):
+        config=json.loads((BASE/'assets/templates/默认使用配置.json').read_text(encoding='utf-8'))
+        self.assertEqual(config['background']['closeup_preference'], 'scene_softened')
+        self.assertEqual(background_config_errors(config['background']), [])
+        legacy=dict(config['background'], closeup_preference='scene_flat')
+        self.assertEqual(background_config_errors(legacy), [])
+        self.assertTrue(background_config_errors(dict(legacy, closeup_preference='unknown')))
+        self.assertTrue(background_config_errors(dict(legacy, extra=True)))
+
     def test_bad_config_is_rejected(self):
         for v in ({},None,{'policy':BACKGROUND_POLICY,'selection':'all_flat','closeup_preference':'scene_flat'}):
             self.assertTrue(background_config_errors(v))

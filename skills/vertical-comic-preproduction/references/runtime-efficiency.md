@@ -1,5 +1,9 @@
 # 整话增量运行
 
+新运行的主表、增量派生、共用规则/图集复用与少冻结执行见[第二批草稿提速](draft-authoring.md)。派生文件不授予批准或生产权限。
+
+新运行优先按[第一批前期提速](preparation-efficiency.md)执行最小充分设计、代表格接线、单次B/包展示及问题分级处理。可选润饰不产生HOLD；真实缺口在现有委托内修复，局部问题只影响真实依赖，其他工作继续。正式输入与接包要求仍按原合同。
+
 新运行统一按[第一批生产决定](production-decisions.md)衔接审核、返修与交付：真实FAIL不改写，处理动作与交付结论分别记录；旧冻结合同不迁移。下文审核方法、源稿/批准/证据要求仍适用。
 
 当前新任务使用incremental_runtime_v2和[整话异步](episode-async.md)，没有固定半话C。旧incremental_runtime_v1恢复才读[旧半话运行](runtime-half-legacy.md)。

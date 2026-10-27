@@ -123,6 +123,62 @@ def preparation_report(state, root):
     return value
 
 
+def preparation_plan(state, root):
+    """Select source-ordered examples; suggestions never stand in for actual review."""
+    import re
+    from task_context import state_errors
+    errors=state_errors(state,root)
+    if errors: raise ValueError(';'.join(errors))
+    source=read_json(checked_file(Path(root),state['source_snapshot']))
+    order=source['panel_ids']
+    manifest=read_json(checked_file(Path(root),state['shot_manifest'])) if state.get('shot_manifest') else {}
+    if manifest and (manifest.get('book_id')!=state['book_id'] or manifest.get('episode_id')!=state['episode_id']):
+        raise ValueError('镜头书话归属不符')
+    shots={row['panel_id']:row for row in manifest.get('panels',[])}
+    patterns={'contact':r'接触|搂|抱|握|扶|床|承托', 'injury':r'伤|骨折|绷带',
+              'weapon':r'武器|持刀|持枪|挥剑', 'reflection':r'镜面|镜中|倒影',
+              'creature_state':r'鳄鱼|兽形|变身', 'accessory':r'耳饰|耳环|发饰|手镯|佩戴侧'}
+    rows=[]
+    for pid in order:
+        shot=shots.get(pid,{})
+        text=json.dumps(source['locked_scripts'][pid],ensure_ascii=False)
+        risks={key for key,pattern in patterns.items() if re.search(pattern,text)}
+        risks.update('constraint:'+str(r.get('kind','unknown')) for r in shot.get('production_risks',[]) if isinstance(r,dict))
+        if shot.get('generation_dependencies'): risks.add('actual_image_dependency')
+        rows.append({'panel_id':pid,'risk_hints':sorted(risks),
+                     'design_depth':'FOCUSED_REVIEW' if risks else 'MINIMUM_SUFFICIENT',
+                     'review_required':True})
+    selected=set(); remaining=set(r for row in rows for r in row['risk_hints'])
+    while remaining:
+        best=max(rows,key=lambda row:len(set(row['risk_hints']) & remaining))
+        selected.add(best['panel_id']); remaining.difference_update(best['risk_hints'])
+    ordinary=next((row['panel_id'] for row in rows if not row['risk_hints']),None)
+    if ordinary: selected.add(ordinary)
+    return {'policy':'preparation_sample_plan_v1','book_id':state['book_id'],'episode_id':state['episode_id'],
+            'source_snapshot':state['source_snapshot'],'panel_ids':order,'panels':rows,
+            'representative_panel_ids':[pid for pid in order if pid in selected],
+            'risk_hints_only':True,'dispatch_authorized':False,'image_calls':0,
+            'next':'执行者实际语义核对可补充风险；先对代表格准备候选并运行preparation-review --panels，再批量制作；选集通过不代表全话通过'}
+
+
+def preparation_review(state, root, dependency_plan=None, panel_ids=None):
+    """Build one real candidate input set, then derive both review views."""
+    from panel_readiness import review_context
+    with file_session(), review_context(state,root,True):
+        package=_episode_bundle(state,root,dependency_plan,panel_ids=panel_ids)
+        manifest=read_json(checked_file(Path(root),state['shot_manifest']))
+        scoped=package.get('approval_panel_ids', [r['panel_id'] for r in package['inputs']])
+        wanted=set(panel_ids) if panel_ids is not None else set(package['panel_ids'])
+        return {'policy':'combined_preparation_review_v1','book_id':state['book_id'],'episode_id':state['episode_id'],
+                'source_snapshot':state['source_snapshot'],'shot_manifest':state['shot_manifest'],
+                'shot_design':{'panels':[p for p in manifest['panels'] if p['panel_id'] in wanted],
+                               'review_panel_ids':[pid for pid in package.get('design_review_panel_ids',scoped) if pid in wanted]},
+                'generation_package':package,'issue_disposition':package.get('issue_disposition'),
+                'separate_decisions_required':['shot_design','generation_package'],
+                'dispatch_authorized':False,'image_calls':0,'status':'CANDIDATE',
+                'next':'按有效委托内部审查并分别登记B与PACKAGE；有缺口先修准确范围，不重复编译同一输入'}
+
+
 def receiver_audit(state, root, h001_ids, all_ids):
     """Run three original scopes in one read transaction; never derive H001 by slicing."""
     import time
@@ -335,13 +391,13 @@ def review_bundle(state, root, compiled, dependency_plan=None):
     return value
 
 
-def episode_bundle(state, root, dependency_plan=None):
+def episode_bundle(state, root, dependency_plan=None, *, panel_ids=None):
     from panel_readiness import review_context
     with file_session(), review_context(state, root, True):
-        return _episode_bundle(state, root, dependency_plan)
+        return _episode_bundle(state, root, dependency_plan, panel_ids=panel_ids)
 
 
-def _episode_bundle(state, root, dependency_plan=None):
+def _episode_bundle(state, root, dependency_plan=None, *, panel_ids=None):
     """Freeze one complete episode candidate before either production half starts."""
     from scoped_inputs import full_preparation, validate_shots, approval_for
     from execution_contract import state_errors, semantic_errors
@@ -367,11 +423,15 @@ def _episode_bundle(state, root, dependency_plan=None):
     approved_hashes={r['sha256'] for r in basis['reference_files']}
     style_hashes=set(basis.get('style',{}).get('reference_sha256',[]))
     shots=read_json(checked_file(Path(root),state['shot_manifest']))
-    readiness=readiness_report(state,root) if scoped_preparation(state) else None
+    readiness=readiness_report(state,root,include_execution=False) if scoped_preparation(state) else None
     if readiness and readiness['global_errors']:raise ValueError(';'.join(readiness['global_errors']))
     blocked=set(readiness['blocked_panel_ids']) if readiness else set()
     reviewable=set(readiness['ready_for_review_ids']) if readiness else set(order)
     selected=[p for p in order if p not in blocked or p in reviewable and next(s for s in shots['panels'] if s['panel_id']==p).get('generation_dependencies')]
+    if panel_ids is not None:
+        if not panel_ids or len(set(panel_ids))!=len(panel_ids) or not set(panel_ids)<=set(order):
+            raise ValueError('候选选集须非空、不重复且属于准确源序')
+        selected=[pid for pid in selected if pid in panel_ids]
     errors=memory_binding_errors(state,shots=shots)
     if errors:raise ValueError(';'.join(errors))
     validate_shots(state,source,{'batch_id':'EPISODE','panel_ids':order},shots,blocked)
@@ -460,13 +520,20 @@ def _episode_bundle(state, root, dependency_plan=None):
     from input_semantics import enabled as semantics_enabled, coverage as semantic_coverage
     if semantics_enabled(state):
         value['input_semantics_policy'] = state['input_semantics_policy']
-        value['final_input_semantics'] = semantic_coverage(state, root, dependency_plan)
+        value['final_input_semantics'] = semantic_coverage(state, root, dependency_plan) if panel_ids is None else {
+            'status':'FULL_SCOPE_NOT_EVALUATED','requested_panel_ids':panel_ids,'dispatch_authorized':False}
         value['semantic_audit'] = state['semantic_audit']
     if readiness:
         approved_ids={r['panel_id'] for r in inputs}|deferred
         value.update(readiness_policy=state['readiness_policy'],coverage='complete' if len(approved_ids)==len(order) else 'partial',
                      approval_panel_ids=[p for p in order if p in approved_ids],pending_panel_ids=[p for p in order if p not in approved_ids],
                      design_review_panel_ids=readiness['ready_for_review_ids'],blockers=readiness['blockers'],candidate_technical_errors=technical_errors)
+    from issue_disposition import summarize
+    local_issues={pid:[*readiness['blockers'].get(pid,[]),*technical_errors.get(pid,[])] for pid in order} if readiness else technical_errors
+    value['issue_disposition']=summarize(local_errors=local_issues,ready_ids=[r['panel_id'] for r in inputs])
+    value['dispatch_authorized']=False
+    if panel_ids is not None:
+        value.update(requested_panel_ids=[pid for pid in order if pid in panel_ids], representative_only=True)
     value['preparation_check_elapsed_seconds']=round(time.monotonic()-started,4)
     return value
 
@@ -486,6 +553,9 @@ def commit_updates(state_path, expected_sha256, updates, *, resolution_ref=None)
     }
     if not isinstance(updates,list) or not updates or len({u.get("panel_id") for u in updates}) != len(updates):
         raise ValueError("updates须明确不重复格号")
+    if any(u.get('status') == 'IN_FLIGHT' for u in updates):
+        from runtime_clock import require_running
+        require_running(state_path)
     with state_write_lock(state_path):
         state = read_json(state_path); require_legacy(state)
         operation = None
@@ -723,7 +793,7 @@ def prepare_review(state, root, queue):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--state", required=True)
-    parser.add_argument("--action", choices=("readiness", "preflight", "compile", "audit-inputs", "receiver-audit", "review", "checkpoint", "bundle", "commit", "repair-authorize", "diagnosis-record", "watch-progress", "watch-check", "watch-ack", "repair-plan", "decisions-register", "delivery-review", "production-questions"), required=True)
+    parser.add_argument("--action", choices=("authoring-import", "draft-plan", "draft-derive", "draft-atlas", "preparation-plan", "preparation-review", "readiness", "preflight", "compile", "audit-inputs", "receiver-audit", "review", "checkpoint", "bundle", "commit", "repair-authorize", "diagnosis-record", "watch-progress", "watch-check", "watch-ack", "repair-plan", "decisions-register", "delivery-review", "production-questions"), required=True)
     parser.add_argument("--panels", nargs="*")
     parser.add_argument("--h001-panels", nargs="+", help="合并接包审计的准确首半话范围")
     parser.add_argument("--display-progress-dir", help="派生显示目录；仅保存现有检查结果，不新增门禁")
@@ -743,9 +813,17 @@ def main():
     parser.add_argument("--watch-event", help="watch-progress的实际事件JSON")
     parser.add_argument("--watch-alert-ids", help="watch-ack已送达事件ID数组JSON")
     parser.add_argument("--independent-work-pending", action="store_true", help="仍有可独立推进的实际工作")
+    parser.add_argument("--panel-source", help="本话唯一创作主表JSON")
+    parser.add_argument("--previous-derivation", help="上次草稿派生记录；只复用文件，不复用PASS")
+    parser.add_argument("--derivation-output", help="派生草稿全新输出目录")
+    parser.add_argument("--atlas-spec", help="明确来源裁区/人物/职责的图集JSON")
+    parser.add_argument("--atlas-cache", help="图集技术派生复用目录")
+    parser.add_argument("--package-write", help="preparation-review同时保存原格式嵌套包；不重复编译")
     parser.add_argument("--write", help="可选新报告文件；不覆盖、不更改生产流程")
     args = parser.parse_args()
     try:
+        if args.package_write and args.action!='preparation-review':
+            raise ValueError('--package-write仅用于preparation-review')
         path = Path(args.state).resolve(); root = path.parent.parent
         state = read_json(path)
         if "runtime" in state:
@@ -802,12 +880,48 @@ def main():
             if not args.diagnosis or not args.expected_state_sha256:raise ValueError('缺少共因诊断文件或CAS哈希')
             value=record_episode_diagnosis(path,args.expected_state_sha256,args.diagnosis)
             print(json.dumps(value,ensure_ascii=False));return 0
+        if args.action in {'draft-derive','draft-atlas'}:
+            # Draft/cache writes have their own dependency recheck, outside read transactions.
+            if args.action=='draft-derive':
+                from panel_source import read as read_source
+                from panel_derivation import derive
+                if not args.panel_source or not args.derivation_output: raise ValueError('缺--panel-source/--derivation-output')
+                authoring=read_source(args.panel_source)
+                if any(authoring.get(k)!=state[k] for k in ('book_id','episode_id')) or Path(authoring['run_root']).resolve()!=root:
+                    raise ValueError('主表必须绑定本话工作目录')
+                output=Path(args.derivation_output).resolve();output.relative_to(root)
+                value=derive(args.panel_source,output,args.previous_derivation)
+            else:
+                from reference_atlas import cached_lossless_atlas
+                if not args.atlas_spec or not args.atlas_cache: raise ValueError('缺--atlas-spec/--atlas-cache')
+                value=cached_lossless_atlas(read_json(Path(args.atlas_spec)),args.atlas_cache,root)
+            if args.write:
+                from panel_source import write_new
+                dest=Path(args.write).resolve();dest.relative_to(root);write_new(dest,value)
+            print(json.dumps(value,ensure_ascii=False))
+            return 1 if value.get('errors') or value.get('pending_panel_ids') else 0
         from audit_progress import session as progress_session
         if args.candidate and args.action in {'audit-inputs','receiver-audit'}:
             raise ValueError('接包输入审计不得使用candidate')
         with progress_session(state.get('episode_id'),enabled=args.progress),file_session():
             if read_json(path)!=state:raise ValueError('CHECK_SNAPSHOT_CHANGED: 生产状态在审计开始前变化')
-            if args.action=='readiness':
+            if args.action=='authoring-import':
+                from panel_source import import_state
+                value=import_state(path)
+            elif args.action=='draft-plan':
+                from panel_source import read as read_source
+                from panel_derivation import plan as draft_plan
+                if not args.panel_source: raise ValueError('缺--panel-source')
+                authoring=read_source(args.panel_source)
+                if any(authoring.get(k)!=state[k] for k in ('book_id','episode_id')) or Path(authoring['run_root']).resolve()!=root:
+                    raise ValueError('主表必须绑定本话工作目录')
+                value=draft_plan(args.panel_source,args.previous_derivation)
+            elif args.action=='preparation-plan':
+                value=preparation_plan(state,root)
+            elif args.action=='preparation-review':
+                dependency_plan={"path":args.dependency_plan,"sha256":digest(root/args.dependency_plan)} if args.dependency_plan else None
+                value=preparation_review(state,root,dependency_plan,args.panels)
+            elif args.action=='readiness':
                 value=preparation_report(state,root)
             elif args.action=='receiver-audit':
                 value=receiver_audit(state,root,args.h001_panels,args.panels)
@@ -843,6 +957,11 @@ def main():
             dest.parent.mkdir(parents=True, exist_ok=True)
             with dest.open("x", encoding="utf-8", newline='\n') as f:
                 json.dump(value, f, ensure_ascii=False, indent=2); f.write("\n")
+        if args.package_write:
+            dest=Path(args.package_write).resolve(); dest.relative_to(root)
+            dest.parent.mkdir(parents=True,exist_ok=True)
+            with dest.open('x',encoding='utf-8',newline='\n') as f:
+                json.dump(value['generation_package'],f,ensure_ascii=False,indent=2); f.write('\n')
         if args.display_progress_dir:
             from production_progress import observe_runtime
             try: observe_runtime(args.display_progress_dir,path,args.action,value,expected_state=state)

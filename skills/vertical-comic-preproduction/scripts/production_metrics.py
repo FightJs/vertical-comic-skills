@@ -147,9 +147,52 @@ def build(state_paths,*,native_events=None,verify_images=False,capacity=None):
             'note':'决定数不是实际提问/调用数，采用问题统计不代表最终交付门禁通过；缺事件数据不填0'},
         'warnings':warnings,'limitations':'状态比率为登记口径，历史未保留的调用和失败不可补造；verify-images仅核验原图格式和哈希，不授予视觉通过。'}
 
+def draft_metrics(paths, atlas_paths=None):
+    """Read explicit actual receipts only, no periodic scanning or inferred timing."""
+    if not paths and not atlas_paths: return None
+    receipts={};warnings=[]
+    for path in paths or []:
+        try:
+            value=json.loads(Path(path).read_text(encoding='utf-8-sig'))
+            if value.get('policy')!='panel_derivation_v1': raise ValueError('非草稿派生记录')
+            key=hashlib.sha256(json.dumps(value,sort_keys=True,ensure_ascii=False).encode()).hexdigest()
+            receipts[key]=value
+        except (OSError,ValueError,TypeError) as exc: warnings.append(str(path)+':'+str(exc))
+    compiled=reused=repeat=0;seen=set();elapsed=[]
+    for value in receipts.values():
+        for row in value.get('panels',[]):
+            if row.get('error'): continue
+            if row.get('reused'): reused+=1
+            elif row.get('artifacts'):
+                compiled+=1;token=(value['book_id'],value['episode_id'],row['panel_id'],row['input_key'])
+                if token in seen: repeat+=1
+                seen.add(token)
+        timing=value.get('metrics',{}).get('elapsed_seconds')
+        if isinstance(timing,(int,float)): elapsed.append(timing)
+    atlas={}
+    for path in atlas_paths or []:
+        try:
+            value=json.loads(Path(path).read_text(encoding='utf-8-sig'))
+            if value.get('derivation_policy')!='faithful_atlas_v1' or type(value.get('cache_reused')) is not bool or not value.get('observation_id'):
+                raise ValueError('非实际图集操作回执')
+            atlas[value['observation_id']]=value
+        except (OSError,ValueError,TypeError) as exc: warnings.append(str(path)+':'+str(exc))
+    return {'receipt_samples':len(receipts),'compiled_panels':compiled if receipts else None,'reused_panels':reused if receipts else None,
+            'repeated_compilations_same_input':repeat if receipts else None,'observed_derivation_seconds_sum_not_wall_time':sum(elapsed) if elapsed else None,
+            'warnings':warnings,'review_reuse_count':None,
+            'atlas_created_count':sum(not r['cache_reused'] for r in atlas.values()) if atlas else None,
+            'atlas_reuse_count':sum(r['cache_reused'] for r in atlas.values()) if atlas else None,
+            'note':'只统计提供的实际派生记录；不推算未记录的设计/审核/服务耗时，不代表生图提速'}
+
+
 def main():
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--state',action='append',required=True);p.add_argument('--native-events');p.add_argument('--verify-images',action='store_true');p.add_argument('--capacity',type=int);a=p.parse_args()
-    print(json.dumps(build(a.state,native_events=a.native_events,verify_images=a.verify_images,capacity=a.capacity),ensure_ascii=False,indent=2))
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--state',action='append',required=True);p.add_argument('--native-events');p.add_argument('--verify-images',action='store_true');p.add_argument('--capacity',type=int);p.add_argument('--draft-receipt',action='append');p.add_argument('--atlas-receipt',action='append');a=p.parse_args()
+    value=build(a.state,native_events=a.native_events,verify_images=a.verify_images,capacity=a.capacity)
+    value['draft_preparation']=draft_metrics(a.draft_receipt,a.atlas_receipt)
+    from runtime_clock import locate, status as clock_status
+    clocks = {locate(path) for path in a.state} - {None}
+    value['task_runtime_clocks'] = [dict(directory=str(d), **clock_status(d)) for d in sorted(clocks)]
+    print(json.dumps(value,ensure_ascii=False,indent=2))
 if __name__=='__main__':
     from platform_io import configure_stdio
     configure_stdio()

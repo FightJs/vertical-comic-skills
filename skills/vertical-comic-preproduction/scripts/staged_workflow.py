@@ -374,6 +374,8 @@ def evaluate(state, root, check="status", requested=None):
         else:
             # A gate's HOLD alone never proves the image is visually defective.
             result['failure_domain']='SEE_EXACT_GATE_AND_IMAGE_QA' if result.get('errors') else None
+        from issue_disposition import gate_disposition
+        result['issue_disposition'] = gate_disposition(result)
         result['file_reuse_statistics'] = {k: memo[k] for k in ('hash_reads', 'hash_hits')}
         return result
 

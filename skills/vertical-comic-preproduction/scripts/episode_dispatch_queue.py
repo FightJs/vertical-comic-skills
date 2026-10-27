@@ -156,6 +156,8 @@ def _prepare(state_reference, state_path, control_reference, control_path, conte
 
 
 def _commit(prepared, state_path, control_path, context, expected_state_sha256, metrics, *, request_id=None):
+    from runtime_clock import require_running
+    require_running(state_path)
     state, control, job = (prepared[k] for k in ('state', 'control', 'job'))
     selected, packets, lease_mode, ready_observed = (prepared[k] for k in ('selected', 'packets', 'lease_mode', 'ready_observed'))
     root = state_path.parent.parent
@@ -222,6 +224,8 @@ def reserve_ready(state_path, expected_state_sha256, expected_control_sha256, ma
     if _FILE_SESSION.get() is not None:
         raise ValueError('RESERVATION_REQUIRES_OWN_TRANSACTION')
 
+    from runtime_clock import require_running
+    require_running(state_path)
     state_reference = Path(state_path).absolute()
     state_path = state_reference.resolve()
     if not state_path.is_file() or not expected_state_sha256 or not expected_control_sha256:
@@ -245,6 +249,7 @@ def reserve_ready(state_path, expected_state_sha256, expected_control_sha256, ma
             prepared = _prepare(state_reference, state_path, control_reference, control_path, context,
                                 expected_state_sha256, expected_control_sha256, max_count, metrics)
         if not prepared.get('prepared'): return prepared
+        require_running(state_path)
         return _commit(prepared, state_path, control_path, context, expected_state_sha256, metrics)
 
 

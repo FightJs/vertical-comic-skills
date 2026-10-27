@@ -5,6 +5,10 @@ description: Design approved-script-driven per-panel shots, crop and physical co
 
 # 条漫镜头与空间设计
 
+新运行代表格接口稳定后，按[唯一主表与增量派生](../vertical-comic-preproduction/references/draft-authoring.md)维护创作输入，镜头/实际prompt/展示自动派生，只处理变化及真实依赖；工作草稿不反复冻结，正式调用与交接才绑定准确版本。
+
+前期以[最小充分与集中收敛](../vertical-comic-preproduction/references/preparation-efficiency.md)为执行标准：普通格不反复润饰，先打通代表格，再用一次实际输入形成B/包合并审查；普通建议记录继续，技术问题在现有授权内修复，局部缺口不停止其他工作。
+
 所有阶段启动与恢复即执行[阶段与交付进度](../vertical-comic-preproduction/references/review-progress.md)：总控汇报阶段、到本职责ZIP的百分比、进行事项、阻塞与下一步；正常制作每10分钟、仅服务等待每15分钟，重要变化立即报。显示独立于人工停点和少询问委托，子agent上报事实由总控合并；不为通知重跑检查、取消在途请求或改预算。阶段进度只能中途汇报；任务未完成且仍有可执行工作或子agent运行时，总控继续推进/等待并收敛产物，不能发送最终答复结束轮次，详见上述进度规则的“总控持续执行与子任务收敛”。
 
 用户后续明确取消当前人工停点时，按[最新委托更新规则](../vertical-comic-preproduction/references/grouped-review.md#后续指令取消人工停点)更新当前运行授权；整体A也可由执行者内部审查，通过即继续，不因最初保留亲审而再次等待。

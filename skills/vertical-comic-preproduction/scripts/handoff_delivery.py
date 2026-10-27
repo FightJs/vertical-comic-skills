@@ -124,14 +124,18 @@ def bind(package_root,run_root):
             state_file=inside(episode_root,plan['state_file']);state_file.write_text(json.dumps(state,ensure_ascii=False,indent=2)+'\n', encoding='utf-8', newline='\n')
             evidence={'policy':'runtime_only_relocation_v1','package_id':index['package_id'],'episode_id':e['episode_id'],
                       'template_state_sha256':old_sha,'local_state_sha256':sha(state_file),'changed_fields':['runtime_snapshot','toolchain','memory_source'],
-                      'creative_files_unchanged':True,'approval_rewritten':False,'budget_reset':False}
+                      'creative_files_unchanged':True,'approval_rewritten':False,'budget_reset':False,
+                      'input_mode':'package_only_production','external_inputs_required':False,
+                      'usage_config_path_role':'historical_origin_only_not_receiver_configuration'}
             proof=episode_root/'接包路径绑定.json';write(proof,evidence)
             runs.append({'episode_id':e['episode_id'],'state':state_file.relative_to(run_root).as_posix(),
                          'binding_evidence':{'path':proof.relative_to(run_root).as_posix(),'sha256':sha(proof)}})
         dest=run_root/'本地绑定索引.json';write(dest,{'package_id':index['package_id'],'episodes':runs})
     except Exception:
         shutil.rmtree(run_root);raise
-    return {'status':'LOCAL_RUN_BOUND_NOT_IMAGE_AUTHORIZATION','run_root':str(run_root),'run_index':str(dest),'image_calls':0}
+    return {'status':'LOCAL_RUN_BOUND_NOT_IMAGE_AUTHORIZATION','input_mode':'package_only_production',
+            'external_inputs_required':False,'book_profile_required':False,
+            'run_root':str(run_root),'run_index':str(dest),'image_calls':0}
 
 
 def input_review(root,index):

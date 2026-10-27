@@ -331,10 +331,16 @@ def show(directory, *, now=None, acknowledge=False, force=False):
     if not force and not due(snapshot,cursor,now=now,config=task['settings']): return {'status':'NOT_DUE'}
     if acknowledge:
         atomic_json(path, {'sent_at':now,'event':fingerprint([snapshot['stage'],snapshot['blockers'],snapshot['percent']==100,snapshot['wait_kind']])})
-    return {'status':'REPORT_DUE','message':format_summary(snapshot),'percent':snapshot['percent']}
+    from runtime_clock import locate, status as clock_status
+    clock_dir = locate(directory)
+    clock = clock_status(clock_dir) if clock_dir else None
+    message = format_summary(snapshot)
+    if clock:
+        message += f"\n运行计时：{clock['state']}，累计{clock['active_seconds']}秒，剩余{clock['remaining_seconds']}秒"
+    return {'status':'REPORT_DUE','message':message,'percent':snapshot['percent'],'runtime_clock':clock}
 
 
-def complete(directory, archive, *, _coordination_checked=False):
+def complete(directory, archive, *, _coordination_checked=False, transport_receipt=None):
     """Explicit final check once, never from a heartbeat. No permission is granted."""
     import zipfile
     directory = Path(directory)
@@ -383,11 +389,20 @@ def complete(directory, archive, *, _coordination_checked=False):
                     data = z.read((Path(name).parent/relative).as_posix())
                     if hashlib.sha256(data).hexdigest()!=row.get('image',{}).get('sha256') or ref.get('sha256')!=row['image']['sha256']: raise ValueError('ZIP缺采用原图或哈希错误')
                 observe_runtime(directory,sp,'deliver',result)
+    transport_files=[]
+    if transport_receipt:
+        from handoff_transport import check_receipt
+        transport_files=check_receipt(transport_receipt,archive)
     baseline = refresh(directory)
+    baseline['files'].update({p:stat(p) for p in transport_files})
     atomic_json(directory/'delivered.json', {'zip':str(archive),'stat':stat(archive),
                 'dependencies':baseline['files'],'states':{p:fingerprint(read(p)) for p in task['states']}})
     result = refresh(directory,activity='完整ZIP已验证并形成交付',next_action='交付用户')
     if result['percent']!=100: raise ValueError('ZIP已记录，但前序阶段证据尚未闭合；保持未完成百分比')
+    from runtime_clock import locate, event as clock_event
+    clock_dir=locate(directory)
+    if clock_dir:
+        clock_event(clock_dir,'finish','validated-delivery-finished')
     return result
 
 
@@ -401,10 +416,11 @@ def main():
     p.add_argument('--stage',choices=tuple(LABELS)); p.add_argument('--blockers',help='准确额外阻塞的JSON数组文件；仅显示，不改变原HOLD')
     p.add_argument('--activity'); p.add_argument('--next'); p.add_argument('--wait-kind',choices=('NONE','SERVICE','DEPENDENCY','HUMAN','ENDED'),default='NONE')
     p.add_argument('--ack',action='store_true',help='仅在总控实际发出消息后确认送达'); p.add_argument('--force',action='store_true'); p.add_argument('--zip')
+    p.add_argument('--transport-receipt',help='export生成的运输验证.json；交付微信运输包时必须提供')
     a = p.parse_args()
     if a.action=='init': value = initialize(a.directory,a.role,a.state or [])
     elif a.action=='refresh': value = refresh(a.directory,activity=a.activity,next_action=a.next,wait_kind=a.wait_kind,stage=a.stage,blockers=read(a.blockers) if a.blockers else None)
-    elif a.action=='complete': value = complete(a.directory,a.zip)
+    elif a.action=='complete': value = complete(a.directory,a.zip,transport_receipt=a.transport_receipt)
     else: value = show(a.directory,acknowledge=a.ack,force=a.force)
     print(json.dumps(value,ensure_ascii=False,indent=2))
 

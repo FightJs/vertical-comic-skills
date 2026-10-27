@@ -5,6 +5,14 @@ description: Coordinate first-batch per-panel comic production for further human
 
 # 条漫第一批逐格图片生产总控
 
+**接包优先**：用户提供正式ZIP或完整解压包根目录时，直接执行[免外部配置接包](references/quick-start.md#接包生产免外部配置)，优先于首次书籍配置和下文新运行创作步骤。书名、话号、格数、脚本依据和资产从已验证包内读取；不询问外部脚本/资产，不创建本书profile，不调用prepare，不重建主表或重做A/B。缺件只报告包内准确缺项，在现有授权内闭环。
+
+新运行代表格接口稳定后，按[唯一主表与增量派生](references/draft-authoring.md)维护创作输入，镜头/实际prompt/展示自动派生，只处理变化及真实依赖；工作草稿不反复冻结，正式调用与交接才绑定准确版本。
+
+前期以[最小充分与集中收敛](references/preparation-efficiency.md)为执行标准：普通格不反复润饰，先打通代表格，再用一次实际输入形成B/包合并审查；普通建议记录继续，技术问题在现有授权内修复，局部缺口不停止其他工作。
+
+用户提出累计运行时限时，先执行[有效运行计时](references/runtime-clock.md)：新职责默认14400秒，人工暂停/明确等用户不计时；真实Interrupt Hook须绑定并获宿主信任。恢复先核实旧任务再续计，普通进度询问不恢复；不能仅凭提示词或后台计时宣称已自动扣除暂停。旧冻结入口每次实际提交前检查安装版计时入口。
+
 所有阶段启动与恢复即执行[阶段与交付进度](references/review-progress.md)：总控汇报阶段、到本职责ZIP的百分比、进行事项、阻塞与下一步；正常制作每10分钟、仅服务等待每15分钟，重要变化立即报。显示独立于人工停点和少询问委托，子agent上报事实由总控合并；不为通知重跑检查、取消在途请求或改预算。阶段进度只能中途汇报；任务未完成且仍有可执行工作或子agent运行时，总控继续推进/等待并收敛产物，不能发送最终答复结束轮次，详见上述进度规则的“总控持续执行与子任务收敛”。
 
 用户后续明确取消当前人工停点时，按[最新委托更新规则](references/grouped-review.md#后续指令取消人工停点)更新当前运行授权；整体A也可由执行者内部审查，通过即继续，不因最初保留亲审而再次等待。
@@ -26,9 +34,9 @@ description: Coordinate first-batch per-panel comic production for further human
 
 首次执行先按[短启动的执行环境](references/quick-start.md#执行环境)检查当前Python；Windows使用原生跨平台运行时，不安装fcntl、不修改旧冻结包。
 
-用户首次使用或缺配置时，按[首次配置引导](references/quick-start.md#安装后的首次配置引导)一次收集缺少的书名、脚本、资产和话号，自动校验并生成本书配置；不要求用户预建JSON。已有配置只询问差异。
+仅前期制作的用户首次使用或缺配置时，按[首次配置引导](references/quick-start.md#安装后的首次配置引导)一次收集缺少的书名、脚本、资产和话号，自动校验并生成本书配置；不要求用户预建JSON。已有配置只询问差异。
 
-读[短启动与本书配置](references/quick-start.md)。用户只需脚本、资产、话号及可明确识别的书名，内部默认配置与规则自动解析，不要求填写技术JSON；“前期制作”路由分工准备阶段并停在正文前，“接包生产”接收正式ZIP或其已解压目录。用comic_start.py合并初始化或校验/解压/bind/rehearse步骤，初始化通过不等于源审计或批准通过。
+读[短启动与本书配置](references/quick-start.md)。前期制作用户只需脚本、资产、话号及可明确识别的书名，内部默认配置与规则自动解析，不要求填写技术JSON；“前期制作”路由分工准备阶段并停在正文前，“接包生产”接收正式ZIP或其已解压目录。用comic_start.py合并初始化或校验/解压/bind/rehearse步骤，初始化通过不等于源审计或批准通过。
 
 准备和生产是流程阶段，不要求不同负责人、电脑或会话。正式交付一经接收，当前生图人员负责在同一任务中闭环处理路径、材料、工具、历史账和设计问题：集中列出准确受影响范围并直接询问用户，获批后仅更新和重检该范围。不得要求用户另找前期负责人、返回前期会话或等待外部任务回传。
 
@@ -46,7 +54,7 @@ description: Coordinate first-batch per-panel comic production for further human
 - 恢复任务：先从原冻结入口运行staged_workflow.py --check status；按原模式、源序、输入、规则与预算恢复，不静默迁移旧RV。
 - 用户指定分工制作：最终只交一个正式ZIP，交接说明、哈希清单及发布证据内置；接收端可用ZIP路径或其已解压包根目录及可选输出位置启动，旧版sidecar仍兼容。目录校验与发布证据完整时直接接包，不索回原ZIP、不要求重压；接收入口用安装版，生产编译仍用包内冻结工具。读[双电脑交接](references/split-production.md)、[直接交付](references/direct-delivery.md)及[ZIP演练](references/zip-handoff.md)。只提交获批当前半话，第一半话确认后才提交后半；缺技术编译的候选不能当正式可生产包。
 
-核对准确书话、源脚本、真实格数及源序、资产、批准画风和输出RV，不按估计格数初始化。配置存在时读[使用配置](references/usage-configuration.md)，新任务用init_preproduction.py创建未批准模板。
+接包只核对包内书话、原文、源序、资产、画风和本地输出，历史配置路径不作为生产输入；不调用usage_config.read_config。前期制作核对准确书话、源脚本、真实格数及源序、资产、批准画风和输出RV，不按估计格数初始化。前期配置存在时读[使用配置](references/usage-configuration.md)，新任务用init_preproduction.py创建未批准模板。
 
 ## 阶段职责
 
@@ -79,3 +87,6 @@ A由[视觉资产](../vertical-comic-visual-assets/SKILL.md)维护身份、衣�
 派单短锁是可选运行能力，默认关闭。仅在需要显式准入、保存器接线或恢复该协议运行时读[一致性协议](references/dispatch-consistency.md)；普通RV继续原入口，不自动迁移或热更新。
 
 新整话按[前期输入收敛](references/final-input-semantics.md#前期收敛按包执行v2)组织：前期逐格完成原稿/资产、连续性、规则与完整prompt审查；生产按已审包执行，返图按包内目标做真实QA。人物配饰固定在角色自身身体锚点，机位投影和可见数量另行确定。
+
+
+微信发送交接包时执行[无损去重与分卷运输](references/handoff-transport.md)：正式发布后导出，完整恢复验证后发送全部交付文件；接收入口自动识别。

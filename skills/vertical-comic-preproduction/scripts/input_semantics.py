@@ -373,26 +373,30 @@ def dependency_rows(state, root, dependency_plan=None):
     return rows
 
 
-def coverage(state, root, dependency_plan=None):
+def coverage(state, root, dependency_plan=None, *, panel_ids=None):
     if not enabled(state):
         return {'policy': None, 'status': 'LEGACY_FROZEN_CONTRACT'}
     from audit_cache import derived, content_key
     from codex_reference_contract import file_session
     # This is also a public read-only entry, used without production_runtime.
     # Keep all panels in one transaction; nested runtime callers reuse theirs.
+    selected=tuple(panel_ids) if panel_ids is not None else None
     with file_session():
-        return derived('final_semantic_coverage', content_key([str(root), state, dependency_plan]),
-                       lambda: _coverage(state, root, dependency_plan))
+        return derived('final_semantic_coverage', content_key([str(root), state, dependency_plan, selected]),
+                       lambda: _coverage(state, root, dependency_plan, panel_ids=selected))
 
 
-def _coverage(state, root, dependency_plan=None):
+def _coverage(state, root, dependency_plan=None, *, panel_ids=None):
     root = Path(root)
     source = read_json(checked_file(root, state['source_snapshot']))
     shots = {p['panel_id']: p for p in read_json(checked_file(root, state['shot_manifest']))['panels']}
     records = {r['panel_id']: r for r in state['panels']}
     plans = dependency_rows(state, root, dependency_plan)
+    selected=source['panel_ids'] if panel_ids is None else [p for p in source['panel_ids'] if p in panel_ids]
+    if panel_ids is not None and (not panel_ids or len(set(panel_ids))!=len(panel_ids) or set(selected)!=set(panel_ids)):
+        raise ValueError('语义选集须准确属于源序，不为空且不重复')
     errors, pending = {}, []
-    for pid in source['panel_ids']:
+    for pid in selected:
         try:
             if shots[pid].get('generation_dependencies'):
                 found = panel_errors(state, root, shots[pid], plan_row=plans[pid]); pending.append(pid)
@@ -402,8 +406,9 @@ def _coverage(state, root, dependency_plan=None):
             if found: errors[pid] = found
         except (OSError, ValueError, TypeError, KeyError, IndexError) as exc:
             errors[pid] = ['INPUT_SEMANTICS_HOLD:' + str(exc)]
-    return {'policy': state['input_semantics_policy'], 'status': 'HOLD' if errors else 'PREPRODUCTION_INPUTS_REVIEWED',
-            'panel_ids': source['panel_ids'], 'reviewed_panel_ids': [p for p in source['panel_ids'] if p not in errors],
+    return {'policy': state['input_semantics_policy'], 'status': 'HOLD' if errors else 'SCOPED_INPUTS_REVIEWED' if panel_ids is not None else 'PREPRODUCTION_INPUTS_REVIEWED',
+            'scope':'selected' if panel_ids is not None else 'episode',
+            'panel_ids': selected, 'reviewed_panel_ids': [p for p in selected if p not in errors],
             'pending_real_reference_review_ids': pending, 'errors': errors,
             'dispatch_authorized': False, 'image_calls': 0}
 
@@ -425,7 +430,7 @@ def main():
             with file_session():
                 if read_json(path) != state:
                     raise ValueError('CHECK_SNAPSHOT_CHANGED: 生产状态在审计开始前变化')
-                report = coverage(state, root, plan_ref)
+                report = coverage(state, root, plan_ref, panel_ids=args.panels)
             print(json.dumps(report, ensure_ascii=False))
             return 0 if report['status'] != 'HOLD' else 1
         from panel_readiness import review_context

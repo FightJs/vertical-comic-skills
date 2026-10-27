@@ -1,5 +1,7 @@
 # 实际执行质量与返修分流：execution_quality_v1
 
+新运行优先按[第一批前期提速](preparation-efficiency.md)执行最小充分设计、代表格接线、单次B/包展示及问题分级处理。可选润饰不产生HOLD；真实缺口在现有委托内修复，局部问题只影响真实依赖，其他工作继续。正式输入与接包要求仍按原合同。
+
 新运行统一按[第一批生产决定](production-decisions.md)衔接审核、返修与交付：真实FAIL不改写，处理动作与交付结论分别记录；旧冻结合同不迁移。下文审核方法、源稿/批准/证据要求仍适用。
 
 本扩展复用visual_evidence_v1的scene_layouts、appearance_details、checks、原六项QA与原诊断，不增加人工停点。只在新整话RV启用；旧RV、已冻结批次不热升级。当前新建整话RV默认启用execution_quality_v1；配置可显式写execution_quality={"policy":"execution_quality_v1"}，初始化在根状态、镜头及包写input_quality_policy；A、集合、逐格须同策略。初始化不是批准，不能伪填已核对。

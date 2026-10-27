@@ -1,5 +1,7 @@
 # 服装配饰定位与单画面
 
+新运行的主表、增量派生、共用规则/图集复用与少冻结执行见[第二批草稿提速](draft-authoring.md)。派生文件不授予批准或生产权限。
+
 新整话RV由init_preproduction默认声明appearance_policy=appearance_lock_v1和frame_policy=single_frame_v1，配套visual_evidence_v1。旧RV保持原冻结工具，采用新合同须在新RV明确迁移、核对受影响批准；不得热改在途包或签回旧批准。通用方法属于Skill，具体人物穿戴只属于本书批准基准，不自动存入规则记忆。
 
 ## A：唯一衣装状态与细节来源

@@ -44,7 +44,7 @@ class ExtractedHandoffTests(unittest.TestCase):
     def test_directory_without_zip_real_frozen_rehearsal_preserves_originals_and_scope(self):
         before={p.relative_to(self.root).as_posix():h.sha(p) for p in self.root.rglob('*') if p.is_file()}
         with patch.object(h.zipfile,'ZipFile',side_effect=AssertionError('must not access or rebuild ZIP')):
-            result=start.receive(runtime_limit_seconds=None,package_root=self.root,output=self.output)
+            result=start.receive(runtime_limit_seconds=None,package_root=self.root,output=self.output,eager_audit=True)
         self.assertEqual(result['status'],'READY_FOR_PRODUCTION_ROUTING',result)
         self.assertEqual(result['image_calls'],0)
         self.assertEqual(result['reception']['archive_crc'],'NOT_AVAILABLE_EXTRACTED_DIRECTORY')

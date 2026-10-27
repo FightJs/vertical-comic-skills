@@ -74,6 +74,9 @@ def attempt_errors(state, root, item):
     if 'parallel_context' in state:
         from batch_workflow import dispatch_errors
         errors.extend(dispatch_errors(state, root, packet, pid, digest(output)))
+    from light_review import enabled as light_enabled, evidence_errors as light_errors
+    if light_enabled(state):
+        return errors + light_errors(root, item, require_pass=item['status'] in PASS)
     if item['status'] in PASS:
         from staged_workflow import qa_errors
         errors.extend(qa_errors(root, item))

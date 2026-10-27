@@ -10,8 +10,8 @@
   "files": [
     {
       "path": "skills/vertical-comic-image-review/SKILL.md",
-      "sha256": "e0a395230548018f1232027629c10571c25948cbc36e6e6ab7a6e652825ef9ec",
-      "bytes": 7632
+      "sha256": "9dc3e6eb9b1d3954073b6397e4c1f69d4cc38519e9ca50bf411aa06db77a2b95",
+      "bytes": 8162
     },
     {
       "path": "skills/vertical-comic-image-review/agents/openai.yaml",
@@ -20,8 +20,8 @@
     },
     {
       "path": "skills/vertical-comic-panel-generation/SKILL.md",
-      "sha256": "f9e1750f212691d1fcc2f72ff485f7ff9abcd8725c88fbf9b1be32890a618fd6",
-      "bytes": 8251
+      "sha256": "ce82b77d94dfb1a6fa396ce6acbc7e669596c2fa1913b8f2d96278e55a624f27",
+      "bytes": 8781
     },
     {
       "path": "skills/vertical-comic-panel-generation/agents/openai.yaml",
@@ -30,8 +30,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/SKILL.md",
-      "sha256": "bcb9547d43e335792a2d2645866c68a7eeef5a49cc500f04d6a44cf120a7f016",
-      "bytes": 16172
+      "sha256": "205f25ad51ff540baa2286368b2e25e6e5a945117633f54cece336a9eaa72ef0",
+      "bytes": 16211
     },
     {
       "path": "skills/vertical-comic-preproduction/agents/openai.yaml",
@@ -195,13 +195,13 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/references/delivery-contract.md",
-      "sha256": "fcb84c9f6a56750a290d21844262ee11d30b7fb652366051c05e427755e72c69",
-      "bytes": 6657
+      "sha256": "1872ff3d3b90f70d92a1b52a9af19f2725bfa89530efffc586258e9d42f8ea34",
+      "bytes": 7079
     },
     {
       "path": "skills/vertical-comic-preproduction/references/direct-delivery.md",
-      "sha256": "81a9ec45bd93aa40cb9e5d1902502450f0dd0fed65ca7e2284202bf3e8865a3f",
-      "bytes": 12328
+      "sha256": "f506fe383351cc1d377d0b9c46f2b90edf40e1abddb91bc232e8dd00eaeffc6e",
+      "bytes": 12750
     },
     {
       "path": "skills/vertical-comic-preproduction/references/dispatch-consistency.md",
@@ -245,8 +245,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/references/grouped-review.md",
-      "sha256": "604bdf4733d71a645adf101aff2637ec7e7024882dbacfb52731c8b7aac9f25e",
-      "bytes": 16655
+      "sha256": "92f09d601e1a323001eaa05e98fc030d19a364cfeae3ec157b5f6e9076e616e6",
+      "bytes": 17077
     },
     {
       "path": "skills/vertical-comic-preproduction/references/half-episode.md",
@@ -279,14 +279,19 @@
       "bytes": 3980
     },
     {
+      "path": "skills/vertical-comic-preproduction/references/light-review.md",
+      "sha256": "da8c99fcb14de710c8b2d9b8c68cadbb68d3518b5daee7742ce8206c5ddf8295",
+      "bytes": 4540
+    },
+    {
       "path": "skills/vertical-comic-preproduction/references/panel-readiness.md",
       "sha256": "77135f83cf0085891b3187402c59caf4b134b1003bca243c2e9d9a976f3184d0",
       "bytes": 9022
     },
     {
       "path": "skills/vertical-comic-preproduction/references/preparation-efficiency.md",
-      "sha256": "44c21ba57c1a0f244920a7800ef75870a969b675254d54aab6bff1d5de020265",
-      "bytes": 7000
+      "sha256": "ad21be8c86e1f3bf02e027ba52c303e0c46293253965dfc2ee8fd978fd3f6dff",
+      "bytes": 7422
     },
     {
       "path": "skills/vertical-comic-preproduction/references/production-decisions.md",
@@ -310,8 +315,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/references/quick-start.md",
-      "sha256": "1b5122b30563c56a4a3165f602915ab98813b080cf46e10ecbf0d99d828eecaa",
-      "bytes": 13672
+      "sha256": "42888d43f6bf45feb121c2b176241ca360973b07f068d4f6fa6cb1bb7d8147d8",
+      "bytes": 14094
     },
     {
       "path": "skills/vertical-comic-preproduction/references/reference-budget.md",
@@ -360,13 +365,13 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/references/runtime-clock.md",
-      "sha256": "184bc2f250ad21149b1e3cae27fb573b2fca86164010544df34a7de4fc9335fd",
-      "bytes": 9309
+      "sha256": "a53f9a6cdec371efa4fa61e81770856970d770c3d912dd3b89d825e518f71140",
+      "bytes": 13964
     },
     {
       "path": "skills/vertical-comic-preproduction/references/runtime-efficiency.md",
-      "sha256": "6daf10768c00390d37b5c063d6cd7fa61dd9068bbd22f721f2502339d0a0afa1",
-      "bytes": 18514
+      "sha256": "2782e2c1a6c5e4f0faa3ca2133be9a3321de1baacb240a94b8dca6353f08d56d",
+      "bytes": 18936
     },
     {
       "path": "skills/vertical-comic-preproduction/references/runtime-half-legacy.md",
@@ -455,8 +460,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/references/user-prompts.md",
-      "sha256": "5be8bdfdd46e50429b1572025917c7b5a9cd8f23f55b498a2f78cdb59a178941",
-      "bytes": 12160
+      "sha256": "e1260d60c368fbcef00d0d4ab70f6ade06cdb5edb5a9a24700ccaf7a31587c45",
+      "bytes": 14233
     },
     {
       "path": "skills/vertical-comic-preproduction/references/visual-continuity.md",
@@ -480,8 +485,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/references/zip-handoff.md",
-      "sha256": "61d090893c62cbf6c3698567f033ae5b839b9eb3fa69ce0ab9f9c98b08e679a9",
-      "bytes": 7208
+      "sha256": "04bfe168e61211740c42167068cc8059d9b4476f9699b7cab362f6ec2eec301c",
+      "bytes": 7630
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/appearance_lock.py",
@@ -525,13 +530,13 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/batch_round.py",
-      "sha256": "9b9e6b79f8c2b19b358b056c79911e23f2cd6a049d6a7d1ae187fad20e8f3085",
-      "bytes": 16970
+      "sha256": "4aab08f8c5d561fcc20a8f3b6e6e8dce9f08dc3472d7f73cf81f57734612e6f9",
+      "bytes": 17172
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/batch_workflow.py",
-      "sha256": "143b3d499aca6ed9044ab36531d978071f488b7a53c7ddf048879ed0a5a49e29",
-      "bytes": 35307
+      "sha256": "7c716a1fa64af5528e43d6ffb4179a7bdd0c8562694f5194d4df2b08536752c7",
+      "bytes": 35422
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/builtin_memory.py",
@@ -555,8 +560,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/comic_start.py",
-      "sha256": "98fa68e382804c02d3ecc647d51ea9a1f2cfb0c10b6591d36d223fee6c6ec67d",
-      "bytes": 20646
+      "sha256": "6e971cde77f2bd7be6d9952f188eec5a707ed8385a20181613a59ef92ac1fe7a",
+      "bytes": 22573
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/context_rebind.py",
@@ -584,6 +589,11 @@
       "bytes": 10426
     },
     {
+      "path": "skills/vertical-comic-preproduction/scripts/deadline_delivery.py",
+      "sha256": "27648272d032685e17b4a10b7c44f34ddb0c6ecd064cd11146f28a917048028d",
+      "bytes": 19508
+    },
+    {
       "path": "skills/vertical-comic-preproduction/scripts/delivery_contract.py",
       "sha256": "59825984787978bdc411a5d2aa330080faac9864168a74353393ad01200b003d",
       "bytes": 10088
@@ -595,8 +605,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/delivery_publish.py",
-      "sha256": "563768bd88c7f632071b58202b3bca550cf7f5974634c113447170486af703b1",
-      "bytes": 17164
+      "sha256": "1fa1157c2f427a8e93b62b75a1df93fe88e106c5d7c92958b562f4b65386ae6d",
+      "bytes": 17517
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/dispatch_publication.py",
@@ -615,8 +625,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/execution_contract.py",
-      "sha256": "a4fda3a32abdabdddf8445de309a6ca59b0cf97885ed10fc933541f072790a02",
-      "bytes": 14553
+      "sha256": "eec6db9a25f21f5055b249580c5b1fae1e4851555fc54f896c16c2542235c4ec",
+      "bytes": 14780
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/execution_timing.py",
@@ -655,8 +665,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/handoff_zip.py",
-      "sha256": "a66a5ba468bd3f2e3ebb54b87c2f86febe946414b2a10ebdf123bc4d531a8955",
-      "bytes": 49652
+      "sha256": "1f8d2dec7509687b9fdf5f43cb16d5534500f43f3e1c45fcab847af2886ea617",
+      "bytes": 52152
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/identity_confirmation.py",
@@ -680,8 +690,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/init_preproduction.py",
-      "sha256": "8e942bc6630c83fad891318cd64a8846e44f57d39dc78a9c4ad1a786467bbf78",
-      "bytes": 16931
+      "sha256": "6787a25f5dc73283a4cdbf96ba98f67e2708ad1d2db00fd688e53504a9203a00",
+      "bytes": 17325
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/input_dependencies.py",
@@ -719,9 +729,14 @@
       "bytes": 9872
     },
     {
+      "path": "skills/vertical-comic-preproduction/scripts/light_review.py",
+      "sha256": "9a4cbc0724376675f4f6ef05ae6960a6a6365bcd7de0d1c8d5051fa72f35b995",
+      "bytes": 8614
+    },
+    {
       "path": "skills/vertical-comic-preproduction/scripts/make_generation_qa.py",
-      "sha256": "a896f01888f4cd5ce0dd92531cf3d62173d39000d2129c572c0524ee38f752ce",
-      "bytes": 20912
+      "sha256": "ec53a3403e1f1708adcc10868fba54db75ab84ab6d033355202d87bf26bee19d",
+      "bytes": 21806
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/managed_dispatch.py",
@@ -730,8 +745,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/panel_delivery.py",
-      "sha256": "f777fd46dbeed0d77a32eefa1e51a3bf0d46db294cfa4e5ee1463edcd2be392c",
-      "bytes": 18783
+      "sha256": "9d86d90de96a3e90e821baf0e220e0611e8cd7685b2a556874f68cb8f374c5c2",
+      "bytes": 19426
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/panel_derivation.py",
@@ -760,8 +775,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/production_decisions.py",
-      "sha256": "a5e541ee4015d74e7ff890a1ccfefc2a089dade1c3cbecedaae674144235ec05",
-      "bytes": 15767
+      "sha256": "0bb02e9f409ce43f621f823b0402a01b5d80c478aefbf265d1ba3df6fd2a9f46",
+      "bytes": 16224
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/production_metrics.py",
@@ -770,13 +785,13 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/production_progress.py",
-      "sha256": "58456814b3b46aa1069c31ca85c0e419b3348789e8dffacaf56d614e7529f47a",
-      "bytes": 32974
+      "sha256": "52a25581bac4f16a6aee98687977d08a491dbb3bda88023bc505cbe091df122f",
+      "bytes": 34112
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/production_runtime.py",
-      "sha256": "974a32f07d5ecf8fbee914d2999c6746288fe7c775999acd0cdc719e11e3d291",
-      "bytes": 75797
+      "sha256": "edf2d7df83d26778729019a1b7d5c07d562ca42915948a26526808b72803b17a",
+      "bytes": 76304
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/reference_atlas.py",
@@ -810,8 +825,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/review_pipeline.py",
-      "sha256": "6467f3591ed120d444852cf5f2073522dac505d6e1c6b2ea03aa6ea7e4070e4f",
-      "bytes": 14433
+      "sha256": "9ad0a19dbc8bb366de5484164058e8920aa89635e67903c1149da03387cfaf37",
+      "bytes": 15002
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/review_policy.py",
@@ -820,8 +835,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/review_queue.py",
-      "sha256": "af7921753a00c2b87762bb6bd59553942464e16ca365c4a8d39d1828d54dfafe",
-      "bytes": 5018
+      "sha256": "e27e29cdee915fe5e89d4ec0c6d3c014d7d2c67c52abb28b8a7b306f391ad2c9",
+      "bytes": 5176
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/review_reuse.py",
@@ -845,13 +860,13 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/runtime_capabilities.json",
-      "sha256": "5bc136a74b3a3b1b79fac3e3b037faf514d84c33afa574377fb1e5fd0fb4bebf",
-      "bytes": 3959
+      "sha256": "ec07c524d9b69e715315c31b07368b8c7aeec41a9ec7093b08278a732d68199f",
+      "bytes": 4216
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/runtime_clock.py",
-      "sha256": "09775e1aae35d4eccf0ce05b59284ec505e7ef982824d5c11d1a951d8af8f19d",
-      "bytes": 20153
+      "sha256": "f702358ac75a0f78aa109c6117e96952efba865013de6f00a2e0f2886c2093f9",
+      "bytes": 22062
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/runtime_clock_context.py",
@@ -910,8 +925,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/source_input_contract.py",
-      "sha256": "f149fbba23b0f39b078cbb8ac19cae744ba29a7802f09914290f670bc5c28dbb",
-      "bytes": 5308
+      "sha256": "892e204b967ab7d7bdad52c90d9194784260c15556c293ab50b9d743a0104f6e",
+      "bytes": 5329
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/source_workbook.py",
@@ -925,8 +940,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/staged_workflow.py",
-      "sha256": "f1b25205e6e81e030151cd6bab21fc8d60015f23084604f774fe2531a92fe1ee",
-      "bytes": 27677
+      "sha256": "082e5e6204ba12f7280c77c76ae0f9c0704565210d67a7e88f9f25a60b1e9580",
+      "bytes": 27989
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/style_contract.py",
@@ -945,8 +960,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/task_coordination.py",
-      "sha256": "898e01485470919a39b7c433ccbfbcbf8e7b00c2f14d739e80c73f34ef2f5057",
-      "bytes": 11024
+      "sha256": "c7f7e40032d305b3ad4ce2e9dd9f8e759f52956e3e14eb972434eff3fad22d26",
+      "bytes": 12017
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/update_skills.py",
@@ -970,8 +985,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/visual_evidence.py",
-      "sha256": "0146d20fad405982b8f2b7d006a8c3ff14715b3f29f50214a9b8774717bee923",
-      "bytes": 55547
+      "sha256": "6188d4c8390ea903f9d69cc0f4be3b9424b2c4c4b90ede9f16eb61cd6ea72a7d",
+      "bytes": 55663
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/worker_watchdog.py",
@@ -1190,8 +1205,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/tests/test_extracted_handoff.py",
-      "sha256": "fdadb1fd2249558fdc575e49dcd3a070148c2f863dec7e6942e702dda0729e98",
-      "bytes": 9067
+      "sha256": "6a793f7626d39972aaf2fa387a0c28392fdc6818e487402975667a7716de3305",
+      "bytes": 9084
     },
     {
       "path": "skills/vertical-comic-preproduction/tests/test_first_batch_production.py",
@@ -1257,6 +1272,11 @@
       "path": "skills/vertical-comic-preproduction/tests/test_input_semantics.py",
       "sha256": "21e86546986e2792ab83be8f90ec2795315a606a692d43a27d6957cbf1823b4e",
       "bytes": 14605
+    },
+    {
+      "path": "skills/vertical-comic-preproduction/tests/test_light_review.py",
+      "sha256": "40cd39f796d4466ac2de8f9c00e02bedf8837613008876d545dae7c7b31503b7",
+      "bytes": 8137
     },
     {
       "path": "skills/vertical-comic-preproduction/tests/test_managed_dispatch.py",
@@ -1405,8 +1425,8 @@
     },
     {
       "path": "skills/vertical-comic-shot-design/SKILL.md",
-      "sha256": "ce780e90c6c2a9c8b59478f03bc3d714bcd6c7c74525ac33db66fd4654ceea14",
-      "bytes": 5449
+      "sha256": "5288eec442d65f9ee056dffae0a0db6f9763e96ddef7ae3e96f8fc2acf06e972",
+      "bytes": 5979
     },
     {
       "path": "skills/vertical-comic-shot-design/agents/openai.yaml",
@@ -1415,8 +1435,8 @@
     },
     {
       "path": "skills/vertical-comic-visual-assets/SKILL.md",
-      "sha256": "b829caed3c82cae5a9f2c0178c3999d6fbd960ade7573b6503309ef0d27ff271",
-      "bytes": 5143
+      "sha256": "19cd0b99917b8382ba1b18fb17d1562e0f28ebc8860114476c32b1d979ca8485",
+      "bytes": 5673
     },
     {
       "path": "skills/vertical-comic-visual-assets/agents/openai.yaml",

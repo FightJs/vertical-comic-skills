@@ -115,5 +115,13 @@
     "policy": "style_basis_by_job_v1",
     "single_capacity_control": true,
     "legacy_auto_migration": false
+  },
+  "light_image_review": {
+    "policy": "light_story_review_v1",
+    "default_entry": "comic_start prepare",
+    "full_detail_review": false,
+    "automatic_repair": "story_critical_only",
+    "max_repair_rounds": 1,
+    "legacy_auto_migration": false
   }
 }

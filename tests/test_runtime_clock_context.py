@@ -18,10 +18,14 @@ class ContextTests(unittest.TestCase):
     def receipt(self,session='thread-A',turn='turn1'):
         return handle({'session_id':session,'turn_id':turn,'hook_event_name':'PreToolUse',
                        'tool_input':{'cmd':'python comic_start.py receive --runtime-limit-seconds 14400'}},self.home)
-    def test_missing_host_receipt_fails_before_timer_start(self):
+    def test_wall_deadline_starts_without_optional_host_pause_receipt(self):
         run=self.root/'run'
-        with self.assertRaisesRegex(ValueError,'CONTEXT_UNAVAILABLE'):start_clock(run,'production',14400,None)
-        self.assertFalse((run/'00_任务协调/runtime-clock.json').exists())
+        result=start_clock(run,'production',14400,None)
+        self.assertTrue((run/'00_任务协调/runtime-clock.json').exists())
+        self.assertEqual(result['runtime_clock']['delivery_schedule'],clock.DELIVERY_SCHEDULE)
+        self.assertTrue(result['runtime_clock']['deadline_includes_pauses'])
+        self.assertFalse(result['clock_binding']['session_bound'])
+        self.assertFalse(result['clock_binding']['automatic_pause_verified'])
     def test_host_id_mismatch_stale_and_unrelated_do_not_bind(self):
         handle({'session_id':'thread-B','hook_event_name':'PreToolUse','tool_input':{'cmd':'date'}},self.home)
         self.assertFalse(context.context_path('thread-B',self.home).exists())

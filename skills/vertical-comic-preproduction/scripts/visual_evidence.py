@@ -784,6 +784,8 @@ def repair_binding_extension_valid(panel, shot):
 
 def comparison_errors(panel, item, records, root):
     """Bind visual comparisons to the latest actual episode records, not labels."""
+    from light_review import at_root, review_errors as light_errors
+    if at_root(root): return light_errors(item)
     if panel.get('visual_evidence_policy') != POLICY: return []
     from codex_reference_contract import checked_file
     errors = []

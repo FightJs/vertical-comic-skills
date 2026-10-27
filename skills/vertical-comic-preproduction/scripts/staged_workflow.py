@@ -170,6 +170,11 @@ def _qa_errors(root, record):
 
 
 def qa_errors(root, record):
+    from light_review import at_root, evidence_errors
+    if at_root(root):
+        from audit_cache import derived
+        return list(derived('qa_evidence', ['light_story_review_v1', str(resolve_path(Path(root))), record],
+                            lambda: evidence_errors(root, record, require_pass=True)))
     from review_reuse import cached_qa
     from audit_cache import derived
     # The original checks still own all observations. Reuse only after the

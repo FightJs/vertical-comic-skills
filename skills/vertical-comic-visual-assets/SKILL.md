@@ -5,6 +5,10 @@ description: Lock episode-specific character identities, costume states, scenes 
 
 # 条漫视觉基准与资产
 
+
+
+**新任务默认速度优先、轻审核成品**：先按[轻审核流程](../vertical-comic-preproduction/references/light-review.md)执行。每图快速看一次人物与剧情可读性，仅严重剧情问题最多返修一轮；普通瑕疵留人工。此模式不执行下文旧全面审核的六项细节取证、逐MEM记录及整话/跨话重复复审，不为测试返修另做生图。工具以冻结状态的 `image_review_profile` 分支登记和交付；无该字段的旧任务仍按原合同，不能热改。
+
 阶段开始时按[规则归属](../vertical-comic-preproduction/references/rule-ownership.md)读取共同规则与本阶段合同；授权和进度沿用该页入口，同一运行不重复加载未变内容。新制作按[前期提速](../vertical-comic-preproduction/references/preparation-efficiency.md)先贯通代表格，再用[唯一主表](../vertical-comic-preproduction/references/draft-authoring.md)增量派生。接包直接使用已审输入。
 
 新整话按[服装配饰定位](../vertical-comic-preproduction/references/appearance-and-single-frame.md)在原appearance_details一次冻结衣装核心、首饰款式/总数量、角色自身左右及身体附着位置、清晰原板裁区；遮挡不推导不存在，未知不默认对称。具体穿戴属于本书生产记录，不写入通用记忆。

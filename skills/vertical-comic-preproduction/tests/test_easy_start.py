@@ -84,6 +84,8 @@ class EasyStartTests(unittest.TestCase):
         result=start.prepare(self.root,'SYNTHETIC',['E001-E002'],runtime_limit_seconds=None,script=script,assets=assets)
         self.assertEqual(result['image_calls'],0);root=Path(result['run_root']);state=b.read(root/'E001/00_输入审计/生产流程.json')
         self.assertEqual(state['gates'],{});self.assertTrue(state['memory_source']['index_sha256']);self.assertTrue((Path(state['memory_source']['root'])/'内置规则/规则记忆输入与增添规范.md').is_file())
+        self.assertEqual(state['image_review_profile'],'light_story_review_v1')
+        self.assertEqual(state['speed_policy'],'bounded_stage_fallback_v1')
         self.assertEqual(state['task_context'],result['task_context'])
         self.assertEqual(b.read(root/'E002/00_输入审计/生产流程.json')['task_context'],state['task_context'])
         self.assertEqual(state['task_context']['origin'],'fresh')

@@ -69,6 +69,7 @@ class StageDeadlineTests(unittest.TestCase):
         import inspect
         for entry in (comic_start.start_clock,comic_start.prepare,comic_start.receive):
             self.assertIs(inspect.signature(entry).parameters['wall_delivery'].default,False)
+        self.assertEqual(inspect.signature(comic_start.prepare).parameters['image_review_profile'].default,'light_story_review_v1')
         from contextlib import redirect_stdout
         for extra,expected in (([],False),(['--clock-mode','wall'],True)):
             with self.subTest(wall=expected),patch.object(sys,'argv',['comic_start.py','prepare','--project','SYNTHETIC','--book','TEST','--episodes','E001',*extra]),patch('runtime_clock_context.resolve',return_value={'session_id':'SYNTHETIC'}),patch.object(comic_start,'prepare',return_value={'status':'INITIALIZED_NOT_PRODUCTION_APPROVAL'}) as prepare,redirect_stdout(io.StringIO()):
@@ -91,6 +92,34 @@ class StageDeadlineTests(unittest.TestCase):
         self.assertEqual(inner.call_args.args[2],[f'P{i:03d}' for i in range(1,6)])
         self.assertEqual(result['next_compile_panel_ids'],[f'P{i:03d}' for i in range(6,12)])
         self.assertFalse(result['compile_scope_complete'])
+
+    def test_complete_scope_consumers_do_not_truncate_or_restart_after_deadline(self):
+        h,path,row,p=self.fixture();state=read_json(path)
+        checkpoint(path,'compile',state=state);self.now=91
+        import production_runtime
+        def compiled(state,root,ids,**kwargs):
+            return {'jobs':[{'panel_id':pid} for pid in ids],'preflight':{'status':'READY'}}
+        for count in (11,35,165):
+            ids=[f'P{i:03d}' for i in range(1,count+1)]
+            for mode in ({'input_audit':True},{'candidate':True},{'complete_scope':True}):
+                with self.subTest(count=count,mode=mode),patch.object(production_runtime,'_compile_jobs',side_effect=compiled) as inner:
+                    result=production_runtime.compile_jobs(state,h.root,ids,**mode)
+                    self.assertEqual([j['panel_id'] for j in result['jobs']],ids)
+                    self.assertEqual(inner.call_count,1)
+                    self.assertNotIn('next_compile_panel_ids',result)
+
+    def test_complete_scope_cannot_bypass_pause_or_total_deadline(self):
+        h,path,row,p=self.fixture();state=read_json(path)
+        import production_runtime
+        self.now=1
+        runtime_clock.event(self.clock,'pause','pause')
+        for mode in ({'input_audit':True},{'candidate':True},{'complete_scope':True}):
+            with self.subTest(mode=mode),self.assertRaises(ValueError):
+                production_runtime.compile_jobs(state,h.root,['P001'],**mode)
+        self.now=2
+        runtime_clock.event(self.clock,'resume','resume');self.now=14403
+        with self.assertRaisesRegex(ValueError,'LIMIT_REACHED'):
+            production_runtime.compile_jobs(state,h.root,['P001'],input_audit=True)
 
     def test_cooperative_compile_timeout_selects_fallback(self):
         h,path,row,p=self.fixture();state=read_json(path)

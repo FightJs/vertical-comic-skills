@@ -6,7 +6,7 @@
 |---|---|---|
 | 源稿锁定、参考依据、整话流程、人工审查、修正次数 | production-foundation.md、staged-workflow.md | 各阶段 Skill 与完整 staged_workflow 门禁，始终执行 |
 | 格数/原序、文件哈希、实际输入、调用证据及版本 | 共享检查器代码与对应输入输出合同 | validate_preproduction、codex_reference_contract、execution_contract 等技术检查 |
-| 基础图像质量：身份、衣装、动作、空间、构图、画风 | reference-continuity.md、style_contract.py 与批准的逐格判据 | 原 dimension_review、style_review 及六项实际看图检查，始终执行 |
+| 按冻结审核模式检查实际图片 | reference-continuity.md、style_contract.py 与批准的逐格判据 | light_story_review_v1按light-review.md一次快速观察；仅全面审核使用dimension_review、style_review及六项检查 |
 | 跨话跨作品的通用视觉标准 | 新任务默认总控assets/rule-memory内置+用户增补的合并索引与正文；显式memory_root/旧RV按原来源，均由哈希/签名绑定 | rule_memory.load-stage/load 管读取，select/check 管实际适用与执行；镜头、生成和实际图片验收分别落实 |
 | 人物状态、房间布局、剧情、某格修正及用户例外 | 当前源稿、资产、镜头、QA 和原用户批准证据 | 当前生产 RV；不写入通用记忆 |
 | 输入冲突时的处理顺序及可调整范围 | production-foundation.md 的 `physical_scene_priority_v1` | 输入审计、镜头、提示词编译与原 QA；不代替各 MEM 的实际判据 |
@@ -21,13 +21,13 @@
 
 ## 触发覆盖
 
-基础六项 QA 不依赖记忆标签。结构上已明确可见的人物、背景锚点、场景或道具会派生 visual_subjects_present；真实前格派生相邻关系，可比较脸部由已有批准的比较记录确定。返修由 operation=repair 触发，不修改获批镜头标签。
+下面是前期规则选择与全面QA的覆盖要求；轻审核返图不补逐MEM记录或六项检查。基础六项 QA 不依赖记忆标签。结构上已明确可见的人物、背景锚点、场景或道具会派生 visual_subjects_present；真实前格派生相邻关系，可比较脸部由已有批准的比较记录确定。返修由 operation=repair 触发，不修改获批镜头标签。
 
 人体、床、镜面、复杂肢体关系等语义不得仅凭角色 ID 或对白猜测。新任务全话 semantic_audit 中 rule_triggers 保留准确 matched_rules（memory_id/rule_signature），模板从当前命中集生成且不填 PASS；旧RV按原半话审计范围恢复。库中启用人体规则且本格有可见角色时，另核对 human_figure_visible：decision=APPLIES/NOT_APPLICABLE 与具体 evidence。APPLIES 必须与获批 memory_tags 一致；人手/局部人体仍适用其可见部分，不因脸在画外而排除。非人体角色等真实不适用情形说明依据，不能由脚本把所有角色默认当人。
 
 阶段基准预读和是否实际执行分开。当前 MEM-005/006 按其 stages 预读一次，其余条目按命中读取；未命中者不新增执行或验收项。semantic_audit 只用轻量索引核对实际命中覆盖，执行者仍要检查语义分类；机器无法证明其自然语言判断正确。每格没有命中也保留 memory_tags=[]，不删来源跳过检查。完整字段与命令见 [rule-memory.md](rule-memory.md)。
 
-## 一次观察、分别判断
+## 全面审核的一次观察（仅full或原冻结合同）
 
 make_generation_qa 生成 inspection_plan，将原基础 QA、命中 memory_review 和例外替代检查按观察对象组织。它绑定实际图片和源执行包，仅用于安排一次看图；status 初始 UNREVIEWED，不参与放行。
 

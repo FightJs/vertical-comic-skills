@@ -239,7 +239,13 @@ def observe_runtime(directory, state_path, action, result, *, expected_state=Non
     rehearsed = (action == 'rehearsal' and result.get('source_kind') == 'observed_frozen_gate_rehearsal'
                  and result.get('status') == 'RELEASE_CANDIDATE'
                  and any(r.get('episode_id') == state['episode_id'] and r.get('status') == 'REHEARSED' for r in result.get('results', [])))
-    receiver = action == 'receiver-audit' and all(result.get(k, {}).get('preflight', {}).get('status') in {'READY','PARTIAL_READY'} for k in ('h001','all_inputs')) and not result.get('preparation', {}).get('global_errors') and not result.get('preparation', {}).get('errors')
+    scopes = ('all_inputs',) if result.get('policy') == 'receiver_episode_audit_v1' else ('h001','all_inputs')
+    receiver = (action == 'receiver-audit' and all(
+        result.get(k, {}).get('preflight', {}).get('status') in {'READY','PARTIAL_READY'}
+        and result[k].get('compile_scope_complete', True)
+        and not result[k].get('next_compile_panel_ids')
+        for k in scopes) and not result.get('preparation', {}).get('global_errors')
+        and not result.get('preparation', {}).get('errors'))
     gate = result.get('gate', result)
     final = gate.get('status') == 'PASS' and gate.get('next_action') in {'READY_FOR_HANDOFF','READY_TO_PACKAGE'} and gate.get('handoff_complete', True)
     atomic_json(p, {'binding': observation_binding(state), 'receive_binding': receive_binding(state), 'receiver_pass': receiver or rehearsed or final or previous.get('receiver_pass', False),

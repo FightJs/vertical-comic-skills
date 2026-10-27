@@ -46,3 +46,5 @@ PR和三平台检查通过并合并后，由维护者明确创建与VERSION一�
 已配置的条漫计时Hook随安装自动修复到稳定环境；新启用可用--clock-hooks。解释器与依赖保存在Skill管理目录，不引用下载/开发仓库。修改Hook定义仍需宿主信任，不能伪造信任状态。
 
 本机版本较新时，普通main预览更新返回 `AHEAD_OF_PREVIEW` 并保留本机安装；这是无需更新的正常结果，继续当前任务，不删除安装标记或强制覆盖。只有用户明确回退/替换时使用原restore或replace-existing入口。
+
+安装和更新本身不修改用户的Codex agent配置；正式前期或接包入口才按[子agent容量检查](usage-configuration.md#启动时子agent配置与实际容量)处理。

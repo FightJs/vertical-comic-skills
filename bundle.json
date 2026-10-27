@@ -9,6 +9,71 @@
   ],
   "files": [
     {
+      "path": "memory/规则/生图/MEM-001_床面承托与被褥遮挡.md",
+      "sha256": "7e9a3bc7650d3e61cfad5927dece85a6250dd09dc71c0b9e71e0c7dfefb511cf",
+      "bytes": 2381
+    },
+    {
+      "path": "memory/规则/生图/MEM-002_多人接触与肢体归属.md",
+      "sha256": "ad89f6e847954c55e839898fcb96895406df07b1c20b208cba9fdfd4c0ca2404",
+      "bytes": 1944
+    },
+    {
+      "path": "memory/规则/生图/MEM-004_局部返修保留批准特征.md",
+      "sha256": "9f95df308c4997730e5176b6ebf115b80886bb301d82ff460ff589e52f9c0ccd",
+      "bytes": 5491
+    },
+    {
+      "path": "memory/规则/生图/MEM-006_人体结构物理合理性与动作表现力.md",
+      "sha256": "d6a032b02508b27d139358b8252808a95a4f8f6cdc6ddbf930f1ce0eb5417a6d",
+      "bytes": 4319
+    },
+    {
+      "path": "memory/规则/生图/MEM-008_镜面统一磨砂且不呈现真实反射.md",
+      "sha256": "4d57461a67520ff2f8cc16d8c07a76ea6e7bec8fb8af2482998ae2db273c4a14",
+      "bytes": 1378
+    },
+    {
+      "path": "memory/规则/生图/MEM-011_掌掴完成后的结果瞬间表达.md",
+      "sha256": "d43611860efd323dc050e177ae2b881d65f84f6c1a7fa9f3173552b691a4765e",
+      "bytes": 4221
+    },
+    {
+      "path": "memory/规则/镜头/MEM-003_换机位保持固定空间锚点.md",
+      "sha256": "2db4835322e339964521cdb6768ce0d4c582f164f13b09724311e9ddae63c14a",
+      "bytes": 2882
+    },
+    {
+      "path": "memory/规则/镜头/MEM-005_人物场景与关键道具的一致性和连续性.md",
+      "sha256": "94ced5a4b635386956199c0e7d3a8860cde0205850769ad8f7ceb9c69363aca8",
+      "bytes": 3990
+    },
+    {
+      "path": "memory/规则/镜头/MEM-007_相邻格同角色微表情必须有可见变化.md",
+      "sha256": "8c4ba291921293113ab1c1ce791de35443cc02b8025a4a41d764a9f89c5b4ade",
+      "bytes": 2423
+    },
+    {
+      "path": "memory/规则/镜头/MEM-009_真实透视与遮挡优先于完整展示.md",
+      "sha256": "00feb6b2661e779e203b3d3314f5d52047537d83e7325d0d5afb0b1cda11f785",
+      "bytes": 3123
+    },
+    {
+      "path": "memory/规则/镜头/MEM-010_叙事驱动的相邻镜头与物理连续性.md",
+      "sha256": "0bc1ba2832cca681cc110576e34a50a758d15209e6848e63815cd8abd2b16167",
+      "bytes": 2420
+    },
+    {
+      "path": "memory/规则记忆输入与增添规范.md",
+      "sha256": "c6bf2dfa0be28eb10c8e148e4862d0721ce9e0188d2a44db33071f294a17fd28",
+      "bytes": 17116
+    },
+    {
+      "path": "memory/记忆索引.json",
+      "sha256": "b9eec22b1b2598877f6212918229cbb75f151dede148426697c7d542937c2fb7",
+      "bytes": 25748
+    },
+    {
       "path": "skills/vertical-comic-image-review/SKILL.md",
       "sha256": "816552169f66d2145b44d148770bdfd7939db58c4a08a6b9551afb9c48d6131f",
       "bytes": 4071
@@ -30,8 +95,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/SKILL.md",
-      "sha256": "f7bfd4d63247e7870448e9304e7b1e9c248f9d8fd5f74915862af2dff250b10f",
-      "bytes": 18034
+      "sha256": "610f4c1b04891ea91757c11d5eeef61db59804bf429fe81fbf422e5e33abf248",
+      "bytes": 18455
     },
     {
       "path": "skills/vertical-comic-preproduction/agents/openai.yaml",
@@ -275,8 +340,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/references/installation-update.md",
-      "sha256": "c242193aa7dcba7d02ac0b9f531e15f7d95a4adefe9e064e5b4959a02107a735",
-      "bytes": 5238
+      "sha256": "f9bc2f69ee48d164078a2af22e6df9d0f9dd0fea39509c77e4272306a2843792",
+      "bytes": 5426
     },
     {
       "path": "skills/vertical-comic-preproduction/references/legacy-package-repair.md",
@@ -320,8 +385,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/references/quick-start.md",
-      "sha256": "e69752453dc5f9828580b50910cc0c2fce0bfcfb260b008a4f4c831437df4f45",
-      "bytes": 14516
+      "sha256": "a8803f6130f2a442ab85f5ea30bee7e52e1013ab125c917c15acd5f7dedc94f6",
+      "bytes": 14771
     },
     {
       "path": "skills/vertical-comic-preproduction/references/reference-budget.md",
@@ -455,8 +520,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/references/usage-configuration.md",
-      "sha256": "d30e01d8f9894541a304da73c211a040cc42478301dea4cdd93642e8f4c53cb4",
-      "bytes": 12124
+      "sha256": "42e3af080d4d8df05f72af9a8b8ffba2bb681c94a9f7eb981706c737a7715e1e",
+      "bytes": 13795
     },
     {
       "path": "skills/vertical-comic-preproduction/references/usage.md",
@@ -490,8 +555,13 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/references/条漫Skill使用提示词.md",
-      "sha256": "48f2ed3c87d8cd6e8333b6ccd3728536cb749d5e91201b07747ab4f3f1e3cb25",
-      "bytes": 16961
+      "sha256": "425c6f383ff85d56e6342f1ef883a7f7a4b19abf4c2f70b6b1091234cc3f0f86",
+      "bytes": 17203
+    },
+    {
+      "path": "skills/vertical-comic-preproduction/scripts/agent_capacity.py",
+      "sha256": "e7c78328e4b9e36646d15d799b7d6c325e5ae1c25818d7e509b13b7c6fbec01f",
+      "bytes": 6400
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/appearance_lock.py",
@@ -565,8 +635,8 @@
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/comic_start.py",
-      "sha256": "e47e11c299b7aa822df485bc53453b849873a43fc277e08e92e91f7a5d7af205",
-      "bytes": 23241
+      "sha256": "ebe3b75b67f15857e2e91bd613768e2232f8edafa284e286cf4e2bb3105269a8",
+      "bytes": 23578
     },
     {
       "path": "skills/vertical-comic-preproduction/scripts/context_rebind.py",
@@ -1079,6 +1149,11 @@
       "bytes": 1640
     },
     {
+      "path": "skills/vertical-comic-preproduction/tests/test_agent_capacity.py",
+      "sha256": "ea71722c5122f0e19a3d00aa0616b47b54499496d76a2856d35e9dd53fbd109a",
+      "bytes": 5107
+    },
+    {
       "path": "skills/vertical-comic-preproduction/tests/test_appearance_lock.py",
       "sha256": "740564b1c7fb5631448f0811c877953caff1050fd47495b22f39a833bb82c605",
       "bytes": 17976
@@ -1497,71 +1572,6 @@
       "path": "skills/vertical-comic-visual-assets/agents/openai.yaml",
       "sha256": "bd1fe373e9f9408d2930032a82d18922760aabb83463c3d33912f870235eeae7",
       "bytes": 368
-    },
-    {
-      "path": "memory/规则/生图/MEM-001_床面承托与被褥遮挡.md",
-      "sha256": "7e9a3bc7650d3e61cfad5927dece85a6250dd09dc71c0b9e71e0c7dfefb511cf",
-      "bytes": 2381
-    },
-    {
-      "path": "memory/规则/生图/MEM-002_多人接触与肢体归属.md",
-      "sha256": "ad89f6e847954c55e839898fcb96895406df07b1c20b208cba9fdfd4c0ca2404",
-      "bytes": 1944
-    },
-    {
-      "path": "memory/规则/生图/MEM-004_局部返修保留批准特征.md",
-      "sha256": "9f95df308c4997730e5176b6ebf115b80886bb301d82ff460ff589e52f9c0ccd",
-      "bytes": 5491
-    },
-    {
-      "path": "memory/规则/生图/MEM-006_人体结构物理合理性与动作表现力.md",
-      "sha256": "d6a032b02508b27d139358b8252808a95a4f8f6cdc6ddbf930f1ce0eb5417a6d",
-      "bytes": 4319
-    },
-    {
-      "path": "memory/规则/生图/MEM-008_镜面统一磨砂且不呈现真实反射.md",
-      "sha256": "4d57461a67520ff2f8cc16d8c07a76ea6e7bec8fb8af2482998ae2db273c4a14",
-      "bytes": 1378
-    },
-    {
-      "path": "memory/规则/生图/MEM-011_掌掴完成后的结果瞬间表达.md",
-      "sha256": "d43611860efd323dc050e177ae2b881d65f84f6c1a7fa9f3173552b691a4765e",
-      "bytes": 4221
-    },
-    {
-      "path": "memory/规则/镜头/MEM-003_换机位保持固定空间锚点.md",
-      "sha256": "2db4835322e339964521cdb6768ce0d4c582f164f13b09724311e9ddae63c14a",
-      "bytes": 2882
-    },
-    {
-      "path": "memory/规则/镜头/MEM-005_人物场景与关键道具的一致性和连续性.md",
-      "sha256": "94ced5a4b635386956199c0e7d3a8860cde0205850769ad8f7ceb9c69363aca8",
-      "bytes": 3990
-    },
-    {
-      "path": "memory/规则/镜头/MEM-007_相邻格同角色微表情必须有可见变化.md",
-      "sha256": "8c4ba291921293113ab1c1ce791de35443cc02b8025a4a41d764a9f89c5b4ade",
-      "bytes": 2423
-    },
-    {
-      "path": "memory/规则/镜头/MEM-009_真实透视与遮挡优先于完整展示.md",
-      "sha256": "00feb6b2661e779e203b3d3314f5d52047537d83e7325d0d5afb0b1cda11f785",
-      "bytes": 3123
-    },
-    {
-      "path": "memory/规则/镜头/MEM-010_叙事驱动的相邻镜头与物理连续性.md",
-      "sha256": "0bc1ba2832cca681cc110576e34a50a758d15209e6848e63815cd8abd2b16167",
-      "bytes": 2420
-    },
-    {
-      "path": "memory/规则记忆输入与增添规范.md",
-      "sha256": "c6bf2dfa0be28eb10c8e148e4862d0721ce9e0188d2a44db33071f294a17fd28",
-      "bytes": 17116
-    },
-    {
-      "path": "memory/记忆索引.json",
-      "sha256": "b9eec22b1b2598877f6212918229cbb75f151dede148426697c7d542937c2fb7",
-      "bytes": 25748
     }
   ]
 }

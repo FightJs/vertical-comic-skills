@@ -133,3 +133,5 @@ receive返回`runtime_compatibility`及每话`generation_host`。先据结果使
 
 
 接包出现确认无图且原包没有重试入口时，按[确认无图恢复](submission-runtime.md#确认无图恢复)执行。已有用户明确授权时，宿主自动准备并核对独立兼容执行副本，复用原快照、批准及计时；不为每格恢复再询问。
+
+正式前期和接包入口先按[子agent容量检查](usage-configuration.md#启动时子agent配置与实际容量)处理当前用户配置；配置与本会话实际容量分开报告。查看、安装、更新和旧运行恢复不修改该配置。

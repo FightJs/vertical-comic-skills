@@ -41,6 +41,13 @@ class WorkflowSession:
             elif action=='context-rebind-status':
                 from context_rebind import status
                 result=status(path,request['plan_id'])
+            elif action=='recover-no-image':
+                if initial.get('dispatch_consistency'):
+                    from managed_dispatch import call
+                    result=call(path,action,expected_sha256=request['expected_state'],request=request['recovery'])
+                else:
+                    from no_image_recovery import recover
+                    result=recover(path,request['expected_state'],request['recovery'])
             elif action=='submit':
                 from production_runtime import submit
                 result=submit(path,request['job'])

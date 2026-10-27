@@ -80,6 +80,24 @@ def advance(state, pid, status, output=None):
     if status=='GENERATED':item['output_sha256']=output['sha256']
 
 
+def close_no_image(state, original, evidence_ref):
+    """Settle only the old proven-no-image lease; next attempt needs a new lease."""
+    if state.get('runtime',{}).get('dispatch_policy')!=POLICY:
+        if state.get('parallel_context'):
+            raise ValueError('NO_IMAGE_RECOVERY_REQUIRES_OWNER_SLOT_LEASE: preserve shared permit ledger')
+        return
+    entries=[e for e in state.get('dispatch_ledger',[]) if e.get('panel_id')==original['panel_id']
+             and e.get('attempt_id')==original['attempt_id'] and e.get('round_id')==original['round_id']
+             and e.get('status')!='RELEASED']
+    if len(entries)!=1:raise ValueError('NO_IMAGE_RECOVERY_LEASE_NOT_UNIQUE')
+    item=entries[0]
+    if item.get('output_sha256') or item.get('status') not in {'RESERVED','IN_FLIGHT','RESULT_UNKNOWN','COMPLETED'}:
+        raise ValueError('NO_IMAGE_RECOVERY_LEASE_CONFLICT')
+    item.setdefault('events',[]).append({'from':item['status'],'to':'RELEASED',
+        'at':datetime.now(timezone.utc).isoformat(),'evidence_status':'CONFIRMED_NO_OUTPUT','evidence':evidence_ref})
+    item.update(status='RELEASED',no_image_evidence=evidence_ref)
+
+
 def resolution_errors(state, root, original, update, report):
     errors=[]
     expected={'policy':'unknown_result_resolution_v1','status':'REVIEWED',

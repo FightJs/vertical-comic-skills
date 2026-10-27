@@ -142,5 +142,13 @@
     "legacy_auto_migration": false
   },
   "default_clock_mode": "active",
-  "wall_delivery_opt_in": "--clock-mode wall"
+  "wall_delivery_opt_in": "--clock-mode wall",
+  "no_image_recovery": {
+    "policy": "confirmed_no_image_recovery_v1",
+    "quality_round_unchanged": true,
+    "unknown_requires_resolution": true,
+    "legacy_adapter": "frozen_no_image_adapter_v1",
+    "same_input_retries_before_diagnosis": 2,
+    "image_calls": 0
+  }
 }

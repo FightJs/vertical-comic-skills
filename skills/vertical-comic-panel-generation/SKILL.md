@@ -44,3 +44,5 @@ B和实际包按[合并审查](../vertical-comic-preproduction/references/groupe
 新协议正文和返修按[统一提交登记](../vertical-comic-preproduction/references/submission-runtime.md)提供真实onBeforeInvoke；编译/领取通过不是稍后调用的长期许可。
 
 接包使用receive返回的配套冻结执行器与generation_host，旧协议按[接收端配套接线](../vertical-comic-preproduction/references/submission-runtime.md#接收端配套接线)执行。实际返回通过正式save-return保存；持久化失败恢复原返回，不新增生图。
+
+确认无图的技术恢复按[统一恢复入口](../vertical-comic-preproduction/references/submission-runtime.md#确认无图恢复)执行；已有用户明确授权时无需再次确认兼容副本或必要重试。技术重试增加attempt而不增加质量返修round；未知结果先查证，原图、批准、证据和有效计时保留。

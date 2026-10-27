@@ -429,6 +429,9 @@ def call(state_path, action, **kwargs):
                     job['dispatch_receipt']=read_json(checked_file(path.parent.parent,record['package_manifest'])).get('dispatch_receipt')
                     job['managed_submission_required']=True
                 return value
+        if action == 'recover-no-image':
+            from no_image_recovery import recover
+            return recover(path, **kwargs)
         if action == 'submission-status':
             from production_runtime import submission_status
             return submission_status(path,kwargs['job'])
@@ -461,7 +464,7 @@ def call(state_path, action, **kwargs):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--state', required=True)
-    parser.add_argument('--action', choices=('admit', 'reserve', 'compile', 'commit', 'approvals', 'release', 'repair', 'diagnosis', 'evidence', 'save', 'recover', 'submit', 'submission-status', 'control', 'allocate'), required=True)
+    parser.add_argument('--action', choices=('admit', 'reserve', 'compile', 'commit', 'approvals', 'release', 'repair', 'diagnosis', 'evidence', 'save', 'recover', 'submit', 'submission-status', 'recover-no-image', 'control', 'allocate'), required=True)
     parser.add_argument('--arguments', required=True, help='Explicit JSON arguments; never image calls')
     args = parser.parse_args(); kwargs = read_json(Path(args.arguments))
     if args.action == 'admit': value = admit(args.state, **kwargs)

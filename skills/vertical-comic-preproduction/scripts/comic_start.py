@@ -13,7 +13,7 @@ from task_context import fresh, validate as validate_task
 
 BASE=Path(__file__).resolve().parents[1]
 
-def start_clock(run, role, limit, session, *, started=None):
+def start_clock(run, role, limit, session, *, started=None, wall_delivery=False):
     from runtime_clock import initialize_context
     if limit is None:
         return {'runtime_execution_context': initialize_context(run, role, limit)}
@@ -23,10 +23,11 @@ def start_clock(run, role, limit, session, *, started=None):
     # Keep real host binding when available; never invent a session receipt.
     try:context=resolve(explicit_session=session)
     except ValueError as exc:
+        if not wall_delivery: raise
         if 'CLOCK_CONTEXT_UNAVAILABLE' not in str(exc) and 'CLOCK_CONTEXT_STALE' not in str(exc):raise
         context=None
     directory = Path(run)/'00_任务协调'
-    initialize(directory, role, limit, hard_deadline=True, at=started, delivery_deadline=True)
+    initialize(directory, role, limit, hard_deadline=True, at=started, delivery_deadline=wall_delivery)
     binding=bind(directory,context['session_id'],identity_source='host:PreToolUse+CODEX_THREAD_ID') if context else {'session_bound':False,'automatic_pause_verified':False,'timing':'wall_clock_includes_waits'}
     event(directory, 'start', 'initial-start', at=started)
     reference = initialize_context(run, role, limit, hard_deadline=True)
@@ -65,7 +66,7 @@ def episodes(values):
     if not out or len(set(out))!=len(out):raise ValueError('话号缺失或重复')
     return out
 
-def prepare(project,book,ids,*,script=None,assets=None,output=None,workers=None,request_source=None,reuse_selection=None,runtime_limit_seconds=14400,clock_session_id=None,delivery_mode='allow_parts',max_file_bytes=900000000,image_review_profile='full'):
+def prepare(project,book,ids,*,script=None,assets=None,output=None,workers=None,request_source=None,reuse_selection=None,runtime_limit_seconds=14400,clock_session_id=None,delivery_mode='allow_parts',max_file_bytes=900000000,image_review_profile='full',wall_delivery=False):
     from runtime_clock import instant
     started=instant()
     project=Path(project).resolve();ids=episodes(ids)
@@ -94,13 +95,13 @@ def prepare(project,book,ids,*,script=None,assets=None,output=None,workers=None,
     output_base=Path(output).resolve() if output else project/'条漫输出'/book_directory(book)/('_'.join((ids[0],ids[-1])))
     stamp=datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=8))).strftime('%Y%m%d_%H%M%S')
     run=output_base/('RV_'+stamp+'_'+uuid.uuid4().hex[:6]);run.mkdir(parents=True)
-    clock = start_clock(run, 'preparation', runtime_limit_seconds, clock_session_id, started=started)
+    clock = start_clock(run, 'preparation', runtime_limit_seconds, clock_session_id, started=started, wall_delivery=wall_delivery)
     task_path=run/'任务来源.json';write(task_path,task)
     cfg=run/'本次配置.json';write(cfg,config);read_config(cfg)
     snap=create(run/'00_总控/运行版本',memory_source=memory_source(config))
     for eid in ids:
         cmd=[sys.executable, '-X', 'utf8','-B',str(Path(snap['path']).parent/'skills/vertical-comic-preproduction/scripts/init_preproduction.py'),'--book',book,'--episode',eid,'--config',str(cfg),'--runtime-snapshot',snap['path'],'--task-context',str(task_path),'--execution-context',clock['runtime_execution_context']['path'],'--output',str(run/eid),'--backend','codex_builtin_imagegen']
-        if image_review_profile != 'full': cmd.extend(['--image-review-profile',image_review_profile])
+        if image_review_profile != 'full': cmd.extend(['--image-review-profile',image_review_profile,'--speed-policy','bounded_stage_fallback_v1'])
         proc=subprocess.run(cmd,capture_output=True,text=True, encoding='utf-8')
         if proc.returncode:raise ValueError('初始化失败，保留诊断运行目录:'+eid+':'+proc.stderr[-1000:])
     if old is None:
@@ -112,7 +113,7 @@ def prepare(project,book,ids,*,script=None,assets=None,output=None,workers=None,
     result.update(start_display(run/'00_显示进度','preparation',[run/e/'00_输入审计/生产流程.json' for e in ids],config=config.get('progress')))
     result.update(clock)
     from deadline_delivery import start_watch
-    result['deadline_delivery']=start_watch(result['delivery_identity']['path']) if runtime_limit_seconds is not None else {'status':'LEGACY_UNTIMED'}
+    result['deadline_delivery']=start_watch(result['delivery_identity']['path']) if runtime_limit_seconds is not None and wall_delivery else {'status':'ACTIVE_TIME_SCHEDULE' if runtime_limit_seconds is not None else 'LEGACY_UNTIMED'}
     write(run/'启动摘要.json',result);return result
 
 def inspect_received_runtime(run_root, run_index, report_dir):
@@ -140,7 +141,7 @@ def inspect_received_runtime(run_root, run_index, report_dir):
     return entrypoints,compatibility
 
 
-def receive(zip_path=None,*,package_root=None,output=None,runtime_limit_seconds=14400,clock_session_id=None,_started=None,audit_timeout=900, eager_audit=False):
+def receive(zip_path=None,*,package_root=None,output=None,runtime_limit_seconds=14400,clock_session_id=None,_started=None,audit_timeout=900, eager_audit=False, wall_delivery=False):
     from runtime_clock import instant
     started=_started or instant()
     if (zip_path is None)==(package_root is None):raise ValueError('接包提供ZIP或已解压包根目录其中一个')
@@ -158,7 +159,7 @@ def receive(zip_path=None,*,package_root=None,output=None,runtime_limit_seconds=
                 import shutil
                 shutil.rmtree(holder)
                 raise
-            return receive(package_root=restored['root'],output=base,runtime_limit_seconds=runtime_limit_seconds,clock_session_id=clock_session_id,_started=started,audit_timeout=audit_timeout,eager_audit=eager_audit)
+            return receive(package_root=restored['root'],output=base,runtime_limit_seconds=runtime_limit_seconds,clock_session_id=clock_session_id,_started=started,audit_timeout=audit_timeout,eager_audit=eager_audit,wall_delivery=wall_delivery)
     if package_root is not None:
         checked=check_delivery_directory(package_root);originals=Path(checked['root']);archive=None
         base=Path(output).resolve() if output else originals.parent/'接包生产'
@@ -170,7 +171,7 @@ def receive(zip_path=None,*,package_root=None,output=None,runtime_limit_seconds=
         checked={**checked,'source_type':'zip','archive_crc':'PASS'}
         base=Path(output).resolve() if output else archive.parent/'接包生产'
     target=base/('RV_'+uuid.uuid4().hex[:12]);target.mkdir(parents=True)
-    clock = start_clock(target, 'production', runtime_limit_seconds, clock_session_id, started=started)
+    clock = start_clock(target, 'production', runtime_limit_seconds, clock_session_id, started=started,wall_delivery=wall_delivery)
     if archive is not None:originals=Path(extract(archive,target/'收到原件',checksum_file=checksum)['root'])
     write(target/'接收校验.json',checked)
     bound=bind(originals,target/'本地运行',execution_context=clock['runtime_execution_context'])
@@ -196,7 +197,7 @@ def receive(zip_path=None,*,package_root=None,output=None,runtime_limit_seconds=
     delivery_identity=initialize_delivery(target,'production',[Path(bound['run_root'])/e['state'] for e in local_index['episodes']],
         package_mode='single_zip')
     from deadline_delivery import start_watch
-    deadline_delivery=start_watch(delivery_identity['path']) if runtime_limit_seconds is not None else {'status':'LEGACY_UNTIMED'}
+    deadline_delivery=start_watch(delivery_identity['path']) if runtime_limit_seconds is not None and wall_delivery else {'status':'ACTIVE_TIME_SCHEDULE' if runtime_limit_seconds is not None else 'LEGACY_UNTIMED'}
     progress = start_display(target/'00_显示进度','production',[Path(bound['run_root'])/e['state'] for e in local_index['episodes']],rehearsal=result)
     # A received run is already configured by its verified package, not a new book.
     package_index=read(originals/INDEX)
@@ -263,6 +264,7 @@ def main():
     preparation.add_argument('--delivery-mode',choices=['single_zip','allow_parts'],default='allow_parts',help='默认单包优先、超限自动分包；仅用户明确限制单文件时选择single_zip')
     preparation.add_argument('--max-file-bytes',type=int,default=900000000,help='微信单文件上限，最大900000000字节')
     for command in sub.choices.values():
+        command.add_argument('--clock-mode',choices=('active','wall'),default='active',help='默认暂停不计时；仅明确自然时限时选择wall，恢复保留原时钟')
         command.add_argument('--runtime-limit-seconds', type=int, default=14400, help='新任务默认四小时自然时间交包；等待计时，预留30分钟收尾；只能缩短，不能超过14400秒')
         command.add_argument('--clock-session-id', help='经核实的宿主session_id；需已信任Interrupt Hook')
     a=parser.parse_args()
@@ -270,7 +272,7 @@ def main():
         if a.action=='receive-resume':
             result=receive_resume(a.run_root,audit_timeout=a.audit_timeout)
             print(json.dumps(result,ensure_ascii=False));return int(result['status']=='HOLD')
-        result=prepare(a.project,a.book,a.episodes,script=a.script,assets=a.assets,output=a.output,workers=a.workers,request_source=read(a.request_source) if a.request_source else None,reuse_selection=read(a.reuse_selection) if a.reuse_selection else None,runtime_limit_seconds=a.runtime_limit_seconds,clock_session_id=a.clock_session_id,delivery_mode=a.delivery_mode,max_file_bytes=a.max_file_bytes,image_review_profile=a.image_review_profile) if a.action=='prepare' else receive(a.zip,package_root=a.package_root,output=a.output,runtime_limit_seconds=a.runtime_limit_seconds,clock_session_id=a.clock_session_id,audit_timeout=a.audit_timeout,eager_audit=a.eager_audit)
+        result=prepare(a.project,a.book,a.episodes,script=a.script,assets=a.assets,output=a.output,workers=a.workers,request_source=read(a.request_source) if a.request_source else None,reuse_selection=read(a.reuse_selection) if a.reuse_selection else None,runtime_limit_seconds=a.runtime_limit_seconds,clock_session_id=a.clock_session_id,delivery_mode=a.delivery_mode,max_file_bytes=a.max_file_bytes,image_review_profile=a.image_review_profile,wall_delivery=a.clock_mode=='wall') if a.action=='prepare' else receive(a.zip,package_root=a.package_root,output=a.output,runtime_limit_seconds=a.runtime_limit_seconds,clock_session_id=a.clock_session_id,audit_timeout=a.audit_timeout,eager_audit=a.eager_audit,wall_delivery=a.clock_mode=='wall')
         print(json.dumps(result,ensure_ascii=False));return int(result['status']=='HOLD')
     except (OSError,ValueError,KeyError,TypeError,zipfile.BadZipFile) as e:print(json.dumps({'status':'HOLD','error':str(e)},ensure_ascii=False));return 1
 if __name__=='__main__':

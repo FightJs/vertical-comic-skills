@@ -218,6 +218,9 @@ def repeated_method(state, root, decision):
 
 def priority(state, record, shot, root):
     """Do not turn delivery eligibility into dependency/reference acceptance."""
+    from stage_deadlines import enabled as speed_enabled
+    if speed_enabled(state):
+        return 0 if record.get('status') == 'PENDING' else 1
     if record.get('status') == 'PENDING':
         return 2
     try:

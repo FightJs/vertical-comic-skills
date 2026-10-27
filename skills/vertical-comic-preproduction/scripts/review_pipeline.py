@@ -83,7 +83,22 @@ def save(state_path,expected_state,proposal):
     if light:
         if template.get(FIELD) != LIGHT_POLICY: raise ValueError('LIGHT_QA: template profile mismatch')
         if proposal.get('observations'): raise ValueError('LIGHT_QA: use light_observations')
-        prepare_observations(items[0], proposal, original)
+        from stage_deadlines import checkpoint, manual_decision
+        review_budget = checkpoint(path, 'review', original['panel_id'], state=state)
+        repair_budget = checkpoint(path, 'repair', original['panel_id'], state=state)
+        expired = bool(repair_budget and repair_budget['degraded'])
+        prepare_observations(items[0], proposal, original, allow_manual_critical=expired)
+        if review_budget and review_budget['degraded']:
+            observed = items[0]['light_review']
+            if 'checks' in observed:
+                observed['single_observation'] = '；'.join(k+': '+v['observed'] for k,v in observed.pop('checks').items())
+            observed['review_effort'] = 'deadline_single_observation'
+        if expired and proposal['decision']['action'] in {'local_edit','regenerate','rebuild_inputs','crop_candidate'}:
+            proposal['decision'] = manual_decision(proposal['decision'])
+            proposal['adopt'] = True
+        elif expired and proposal['verdict'] == 'FAIL' and proposal['decision'].get('question_kind') != 'user_reserved':
+            proposal['decision'] = manual_decision(proposal['decision'])
+            proposal['adopt'] = True
     else:
         if template.get(FIELD) or proposal.get('light_observations'): raise ValueError('Frozen full review cannot be downgraded')
         overlay(items[0],proposal.get('observations',{}),proposal['reviewer'])

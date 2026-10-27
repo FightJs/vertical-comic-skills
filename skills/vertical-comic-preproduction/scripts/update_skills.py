@@ -134,6 +134,14 @@ def apply_archive(home,archive,work,*,source=None,replace_existing=False):
     validate_payload(root)
     version=(root/'VERSION').read_text(encoding='utf-8-sig').strip()
     if source and source.get('version') and source['version']!=version:raise ValueError('发布标签与包内版本不一致')
+    # A preview may point at an older main commit after a local maintenance install.
+    # Preserve the newer local version unless replacement was explicitly requested.
+    if source and source.get('channel')=='preview' and not replace_existing:
+        local=installed_status(home)
+        if version_key(local.get('version')) > version_key(version):
+            return {'status':'AHEAD_OF_PREVIEW','installed':local,'available':{**source,'version':version},
+                    'changed_files':0,'codex_home':str(home),'next':'保留本机较新版本，继续使用；明确回退请用restore或replace-existing'}
+
     source={**(source or {'channel':'offline'}),'archive_sha256':digest(archive)}
     write(root/'release-origin.json',source)
     command=[sys.executable,'-X','utf8','-B',str(root/'tools/sync_skills.py'),'--codex-home',str(home)]

@@ -34,9 +34,13 @@ def review_errors(item, *, require_pass=False):
     if review.get('status') not in {'PASS', 'FAIL'} or not isinstance(review.get('reviewer'), str) or not review['reviewer'].strip():
         errors.append('LIGHT_QA: actual reviewer and verdict required')
     checks = review.get('checks')
-    if not isinstance(checks, dict) or set(checks) != set(CHECKS):
+    single = review.get('single_observation')
+    if single is not None:
+        if not isinstance(single, str) or not single.strip() or checks is not None:
+            errors.append('LIGHT_QA: one actual identity/story observation required')
+    elif not isinstance(checks, dict) or set(checks) != set(CHECKS):
         errors.append('LIGHT_QA: identity and story_readability observations required')
-    else:
+    elif single is None:
         for name, check in checks.items():
             if not isinstance(check, dict) or check.get('status') not in {'PASS', 'FAIL'} or not isinstance(check.get('observed'), str) or not check['observed'].strip():
                 errors.append('LIGHT_QA: actual observation required: ' + name)
@@ -115,11 +119,12 @@ def decision_errors(decision, attempt, item):
     return errors
 
 
-def prepare_observations(item, proposal, record):
+def prepare_observations(item, proposal, record, *, allow_manual_critical=False):
     """Reviewer supplies two quick observations and issues; tool supplies bookkeeping."""
     observed = proposal.get('light_observations')
-    if not isinstance(observed, dict) or set(observed) != {'checks', 'issues'}:
+    if not isinstance(observed, dict) or set(observed) not in ({'checks', 'issues'}, {'single_observation', 'issues'}):
         raise ValueError('LIGHT_QA: supply light_observations with checks and issues')
+    item['light_review'].pop('checks' if 'single_observation' in observed else 'single_observation', None)
     item['light_review'].update(observed, reviewer=proposal['reviewer'], status=proposal['verdict'])
     errors = review_errors(item)
     if errors: raise ValueError(';'.join(errors))
@@ -132,7 +137,7 @@ def prepare_observations(item, proposal, record):
                 'observations': [f'/light_review/issues/{n}']})
         critical = [i['id'] for i in issues if i['story_critical']]
         # Only serious first-round findings need an explicit repair plan.
-        if critical and record['round_id'] == 1:
+        if critical and record['round_id'] == 1 and not allow_manual_critical:
             raise ValueError('LIGHT_QA: serious first-round issue requires a concrete decision/repair plan')
         action = 'defer_manual' if issues else 'complete'
         proposal['decision'] = {'action': action, 'reason': proposal['reason'], 'issues': issues,

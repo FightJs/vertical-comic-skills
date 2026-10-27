@@ -224,19 +224,29 @@ def publish_preparation(identity,source,output):
 
 
 def pack_panels(value,stage,out):
+    from stage_deadlines import checkpoint, enabled as speed_enabled
+    speed_states=[(Path(p),read(p)) for p in value.get('states', [])]
+    speed_states=[(p,s) for p,s in speed_states if speed_enabled(s)]
+    for p,s in speed_states: checkpoint(p,'pack',state=s)
     sources={p.relative_to(stage).as_posix():p for p in stage.rglob('*') if p.is_file()}
     members={name:digest(p) for name,p in sources.items()}
     _,indexes=production_expected(value)
     images=[eid+'/'+row['delivered_image']['path'] for _,eid in value['scope'] for row in indexes[eid]['panels']]
     metadata=sorted(name for name in sources if name not in images)
     groups=[images];set_id=uuid.uuid4().hex
+    pack_expired=False;next_pack_check=0.0
     def write_group(names,target,number,count):
-        with zipfile.ZipFile(target,'w',compression=zipfile.ZIP_DEFLATED,compresslevel=3) as z:
+        nonlocal pack_expired,next_pack_check
+        with zipfile.ZipFile(target,'w',compression=zipfile.ZIP_DEFLATED,compresslevel=1 if speed_states else 3) as z:
             for name in [*metadata,*names]:
-                mode=zipfile.ZIP_STORED if sources[name].suffix.lower() in {'.png','.jpg','.jpeg','.webp'} else zipfile.ZIP_DEFLATED
+                if speed_states and not pack_expired and time.monotonic()>=next_pack_check:
+                    pack_expired=any(checkpoint(p,'pack',state=s)['degraded'] for p,s in speed_states)
+                    next_pack_check=time.monotonic()+.5
+                mode=zipfile.ZIP_STORED if pack_expired or sources[name].suffix.lower() in {'.png','.jpg','.jpeg','.webp'} else zipfile.ZIP_DEFLATED
                 z.write(sources[name],name,compress_type=mode)
             z.writestr(PART_INDEX,json.dumps({'policy':POLICY,'scope':value['scope'],
-                'member_digest':fingerprint(members),'set_id':set_id,'number':number,'count':count},ensure_ascii=False))
+                'member_digest':fingerprint(members),'set_id':set_id,'number':number,'count':count},ensure_ascii=False),
+                compress_type=zipfile.ZIP_STORED if pack_expired else zipfile.ZIP_DEFLATED)
     with tempfile.TemporaryDirectory(dir=out.parent,prefix='.panel-zips-') as tmp:
         tmp=Path(tmp)
         while True:

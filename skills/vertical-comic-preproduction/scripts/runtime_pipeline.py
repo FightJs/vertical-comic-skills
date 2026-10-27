@@ -27,6 +27,8 @@ def budget(path,enabled=True):
     finally:_BUDGET.reset(token)
 
 def poll_budget():
+    from stage_deadlines import poll_compile
+    poll_compile()
     value=_BUDGET.get()
     if value is not None and time.monotonic()>=value['next_check']:
         from runtime_clock import require_running

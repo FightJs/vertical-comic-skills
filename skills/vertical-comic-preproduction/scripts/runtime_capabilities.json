@@ -75,7 +75,8 @@
     "qa_revision": "immutable_qa_decision_cas_v1",
     "new_episode_default": true,
     "legacy_auto_migration": false,
-    "persistent_pass_cache": false
+    "persistent_pass_cache": false,
+    "approval_coverage": "source_scope_map_v1"
   },
   "source_input_validation": {
     "policy": "formal_source_inputs_v1",
@@ -123,5 +124,23 @@
     "automatic_repair": "story_critical_only",
     "max_repair_rounds": 1,
     "legacy_auto_migration": false
-  }
+  },
+  "stage_deadlines": {
+    "policy": "bounded_stage_fallback_v1",
+    "active_seconds": {
+      "preparation_optional": 2700,
+      "intake_optional": 600,
+      "full_compile_slice": 90,
+      "image_review": 30,
+      "repair_planning": 480,
+      "pack_compression": 30
+    },
+    "repair_min_remaining_seconds": 1800,
+    "compile_fallback_max_panels": 5,
+    "pause_charged": false,
+    "first_round_continues_after_three_hours": true,
+    "legacy_auto_migration": false
+  },
+  "default_clock_mode": "active",
+  "wall_delivery_opt_in": "--clock-mode wall"
 }

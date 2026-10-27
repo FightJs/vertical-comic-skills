@@ -58,6 +58,30 @@ def settings(value):
 
 @authority_scoped
 def compile_jobs(state, root, panel_ids=None, *, candidate=False, input_audit=False):
+    from stage_deadlines import enabled as speed_enabled, checkpoint, compile_slice, CompileSliceExpired
+    if not speed_enabled(state):
+        return _compile_jobs(state, root, panel_ids, candidate=candidate, input_audit=input_audit)
+    path = Path(root)/'00_输入审计/生产流程.json'
+    mark = checkpoint(path, 'compile', state=state)
+    if not mark['degraded']:
+        try:
+            with compile_slice(path, state):
+                result = _compile_jobs(state, root, panel_ids, candidate=candidate, input_audit=input_audit)
+            result['stage_budget'] = checkpoint(path, 'compile', state=state)
+            return result
+        except CompileSliceExpired:
+            mark = checkpoint(path, 'compile', state=state)
+    ids = panel_ids if panel_ids is not None else [r['panel_id'] for r in state['panels']
+        if candidate or input_audit or r.get('status') in {'PENDING','REPAIR_AUTHORIZED'}]
+    selected = ids[:5]
+    result = _compile_jobs(state, root, selected, candidate=candidate, input_audit=input_audit)
+    result.update(stage_budget=mark, deferred_panel_ids=ids[5:], next_compile_panel_ids=ids[5:],
+                  compile_scope_complete=not ids[5:])
+    return result
+
+
+@authority_scoped
+def _compile_jobs(state, root, panel_ids=None, *, candidate=False, input_audit=False):
     """Full bulk gates once; export actual paths/prompt, never execute planned jobs."""
     from staged_workflow import preflight_many
     if input_audit and (candidate or state.get('parallel_context')):
@@ -753,10 +777,30 @@ def _persist_updates(state_path, root, expected_sha256, updates, new,
             "user_approval":"NOT_GRANTED"}
 
 def authorize_episode_repair(state_path, expected_sha256, authorization_ref):
+    from stage_deadlines import RepairPlanningExpired, defer_repair
+    try:
+        return _authorize_episode_repair(state_path, expected_sha256, authorization_ref)
+    except RepairPlanningExpired:
+        path=Path(state_path).resolve();root=path.parent.parent
+        auth=read_json(checked_file(root, {'path':authorization_ref,'sha256':digest(root/authorization_ref)}))
+        return defer_repair(path, expected_sha256, auth['panel_id'])
+
+
+def _authorize_episode_repair(state_path, expected_sha256, authorization_ref):
     """Atomically open one second-round attempt without waiting for every panel."""
     from batch_round import snapshot, attempt_errors
     from episode_repair import systemic_errors
     state_path=Path(state_path).resolve();root=state_path.parent.parent
+    initial = read_json(state_path)
+    require_legacy(initial)
+    if digest(state_path) != expected_sha256: raise ValueError('STATE_CHANGED')
+    from stage_deadlines import checkpoint, defer_repair
+    auth_before = read_json(checked_file(root, {'path':authorization_ref, 'sha256':digest(root/authorization_ref)}))
+    speed = checkpoint(state_path, 'repair', auth_before.get('panel_id'), state=initial)
+    if speed and speed['degraded']:
+        result = defer_repair(state_path, expected_sha256, auth_before['panel_id'])
+        result['stage_budget'] = speed
+        return result
     with state_write_lock(state_path):
         if digest(state_path)!=expected_sha256:raise ValueError('STATE_CHANGED')
         state=read_json(state_path)
@@ -800,6 +844,10 @@ def authorize_episode_repair(state_path, expected_sha256, authorization_ref):
         history=state_path.parent/'runtime_history';history.mkdir(exist_ok=True)
         previous=history/(expected_sha256+'.json')
         if not previous.exists():previous.write_bytes(state_path.read_bytes())
+        speed=checkpoint(state_path,'repair',pid,state=state)
+        if speed and speed['degraded']:
+            from stage_deadlines import RepairPlanningExpired
+            raise RepairPlanningExpired('Repair planning expired before opening the new attempt')
         atomic_json(state_path, new)
         return {'status':'REPAIR_AUTHORIZED','panel_id':pid,'attempt_id':attempt,'state_sha256':digest(state_path)}
 
@@ -856,6 +904,12 @@ def prepare_review(state, root, queue):
     root=Path(root);records={r["panel_id"]:r for r in state["panels"]}
     for item in queue["items"]:
         row=records[item["panel_id"]]
+        from stage_deadlines import checkpoint
+        speed = checkpoint(root/'00_输入审计/生产流程.json', 'review', row['panel_id'], state=state)
+        if speed:
+            checkpoint(root/'00_输入审计/生产流程.json', 'repair', row['panel_id'], state=state)
+            item['stage_budget'] = speed
+            item['review_form'] = 'single_observation' if speed['degraded'] else 'light_observations'
         if item["action"] not in {"REVIEW_SIX_DIMENSIONS", "REVIEW_STORY_ONCE"}:
             continue
         if row.get("qa_report"):
@@ -883,7 +937,8 @@ def prepare_review(state, root, queue):
         report=out/"生成图QA报告.json"
         item["qa_template"]={"path":report.relative_to(root).as_posix(),"sha256":digest(report)}
         item["template_status"]="UNREVIEWED"
-    if queue["items"]:
+    from stage_deadlines import enabled as speed_enabled
+    if queue["items"] and not speed_enabled(state):
         ids={i["panel_id"] for i in queue["items"]}
         order=[r["panel_id"] for r in state["panels"] if r["panel_id"] in ids]
         dest=root/"06_图片验收"/("增量组_"+uuid.uuid4().hex[:12]+".jpg")
@@ -923,6 +978,7 @@ def main():
     parser.add_argument("--atlas-cache", help="图集技术派生复用目录")
     parser.add_argument("--package-write", help="preparation-review同时保存原格式嵌套包；不重复编译")
     parser.add_argument("--write", help="可选新报告文件；不覆盖、不更改生产流程")
+    parser.add_argument("--optional", action="store_true", help="仅可选派生/复核；环节预算到时直接跳过，不作为必需校验通过")
     parser.add_argument('--episode-scope',action='store_true',help='新版整话接包审计；不计算H001/H002')
     args = parser.parse_args()
     try:
@@ -934,6 +990,21 @@ def main():
         state = read_json(path)
         if "runtime" in state:
             settings(state["runtime"])
+        if args.optional:
+            if args.action not in {'draft-atlas','draft-derive','preparation-review','receiver-audit','compile','preflight'}:
+                raise ValueError('保存返回/提交/采用/交付不能标记为可选')
+            from stage_deadlines import enabled as speed_enabled, checkpoint as speed_checkpoint
+            if speed_enabled(state):
+                from runtime_clock import execution_context,require_running
+                clock=require_running(path);context=execution_context(path)
+                phase='preparation' if (context or clock).get('role')=='preparation' else 'intake'
+                mark=speed_checkpoint(path,phase,state=state)
+                if mark['degraded']:
+                    print(json.dumps({'status':'OPTIONAL_WORK_SKIPPED','stage_budget':mark,
+                        'next_action':'CONTINUE_REQUIRED_PRODUCTION_OR_DELIVERY','image_calls':0,
+                        'dispatch_authorized':False,'user_approval':'NOT_GRANTED'},ensure_ascii=False))
+                    return 0
+
         if args.action == 'decisions-register':
             from production_decisions import register
             if not args.decisions or not args.expected_state_sha256: raise ValueError('缺决定文件或CAS哈希')

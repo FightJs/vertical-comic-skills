@@ -28,6 +28,8 @@ def state_errors(state,root):
             raise ValueError('未知来源输入校验协议')
         if state.get('runtime_pipeline_policy') not in (None,'observed_incremental_pipeline_v1'):
             raise ValueError('未知增量流水线合同，不能降级')
+        from stage_deadlines import enabled as speed_enabled
+        speed_enabled(state)
         from light_review import enabled as light_enabled
         if light_enabled(state) and state.get('execution_mode') != 'episode_async_v1':
             raise ValueError('Light review requires a new whole-episode runtime')

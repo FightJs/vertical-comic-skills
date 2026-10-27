@@ -14,11 +14,25 @@ class WorkflowSession:
         if not isinstance(request,dict):raise ValueError('request must be an object')
         action=request['action'];path=Path(request['state']).resolve();root=path.parent.parent
         from runtime_clock import require_step
-        schedule=require_step(path,action,optional=request.get('optional',False)) if action not in {'commit','context-rebind-status'} else None
+        from stage_deadlines import checkpoint, enabled as speed_enabled
+        initial = read_json(path)
+        speed = speed_enabled(initial)
+        schedule=require_step(path,action,optional=request.get('optional',False) and not speed) if action not in {'commit','context-rebind-status'} else None
+        if speed and (request.get('optional') or action == 'pilot-check'):
+            from runtime_clock import execution_context
+            context=execution_context(path)
+            phase='preparation' if context and context['role']=='preparation' else 'intake'
+            mark=checkpoint(path,phase,state=initial)
+            if mark['degraded'] or action=='pilot-check':
+                return {'status':'OPTIONAL_WORK_SKIPPED','stage_budget':mark,'action':action,
+                        'next_action':'CONTINUE_REQUIRED_PRODUCTION_OR_DELIVERY',
+                        'image_calls':0,'dispatch_authorized':False,'user_approval':'NOT_GRANTED'}
         started=time.monotonic()
         # Final delivery always reruns the full existing gate in a fresh pool.
         with (strict_reads() if action=='final-check' else nullcontext()), session(None if action=='final-check' else self.pool), budget(path,enabled=bool(schedule) or action in {'compile','receiver-audit','preparation-review'}):
-            if action=='context-rebind-plan':
+            if action=='stage-check':
+                result={'status':'STAGE_BUDGET','stage_budget':checkpoint(path,request['phase'],request.get('panel_id'),state=initial),'image_calls':0,'dispatch_authorized':False}
+            elif action=='context-rebind-plan':
                 from context_rebind import plan
                 result=plan(path,request['replacements'])
             elif action=='context-rebind-apply':

@@ -5,9 +5,7 @@ description: Compile approved inputs and generate first-batch comic panels with 
 
 # 条漫第一批逐格生图
 
-
-
-**新任务默认速度优先、轻审核成品**：先按[轻审核流程](../vertical-comic-preproduction/references/light-review.md)执行。每图快速看一次人物与剧情可读性，仅严重剧情问题最多返修一轮；普通瑕疵留人工。此模式不执行下文旧全面审核的六项细节取证、逐MEM记录及整话/跨话重复复审，不为测试返修另做生图。工具以冻结状态的 `image_review_profile` 分支登记和交付；无该字段的旧任务仍按原合同，不能热改。
+**新任务默认速度优先、轻审核成品，并启用环节限时自动降级**：先按[轻审核流程](../vertical-comic-preproduction/references/light-review.md)执行。每图快速看一次人物与剧情可读性，仅严重剧情问题最多返修一轮；普通瑕疵留人工。此模式不执行下文旧全面审核的六项细节取证、逐MEM记录及整话/跨话重复复审，不为测试返修另做生图。新任务同时绑定 `speed_policy: bounded_stage_fallback_v1`：按轻审核流程内的时限表执行，超时停止可选润饰、缩小编译批次、简化审核或沿用现有图；首轮出齐优先于返修。工具以冻结状态的 `image_review_profile` 分支登记和交付；无该字段的旧任务仍按原合同，不能热改。
 
 阶段开始时按[规则归属](../vertical-comic-preproduction/references/rule-ownership.md)读取共同规则与本阶段合同；授权和进度沿用该页入口，同一运行不重复加载未变内容。新制作按[前期提速](../vertical-comic-preproduction/references/preparation-efficiency.md)先贯通代表格，再用[唯一主表](../vertical-comic-preproduction/references/draft-authoring.md)增量派生。接包直接使用已审输入。
 

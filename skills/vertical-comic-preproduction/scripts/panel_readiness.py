@@ -119,7 +119,7 @@ def _artifacts_covered(state,root,proof,artifacts,ids,phase=None):
     try:return all(covered(ref) for ref in artifacts)
     except (OSError,ValueError,TypeError,KeyError,RecursionError):return False
 
-def approval_errors_for(state,root,phase,artifacts,ids,direct=None,*,proofs=()):
+def _approval_coverage_for(state,root,phase,artifacts,ids,direct=None,*,proofs=()):
     ids=tuple(ids)  # Preserve one-shot iterables for eligibility and missing-scope reporting.
     def indexed_candidates():
         candidates=[p for p in proofs if isinstance(p,dict)]
@@ -144,7 +144,7 @@ def approval_errors_for(state,root,phase,artifacts,ids,direct=None,*,proofs=()):
         return {'proofs':candidates,'scoped':scoped,'unscoped':unscoped}
     key=content_key([str(resolve_path(Path(root))), state['book_id'], state['episode_id'], phase, state.get('approval_index'), direct, proofs])
     index=derived('approval_index',key,indexed_candidates)
-    if index is None:return ['批准索引版本错误']
+    if index is None:return None
     # A proof usually covers many panels. Verify that proof's eligible scope
     # together instead of replaying the same file dependencies once per panel.
     # Both the original proof and the lookup entry still restrict the scope.
@@ -174,6 +174,34 @@ def approval_errors_for(state,root,phase,artifacts,ids,direct=None,*,proofs=()):
             # per-panel fallback and never let one bad row block its siblings.
             for pid in pending:
                 if artifacts_covered(state,root,proof,artifacts,[pid],phase):covered.add(pid)
+    return tuple(covered)
+
+def approval_errors_for(state,root,phase,artifacts,ids,direct=None,*,proofs=()):
+    """Resolve one immutable coverage map, then query growing predecessor scopes.
+
+    This is evidence coverage, never readiness or dispatch authorization. The
+    existing grouped/per-row validator remains the sole producer of the map.
+    """
+    ids=tuple(ids)
+    universe=ids
+    ref=state.get('shot_manifest')
+    if isinstance(ref,dict) and ref.get('path'):
+        try:
+            shots=read_json_readonly(checked_file(Path(root),ref))
+            source_ids=[p['panel_id'] for p in shots.get('panels',[])]
+            if source_ids and all(isinstance(pid,str) for pid in source_ids):
+                # Preserve exact spellings: aliases are not additional authority.
+                universe=tuple(dict.fromkeys(source_ids+list(ids)))
+        except (OSError,ValueError,TypeError,KeyError):
+            # The original validator still reports malformed/missing evidence.
+            universe=ids
+    key=content_key([str(resolve_path(Path(root))),state['book_id'],state['episode_id'],
+                     ref,state.get('approval_index'),phase,artifacts,direct,proofs,
+                     universe,revocation_token()])
+    coverage=derived('approval_scope_map',key,
+        lambda:_approval_coverage_for(state,root,phase,artifacts,universe,direct,proofs=proofs))
+    if coverage is None:return ['批准索引版本错误']
+    covered=set(coverage)
     missing=[pid for pid in ids if pid not in covered]
     return ['缺少原范围、原版本或未变条目适用的真实批准:'+','.join(missing)] if missing else []
 

@@ -9,9 +9,9 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 
 _POOL=ContextVar('comic_validation_pool',default=None)
-NAMES={'approval_proof','approval_validation','approval_coverage','approval_index',
+NAMES={'approval_scope_map','approval_proof','approval_validation','approval_coverage','approval_index',
        'collection_summary','collection_pair','continuity_context','final_semantic_input','qa_evidence'}
-PRIORITY={'approval_proof':3,'approval_index':3,'collection_summary':3,'collection_pair':3,
+PRIORITY={'approval_scope_map':3,'approval_proof':3,'approval_index':3,'collection_summary':3,'collection_pair':3,
           'continuity_context':2,'qa_evidence':2,'final_semantic_input':2}
 
 class ValidationPool:

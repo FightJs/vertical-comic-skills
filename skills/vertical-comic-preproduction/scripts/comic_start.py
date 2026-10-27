@@ -272,7 +272,11 @@ def main():
         if a.action=='receive-resume':
             result=receive_resume(a.run_root,audit_timeout=a.audit_timeout)
             print(json.dumps(result,ensure_ascii=False));return int(result['status']=='HOLD')
+        from agent_capacity import ensure as ensure_agent_capacity
+        # Only formal new starts alter host config; imported library calls and resume do not.
+        agent_capacity = ensure_agent_capacity(write=not (a.action == 'prepare' and a.workers is not None and a.workers < 6))
         result=prepare(a.project,a.book,a.episodes,script=a.script,assets=a.assets,output=a.output,workers=a.workers,request_source=read(a.request_source) if a.request_source else None,reuse_selection=read(a.reuse_selection) if a.reuse_selection else None,runtime_limit_seconds=a.runtime_limit_seconds,clock_session_id=a.clock_session_id,delivery_mode=a.delivery_mode,max_file_bytes=a.max_file_bytes,image_review_profile=a.image_review_profile,wall_delivery=a.clock_mode=='wall') if a.action=='prepare' else receive(a.zip,package_root=a.package_root,output=a.output,runtime_limit_seconds=a.runtime_limit_seconds,clock_session_id=a.clock_session_id,audit_timeout=a.audit_timeout,eager_audit=a.eager_audit,wall_delivery=a.clock_mode=='wall')
+        result['agent_capacity'] = agent_capacity
         print(json.dumps(result,ensure_ascii=False));return int(result['status']=='HOLD')
     except (OSError,ValueError,KeyError,TypeError,zipfile.BadZipFile) as e:print(json.dumps({'status':'HOLD','error':str(e)},ensure_ascii=False));return 1
 if __name__=='__main__':

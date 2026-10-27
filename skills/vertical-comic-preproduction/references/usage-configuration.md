@@ -99,7 +99,7 @@ python <快照scripts>/init_preproduction.py --config <配置JSON> --runtime-sna
 本项目新配置runtime追加snapshot_policy=batch_snapshot_v1、question_policy=grouped_review_v1、dispatch_policy=episode_slot_lease_v1。开批一次创建快照，各话初始化传同一--runtime-snapshot；配置不是批准。具体命令见[批次运行](batch-runtime.md)，审查范围见[合并审查](grouped-review.md)。旧配置与已有RV不自动添加字段。
 
 
-新配置增加 `"background": {"policy":"narrative_background_v1","selection":"content_driven","closeup_preference":"scene_flat"}`，与framing画幅比例配置独立。配置省略保持旧行为；无配置的新整话初始化默认启用；旧RV不自动升级。A准备profile、B逐格批准模式，实际包仍按原准确范围批准。详见[背景模式](background-treatment.md)。
+新配置增加 `"background": {"policy":"narrative_background_v1","selection":"content_driven","closeup_preference":"scene_softened"}`，与framing画幅比例配置独立。配置省略保持旧行为；无配置的新整话初始化默认启用；旧RV不自动升级。A准备profile、B逐格批准模式，实际包仍按原准确范围批准。详见[背景模式](background-treatment.md)。
 
 
 新配置execution_quality={"policy":"execution_quality_v1"}，仅新整话RV启用；旧配置省略保持旧行为见[实际执行质量与返修分流](execution-quality.md)。复用现有记录和人工停点，不静默升级旧RV。

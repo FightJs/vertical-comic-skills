@@ -71,7 +71,7 @@
 
 新任务镜头优先用近景、半身近景和表情特写突出人物与关键动作；空间建立、路线、承托和必要同时反应决定是否扩大。不设固定80%/90%主体占比，不把每格改成大头特写。全话仍执行frame-ratio-plan，不照搬案例的横版比例。
 
-在visible_region写清上/下缘、主体位置、必显动作和本机位真正可见的背景区域。background_level表示信息量；framing.background_treatment表示呈现方式。新narrative_background_v1候选按叙事选择四种背景模式，近景优先评估scene_flat；必显信息与物理关系决定保留范围，具体字段见[背景模式](background-treatment.md)。旧clear_limited保持少量清晰背景规则。特殊获批景深选approved_depth_of_field，并以background_treatment_basis写本格批准设计依据；文字存在不证明批准真实。
+在visible_region写清上/下缘、主体位置、必显动作和本机位真正可见的背景区域。background_level表示信息量；framing.background_treatment表示呈现方式。新narrative_background_v1候选按叙事选择四种背景模式，近景优先评估scene_softened；必显信息与物理关系决定保留范围，具体字段见[背景模式](background-treatment.md)。旧clear_limited保持少量清晰背景规则。特殊获批景深选approved_depth_of_field，并以background_treatment_basis写本格批准设计依据；文字存在不证明批准真实。
 
 非剧情手部可在设计阶段合理置于画外；不能在失败后裁掉必显手、接触点或同时反应来获得PASS。新构图先设计再生成；现有图裁切候选另按stage-image-review处理，审阅截图不作成品。模块见prompt-package.md。旧批准包不自动补字段重签，新增或迁移候选才采用并走现有准确范围批准。
 

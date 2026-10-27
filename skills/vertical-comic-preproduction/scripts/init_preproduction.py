@@ -132,7 +132,7 @@ def main() -> int:
     if mode == 'episode_async_v1':
         from visual_evidence import BACKGROUND_POLICY
         bg = config.get('background') if config else {
-            'policy': BACKGROUND_POLICY, 'selection': 'content_driven', 'closeup_preference': 'scene_flat'}
+            'policy': BACKGROUND_POLICY, 'selection': 'content_driven', 'closeup_preference': 'scene_softened'}
         if bg:
             extra.update(background_policy=BACKGROUND_POLICY, requested_background=bg)
     if mode == 'episode_async_v1':

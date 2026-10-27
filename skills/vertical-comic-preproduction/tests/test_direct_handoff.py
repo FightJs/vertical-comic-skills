@@ -31,6 +31,9 @@ class DirectHandoffTests(unittest.TestCase):
                     'face_visible':True,'identity_observable':True,'evidence':'SYNTHETIC visible face'}
                     for c in p['character_bindings']}
 
+        if getattr(self, 'LIGHT_PREPARATION', False):
+            from preparation_gate_policy import FIELD, POLICY
+            s[FIELD] = POLICY
         s['shot_manifest']=f.fixtures.write(self.template,'portable-shots.json',self.shots)
         audit=f.fixtures.read(self.template,s['semantic_audit']);audit['shot_manifest']=s['shot_manifest'];s['semantic_audit']=f.fixtures.write(self.template,'portable-audit.json',audit)
         s['gates']['shot_design']={**f.fixtures.approve([s['visual_basis'],s['shot_manifest'],s['semantic_audit']]),'panel_ids':['P001','P002','P003','P004']}
@@ -52,8 +55,13 @@ class DirectHandoffTests(unittest.TestCase):
                 packet=f.fixtures.read(self.template,r['package_manifest'])
                 review=review_template(actual_input(s,self.template,p,packet,self.template))
                 review.update(status='REVIEWED',reviewer='SYNTHETIC',evidence='Synthetic exact input review, no human approval')
-                for check in review['checks'].values():check.update(status='PASS',evidence='Synthetic scoped review')
+                if getattr(self, 'LIGHT_PREPARATION', False):
+                    review['observation'] = {'evidence':'SYNTHETIC one observation', 'characters_correct':True, 'key_event_readable':True, 'input_usable':True, 'issues':[{'code':'COMPOSITION_DETAIL','detail':'SYNTHETIC plain composition','affects_story':False}]}
+                    row.clear();row['panel_id']=p['panel_id']
+                else:
+                    for check in review['checks'].values():check.update(status='PASS',evidence='Synthetic scoped review')
                 row['execution_review']=review
+            if getattr(self, 'LIGHT_PREPARATION', False): audit[FIELD] = POLICY
             s['semantic_audit']=f.fixtures.write(self.template,'portable-final-audit.json',audit)
         bundle=episode_bundle(s,self.template);f.approve_package(self.template,s,bundle,source['panel_ids'])
         compiled=compile_jobs(s,self.template,['P001','P002']);self.assertEqual([r['panel_id'] for r in compiled['jobs']],['P001','P002'],compiled)

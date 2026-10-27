@@ -144,7 +144,12 @@ def main() -> int:
         from production_decisions import POLICY as PRODUCTION
         extra['production_policy'] = PRODUCTION
         from light_review import FIELD, POLICY as LIGHT_POLICY, enabled as light_enabled
-        if args.image_review_profile != 'full': extra[FIELD] = args.image_review_profile
+        if args.image_review_profile != 'full':
+            extra[FIELD] = args.image_review_profile
+            from light_review import REPAIR_FIELD,REPAIR_POLICY
+            extra[REPAIR_FIELD] = REPAIR_POLICY
+            from preparation_gate_policy import FIELD as PREP_FIELD, POLICY as PREP_POLICY
+            extra[PREP_FIELD] = PREP_POLICY
         light_enabled(extra)
         if args.speed_policy:
             extra['speed_policy'] = args.speed_policy

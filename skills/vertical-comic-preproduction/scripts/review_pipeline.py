@@ -82,6 +82,8 @@ def save(state_path,expected_state,proposal):
     light = light_enabled(state)
     if light:
         if template.get(FIELD) != LIGHT_POLICY: raise ValueError('LIGHT_QA: template profile mismatch')
+        from light_review import REPAIR_FIELD
+        if items[0].get('light_review',{}).get(REPAIR_FIELD)!=state.get(REPAIR_FIELD):raise ValueError('LIGHT_QA: frozen repair threshold mismatch')
         if proposal.get('observations'): raise ValueError('LIGHT_QA: use light_observations')
         from stage_deadlines import checkpoint, manual_decision
         review_budget = checkpoint(path, 'review', original['panel_id'], state=state)

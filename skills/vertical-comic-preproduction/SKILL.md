@@ -11,6 +11,10 @@ description: Coordinate first-batch per-panel comic production for further human
 
 **使用说明统一入口**：《条漫Skill使用提示词》和内置模板已合并为[同一份文档](references/条漫Skill使用提示词.md)。用户沿用旧文件名或作者电脑路径时，按[旧文档路径兼容](references/条漫Skill使用提示词.md#旧文档路径兼容)直接路由到该文档，不寻找外部标准说明，不并行维护两套正文。用户明确指定的自定义补充、特定版本或实际生产素材仍须读取，不以模板代替。
 
+新轻审核任务同时启用[前期轻门禁](references/preparation-efficiency.md#新任务前期轻门禁一次观察细节留人工)：设计与最终输入共用一次观察，普通细节仅提醒；仅剧情关键问题及不可执行输入阻断对应格。使用preparation_review.py自动保存内容绑定记录，在已有准确委托内同次登记B/包决定。下文全面逐项审查要求仅适用于旧冻结或明确全面审核任务。
+
+普通格默认按[五项最小镜头模板](assets/templates/普通格最小镜头模板.md)只填写人物、关键动作、景别、必要背景和参考；共同设置在主表shared维护一次。派生入口自动复用同主表上一轮记录，禁止为局部修改重做未变化整话。
+
 阶段开始时按[规则归属](references/rule-ownership.md)读取共同规则与本阶段合同；授权和进度沿用该页入口，同一运行不重复加载未变内容。新制作按[前期提速](references/preparation-efficiency.md)先贯通代表格，再用[唯一主表](references/draft-authoring.md)增量派生。接包直接使用已审输入。
 
 **接包优先**：用户提供正式ZIP或完整解压包根目录时，直接执行[免外部配置接包](references/quick-start.md#接包生产免外部配置)，优先于首次书籍配置和下文新运行创作步骤。书名、话号、格数、脚本依据和资产从已验证包内读取；不询问外部脚本/资产，不创建本书profile，不调用prepare，不重建主表或重做A/B。缺件只报告包内准确缺项，在现有授权内闭环。

@@ -116,10 +116,11 @@ def scoped_input_signals(panel, prompt, context=None):
     return signals
 
 
-def conflict_errors(shot, prompt):
+def conflict_errors(shot, prompt, *, detail_warnings=None):
     """Only facts with explicit subject/instant attribution can auto-block."""
     from spatial_contract import selection_errors, projection_errors
     errors = selection_errors(shot) + projection_errors(shot)
+    details = errors if detail_warnings is None else detail_warnings
     facts = shot.get('semantic_facts', [])
     if not isinstance(facts, list):
         return ['INPUT_CONFLICT:semantic_facts须为列表']
@@ -152,7 +153,7 @@ def conflict_errors(shot, prompt):
             for clause in _asserted(line):
                 for (field, alternative), pattern in PATTERNS.items():
                     if field == attr and alternative != value and re.search(pattern, clause):
-                        errors.append(f'INPUT_CONFLICT:{subject}:{attr}:{value}与最终文字“{clause.strip()}”冲突')
+                        details.append(f'INPUT_CONFLICT:{subject}:{attr}:{value}与最终文字“{clause.strip()}”冲突')
     framing = shot.get('framing') or {}
     required = '；'.join(map(str, framing.get('required_visible', [])))
     crop = framing.get('body_crop')
@@ -169,7 +170,7 @@ def conflict_errors(shot, prompt):
         if row['face_visible']:
             continue
         if (shot.get('adjacent_face_comparison', {}).get(subject, {}) or {}).get('face_comparable') is True:
-            errors.append(f'INPUT_CONFLICT:{subject}:脸不可见却声明面部可比较')
+            details.append(f'INPUT_CONFLICT:{subject}:脸不可见却声明面部可比较')
         name = row.get('subject_name')
         if name:
             for line in prompt.splitlines():
@@ -179,7 +180,7 @@ def conflict_errors(shot, prompt):
                        for other, item in regions.items() if isinstance(item, dict)):
                     continue
                 if any(re.search(r'瞳孔|嘴唇|双唇|眼睑|眉形', c) for c in _asserted(line)):
-                    errors.append(f'INPUT_CONFLICT:{subject}:不可见面部仍有五官绘制指令')
+                    details.append(f'INPUT_CONFLICT:{subject}:不可见面部仍有五官绘制指令')
     return list(dict.fromkeys(errors))
 
 
@@ -201,7 +202,9 @@ def _basis(state, root, shot):
     memory = state.get('memory_source') or {}
     rule_hash = digest(Path(memory['root']) / memory.get('index', '记忆索引.json')) if memory.get('root') else None
     toolchain = state.get('toolchain') or {}
-    return {'book_id': state['book_id'], 'episode_id': state['episode_id'],
+    from preparation_gate_policy import enabled as light_preparation, FIELD
+    return {**({FIELD: state[FIELD]} if light_preparation(state) else {}),
+            'book_id': state['book_id'], 'episode_id': state['episode_id'],
             'panel_id': shot['panel_id'], 'source': source['locked_scripts'][shot['panel_id']],
             'shot_signature': design_signature(shot), 'visual_basis_sha256': digest(basis),
             'rule_index_sha256': rule_hash, 'tool_files': toolchain.get('files', []),
@@ -211,7 +214,7 @@ def _basis(state, root, shot):
 def actual_input(state, root, shot, packet, package_root):
     from audit_cache import derived, content_key
     authority = {k: state.get(k) for k in ('book_id', 'episode_id', 'source_snapshot',
-                 'visual_basis', 'shot_manifest', 'toolchain', 'memory_source', 'input_semantics_policy')}
+                 'visual_basis', 'shot_manifest', 'toolchain', 'memory_source', 'input_semantics_policy', 'preparation_gate_policy')}
     from panel_readiness import review_scope
     return derived('final_semantic_input', content_key([str(root), str(package_root), authority, shot, packet, review_scope()]),
                    lambda: _actual_input(state, root, shot, packet, package_root))
@@ -337,7 +340,11 @@ def preparation_basis(state, root, shot, panel, prompt):
         'appearance_anchors': {'details':context.get('details', {}),
             'visibility':(shot.get('visual_evidence') or {}).get('detail_visibility', {}),
             'checks': [c for c in (shot.get('visual_evidence') or {}).get('checks', []) if c.get('kind') == 'accessory']}}
+    from preparation_gate_policy import enabled as light_preparation
+    detail_signals = []
+    if light_preparation(state): conflict_errors(shot, prompt, detail_warnings=detail_signals)
     signals = scoped_input_signals(panel, prompt, context)
+    if detail_signals: targets['detail_warnings'] = detail_signals
     if signals:
         targets['all_execution_text_and_criteria'] = {'scoped_conflict_signals': signals,
             'instruction': '仅核对这些疑点与相关原输入；在本项evidence说明修正或不构成冲突的依据，不另开审查轮次。'}
@@ -345,6 +352,8 @@ def preparation_basis(state, root, shot, panel, prompt):
 
 
 def review_template(inputs):
+    from preparation_gate_policy import FIELD, POLICY as LIGHT, template
+    if inputs.get(FIELD) == LIGHT: return template(inputs)
     policy = inputs.get('input_semantics_policy', POLICY)
     return {'policy': policy, 'status': 'UNREVIEWED', 'reviewer': '', 'evidence': '',
             'input_digest': fingerprint(inputs), 'checks': {
@@ -355,6 +364,8 @@ def review_template(inputs):
 
 
 def review_errors(review, inputs):
+    from preparation_gate_policy import FIELD, POLICY as LIGHT, review_errors as quick_errors
+    if inputs.get(FIELD) == LIGHT: return quick_errors(review, inputs)
     if not isinstance(review, dict):
         return ['INPUT_SEMANTICS_HOLD:缺最终输入逐格审查']
     policy = inputs.get('input_semantics_policy', POLICY)
@@ -378,6 +389,8 @@ def _audit_row(state, root, pid):
             or audit.get('panel_ids') != source['panel_ids']
             or [r.get('panel_id') for r in audit.get('panels', [])] != source['panel_ids']):
         raise ValueError('INPUT_SEMANTICS_HOLD:全话审查归属/范围失配')
+    from preparation_gate_policy import FIELD
+    if audit.get(FIELD) != state.get(FIELD): raise ValueError('前期审查策略与运行模板不同')
     return next(r for r in audit['panels'] if r['panel_id'] == pid)
 
 
@@ -385,6 +398,9 @@ def panel_errors(state, root, shot, packet=None, package_root=None, *, plan_row=
     try:
         if not enabled(state):
             return []
+        from preparation_gate_policy import enabled as light_preparation
+        def conflicts(prompt):
+            return conflict_errors(shot, prompt, detail_warnings=[] if light_preparation(state) else None)
         inputs = planned_input(state, root, shot, plan_row) if plan_row is not None else actual_input(state, root, shot, packet, package_root)
         row = _audit_row(state, root, shot['panel_id'])
         review = row.get('execution_review')
@@ -396,10 +412,10 @@ def panel_errors(state, root, shot, packet=None, package_root=None, *, plan_row=
             if plan is None:
                 return ['INPUT_SEMANTICS_HOLD:缺批准依赖模板']
             static = planned_input(state, root, shot, plan)
-            static_errors = review_errors(review, static) + conflict_errors(shot, static['prompt'])
+            static_errors = review_errors(review, static) + conflicts(static['prompt'])
             if static_errors: return static_errors
             review = row.get('dependency_completion_review')
-        return conflict_errors(shot, inputs['prompt']) + review_errors(review, inputs)
+        return conflicts(inputs['prompt']) + review_errors(review, inputs)
     except (OSError, ValueError, TypeError, KeyError, IndexError, StopIteration, AttributeError) as exc:
         return ['INPUT_SEMANTICS_HOLD:' + str(exc)]
 
@@ -460,7 +476,12 @@ def _coverage(state, root, dependency_plan=None, *, panel_ids=None):
             if found: errors[pid] = found
         except (OSError, ValueError, TypeError, KeyError, IndexError) as exc:
             errors[pid] = ['INPUT_SEMANTICS_HOLD:' + str(exc)]
-    return {'policy': state['input_semantics_policy'], 'status': 'HOLD' if errors else 'SCOPED_INPUTS_REVIEWED' if panel_ids is not None else 'PREPRODUCTION_INPUTS_REVIEWED',
+    from preparation_gate_policy import enabled as light_preparation, warnings, FIELD
+    extra = {}
+    if light_preparation(state):
+        audit = read_json(checked_file(root, state['semantic_audit']))
+        extra = {FIELD: state[FIELD], 'warnings': {r['panel_id']: warnings(r) for r in audit['panels'] if r['panel_id'] in selected and warnings(r)}}
+    return {**extra, 'policy': state['input_semantics_policy'], 'status': 'HOLD' if errors else 'SCOPED_INPUTS_REVIEWED' if panel_ids is not None else 'PREPRODUCTION_INPUTS_REVIEWED',
             'scope':'selected' if panel_ids is not None else 'episode',
             'panel_ids': selected, 'reviewed_panel_ids': [p for p in selected if p not in errors],
             'pending_real_reference_review_ids': pending, 'errors': errors,

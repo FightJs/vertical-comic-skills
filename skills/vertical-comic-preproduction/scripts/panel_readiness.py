@@ -276,19 +276,24 @@ def _report(state,root,*,include_execution=True):
             state.get('execution_mode')!='episode_async_v1' and (policy=='merge_into_C' and order.index(pid)>=split or policy=='merge_into_D' and order.index(pid)<split)):
             issues.append('新状态审查范围无效')
         if p.get('hold_reasons'):issues.extend(map(str,p['hold_reasons']))
-        if row.get('status')!='REVIEWED' or not row.get('reviewer') or not row.get('evidence'):issues.append('本格尚未实际语义核对')
-        for key in semantic_checks(state):
-            check=row.get('checks',{}).get(key,{})
-            if check.get('status')!='PASS' or not check.get('evidence'):issues.append(key+':尚未核对')
-        if 'framing_feasibility' in semantic_checks(state):
-            from visual_evidence import feasibility_errors
-            issues.extend(feasibility_errors(p,row.get('checks',{}).get('framing_feasibility',{})))
-        if pid!=order[0] or not boundary:
-            try:
-                from continuity_context import rule_tags
-                from rule_memory import trigger_review_errors
-                issues.extend(trigger_review_errors(state.get('memory_source'),'shot_design',p,row.get('checks',{}).get('rule_triggers',{}),rule_tags(shots,path.parent,p)))
-            except (OSError,ValueError,TypeError,KeyError,AttributeError) as exc:issues.append('规则/相邻语义:'+str(exc))
+        from preparation_gate_policy import enabled as light_preparation, design_errors, warnings
+        if light_preparation(state):
+            issues.extend(design_errors(row))
+            planning_items.extend({**w, 'panel_ids':[pid]} for w in warnings(row))
+        else:
+            if row.get('status')!='REVIEWED' or not row.get('reviewer') or not row.get('evidence'):issues.append('本格尚未实际语义核对')
+            for key in semantic_checks(state):
+                check=row.get('checks',{}).get(key,{})
+                if check.get('status')!='PASS' or not check.get('evidence'):issues.append(key+':尚未核对')
+            if 'framing_feasibility' in semantic_checks(state):
+                from visual_evidence import feasibility_errors
+                issues.extend(feasibility_errors(p,row.get('checks',{}).get('framing_feasibility',{})))
+            if pid!=order[0] or not boundary:
+                try:
+                    from continuity_context import rule_tags
+                    from rule_memory import trigger_review_errors
+                    issues.extend(trigger_review_errors(state.get('memory_source'),'shot_design',p,row.get('checks',{}).get('rule_triggers',{}),rule_tags(shots,path.parent,p)))
+                except (OSError,ValueError,TypeError,KeyError,AttributeError) as exc:issues.append('规则/相邻语义:'+str(exc))
         if pid==order[0] and not issues:
             own_holds=direct_holds[pid]
             if own_holds and all(isinstance(h,dict) and h.get('scope')=='panels' and h.get('dimension')=='boundary_comparison' for h in own_holds):design_blocked.discard(pid)

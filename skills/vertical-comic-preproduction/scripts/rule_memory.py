@@ -344,6 +344,8 @@ def application_errors(source, stage, panel, artifact_root, applications=None, i
         return []
     try:
         root, _ = source_index(source)
+        from preparation_gate_policy import enabled as quick_preparation
+        quick = stage in {'shot_design','generation'} and quick_preparation(scope or {})
         matches = select(source, stage, panel,context_tags)
         apps = applications if applications is not None else panel.get("memory_applications", {}).get(stage, [])
         if not isinstance(apps, list):
@@ -360,7 +362,7 @@ def application_errors(source, stage, panel, artifact_root, applications=None, i
             app = found[0]
             if app.get("rule_signature") != token or app.get("rule_sha256") != rule["file"]["sha256"] or app.get("rule_version") != rule["version"]:
                 errors.append(f"MEMORY_HOLD:{rid}:规则版本变更，须重读并复核受影响项")
-            if not isinstance(app.get("evidence"), str) or not app["evidence"].strip() or not isinstance(app.get("reviewer"), str) or not app["reviewer"].strip():
+            if not quick and (not isinstance(app.get("evidence"), str) or not app["evidence"].strip() or not isinstance(app.get("reviewer"), str) or not app["reviewer"].strip()):
                 errors.append(f"MEMORY_HOLD:{rid}:缺少实际执行者和可观察依据")
             if stage == "image_review" and app.get("image_sha256") != image_sha256:
                 errors.append(f"MEMORY_HOLD:{rid}:记忆验收不是当前返回图")
@@ -376,6 +378,7 @@ def application_errors(source, stage, panel, artifact_root, applications=None, i
             exception=applicable(panel,artifact_root,rule,stage,scope)
             waived=set(exception[1]) if exception else set()
             for key in req["checks"]:
+                if quick and key not in waived: continue
                 check = app.get("checks", {}).get(key, {})
                 if key in waived:
                     if check.get('status')!='USER_EXCEPTION' or check.get('exception')!=exception[0] or not check.get('evidence'):errors.append(f'MEMORY_HOLD:{rid}:{key}未记录原范围例外')

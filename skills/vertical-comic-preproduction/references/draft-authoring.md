@@ -4,7 +4,7 @@
 
 ## 主表职责与接线
 
-主表只维护创作事实，不保存调用结果、QA结论或用户批准。主表policy为panel_authoring_source_v1，status为WORKING_DRAFT；source_snapshot绑定原始源稿哈希，run_root写本话工作绝对目录，panel_ids沿原序。panels每行含：
+主表只维护创作事实，不保存调用结果、QA结论或用户批准。主表policy为panel_authoring_source_v1，status为WORKING_DRAFT；source_snapshot绑定原始源稿哈希，run_root写本话工作绝对目录，panel_ids沿原序。普通格先填写[五项最小镜头模板](../assets/templates/普通格最小镜头模板.md)：人物、关键动作、景别、必要背景、参考。共同技术字段和已确认场景设置只维护一次，通过shared继承；不逐格编写额外构图说明。panels每行含：
 
 - panel_id；shot为原镜头记录，包含原文、身份/衣装、场景、动作/构图、连续性与风险；
 - execution为实际包中不属于shot的输入字段，不得重复维护同名字段；packet_header保存原逐格包头部；
@@ -19,7 +19,9 @@ production_runtime.py --state <状态> --action draft-plan --panel-source <主�
 production_runtime.py --state <状态> --action draft-derive --panel-source <主表.json> --previous-derivation <上次派生记录.json> --derivation-output <本话内新工作目录>
 ```
 
-首次plan/derive省略previous-derivation。也可直接用panel_source.py、panel_derivation.py CLI，参数见help。新建主表遵守上述字段和现有镜头/包合同；执行者按本话实际字段填写，不要求使用者手写JSON。
+日常修改直接derive即可，它已计算影响范围；plan仅用于确需提前查看范围，不在每次derive前重复执行。
+
+plan/derive默认自动寻找同一主表、同一运行的上一轮派生记录，首次无记录才完整派生；无需执行者手动传previous-derivation。显式传入仍用于精确恢复。自动索引存主表旁.derivation-cache；旧目录仅在索引不可用时做限定层级查找，不遍历全RV。也可直接用panel_source.py、panel_derivation.py CLI，参数见help。新建主表遵守上述字段和现有镜头/包合同；执行者按本话实际字段填写，不要求使用者手写JSON。
 
 structured_v2复用原v2确定性prompt编译函数与身份、物理优先级、画风和配饰执行块。机位角度/景别/比例、摄影机位置/朝向/高度、可见区域和镜头签名须明确，工具不猜缺项；从主表变更这些值后重新派生，不再手改输出prompt.txt。required_reference_aliases可显式选择本格必要参考；遗漏必要画风/人物/状态引用仍会被原门禁拒绝，不按五张预算截断。
 
@@ -27,7 +29,9 @@ preserved_import只保留已导入的实际文字，不冒充结构化重编译�
 
 ## 派生与增量范围
 
-工具产出镜头派生.json、每个变化格的manifest.json/prompt.txt/negative_prompt.txt、审查展示.json、工作绑定计划.json和派生记录.json。未变化格复用已核对文件哈希的原派生产物；不把所有旧文件复制到每个新目录。主表可编辑，派生目录是可丢弃的工作输出，不是批准或冻结版本。
+shared支持`{"$shared":"模板键","$overrides":{...本格实际差异...}}`。工具展开为原合同；差异字段整项替换，不合并旧人物/动作列表。模板是工作输入复用，不继承批准。
+
+工具产出镜头派生.json、每个变化格的manifest.json/prompt.txt/negative_prompt.txt、审查展示.json、工作绑定计划.json和派生记录.json。未变化格复用已核对文件哈希的原派生产物；不把所有旧文件复制到每个新目录。主表可编辑，派生输出保留不可变以便复用，不是批准或冻结版本。不要在derive之后原地修改manifest/prompt做地址本地化，否则产物哈希失效会触发重编；把路径/引用修改写回主表，或输出独立执行副本。局部修改只更新该格及真实依赖；全话头、公共来源或工具真的变化时才允许扩大重编。
 
 工作绑定计划列准确新镜头与逐格包引用；执行者把引用同步到本话工作状态与真实语义审查，再使用原preparation-review入口。派生本身不改正式状态或伪造审查，原批准版本不覆盖。跨版本引用、缺少的审查和技术字段由当前执行者在原授权内闭合，不要求用户再批准绑定。
 

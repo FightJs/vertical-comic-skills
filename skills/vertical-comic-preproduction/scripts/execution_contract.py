@@ -8,6 +8,8 @@ POLICY='comic_execution_v2'
 AUDIT='semantic_audit_v1'
 CHECKS=('identity_resolution','reference_selection','per_subject_actions','space_and_visibility','rule_triggers','script_rule_conflicts')
 def semantic_checks(state):
+    from preparation_gate_policy import enabled
+    if enabled(state): return ()
     return CHECKS + (('framing_feasibility',) if state.get('runtime',{}).get('question_policy')=='grouped_review_v1' or state.get('input_quality_policy')=='execution_quality_v1' else ())
 SKILLS=('vertical-comic-preproduction','vertical-comic-visual-assets','vertical-comic-shot-design','vertical-comic-panel-generation','vertical-comic-image-review')
 
@@ -40,6 +42,8 @@ def state_errors(state,root):
             raise ValueError('新生产决策仅用于新整话运行，不热迁移旧模式')
         from input_semantics import enabled as semantics_enabled
         semantics_enabled(state)
+        from preparation_gate_policy import enabled as preparation_enabled
+        preparation_enabled(state)
         from visual_evidence import binding_errors as visual_binding_errors
         visual_errors = visual_binding_errors(state)
         if visual_errors: raise ValueError(";".join(visual_errors))
@@ -120,6 +124,10 @@ def semantic_errors(state,root,batch,blocked=()):
             if panel['panel_id'] not in blocked:tags[panel['panel_id']]=rule_tags(shots,shot_path.parent,panel)
         for p in data['panels']:
             if p['panel_id'] in blocked:continue
+            from preparation_gate_policy import enabled as light_preparation, design_errors
+            if light_preparation(state):
+                errors.extend(f"{p['panel_id']}:{e}" for e in design_errors(p))
+                continue
             if p.get('status')!='REVIEWED' or not p.get('reviewer') or not p.get('evidence'):errors.append(f"{p['panel_id']}:尚未实际语义核对")
             for key in semantic_checks(state):
                 c=p.get('checks',{}).get(key,{})
@@ -148,12 +156,15 @@ def _semantic_template(state,root,bid):
         state=half_view(state,bid);plan=read_json(checked_file(Path(root),state['batch_plan']));batch=next(b for b in plan['batches'] if b['batch_id']==bid)
         ids=batch['panel_ids']
     value={'policy':AUDIT,'book_id':state['book_id'],'episode_id':state['episode_id'],**{k:state[k] for k in ('source_snapshot','visual_basis','shot_manifest')},'panel_ids':ids,'panels':[{'panel_id':pid,'status':'UNREVIEWED','reviewer':'','evidence':'','checks':{k:{'status':'UNREVIEWED','evidence':''} for k in semantic_checks(state)}} for pid in ids]}
+    from preparation_gate_policy import enabled as quick, FIELD
+    if quick(state): value[FIELD] = state[FIELD]
     if 'framing_feasibility' in semantic_checks(state):
         from visual_evidence import feasibility_questions
         shots=read_json(checked_file(Path(root),state['shot_manifest']))
         by_id={p['panel_id']:p for p in shots['panels']}
         for row in value['panels']:row['checks']['framing_feasibility']['expected']=feasibility_questions(by_id[row['panel_id']])
-    if state.get('memory_source') is not None:
+    from preparation_gate_policy import enabled as light_preparation
+    if state.get('memory_source') is not None and not light_preparation(state):
         from continuity_context import rule_tags
         from rule_memory import trigger_review
         path=checked_file(Path(root),state['shot_manifest']);shots=read_json(path);by_id={p['panel_id']:p for p in shots['panels']}

@@ -106,7 +106,8 @@ def _main(argv=None) -> int:
         for panel in panels:
             image = Path(args.image_path) if args.image_path else find_image(images_root, panel['panel_id'])
             if image is None: raise SystemExit('LIGHT_QA: actual returned image missing')
-            items.append(light_template({'panel_id': panel['panel_id'], 'output': {'sha256': sha256(image)}}))
+            items.append(light_template({'panel_id': panel['panel_id'], 'output': {'sha256': sha256(image)}},
+                load_json(episode_root/'00_输入审计/生产流程.json')))
         report = {FIELD: LIGHT_POLICY, 'status': 'HOLD_UNREVIEWED',
                   'source_manifest_sha256': sha256(manifest_path), 'panels': items}
         (output/'生成图QA报告.json').write_text(json.dumps(report, ensure_ascii=False, indent=2)+'\n', encoding='utf-8')

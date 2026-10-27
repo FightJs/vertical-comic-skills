@@ -5,6 +5,8 @@ description: Review actual comic images against approved evidence, preserve trut
 
 # 条漫图片轻审核与成品交付
 
+新轻审核运行的自动返修阈值为essential_story_only_v1：仅主要人物明显错认、关键剧情缺失、剧情表达相反或剧情不可理解时，最多自动返修一轮。每图一次快速观察，其他问题记录并归集；具体字段及旧包分支见[轻审核流程](../vertical-comic-preproduction/references/light-review.md#必要返修阈值新轻审核运行)。
+
 先读取状态的image_review_profile：新任务默认light_story_review_v1，按[轻审核流程](../vertical-comic-preproduction/references/light-review.md)执行。speed_policy=bounded_stage_fallback_v1时执行该页环节限时；暂停及等用户不计时，三小时不停止首轮，四小时为累计有效预算。旧冻结任务不迁移。
 
 ## 默认轻审核

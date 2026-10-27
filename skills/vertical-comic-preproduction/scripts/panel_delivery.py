@@ -97,6 +97,15 @@ def build(state, root):
             approval_errors = approval_for(state, root, 'state_review',
                 [state['visual_basis'],state['shot_manifest'],attempt['output']], [pid], state.get('state_reviews',{}).get(pid))
             if approval_errors: incomplete.append('用户保留的高风险实图确认尚未完成')
+        from no_image_recovery import history_errors
+        recovery_errors=history_errors(state,root,row)
+        if recovery_errors:incomplete.extend(recovery_errors)
+        for recovery in row.get('no_image_history',[]):
+            recovery_refs=[recovery['evidence'],recovery['authorization'],recovery['original_attempt']['package_manifest']]
+            proof=read_json(checked_file(root,recovery['evidence']))
+            recovery_refs.extend(proof['evidence_files'])
+            if recovery['original_attempt'].get('call_evidence'):recovery_refs.append(recovery['original_attempt']['call_evidence'])
+            for recovery_ref in recovery_refs:checked_file(root,recovery_ref);refs.append(recovery_ref)
         if row.get('call_evidence'): refs.append(row['call_evidence'])
         for old in row.get('attempt_history', []):
             for key in ('package_manifest','output','qa_report','call_evidence'):

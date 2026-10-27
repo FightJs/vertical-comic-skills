@@ -49,7 +49,7 @@ def _build(state_paths,*,native_events=None,verify_images=False,capacity=None):
                 except (ValueError, KeyError, TypeError, OSError): delivery_outcomes['INCOMPLETE'] += 1
         for current in data.get('panels',[]):
             pid=current['panel_id'];panels[(book,eid,pid)]=current
-            history=[*current.get('attempt_history',[]),current]
+            history=[*(e['original_attempt'] for e in current.get('no_image_history',[])),*current.get('attempt_history',[]),current]
             for row in history:
                 aid=row.get('attempt_id')
                 if not aid:continue

@@ -44,7 +44,8 @@ def decision(attempts, round_id):
 
 
 def attempt_errors(state, root, item):
-    errors = []
+    from no_image_recovery import history_errors
+    errors = history_errors(state, root, item)
     pid = item.get('panel_id')
     if not isinstance(item.get('attempt_id'), str) or not item['attempt_id'].strip() or type(item.get('round_id')) is not int or item['round_id'] not in (1, 2):
         return [f'{pid}:缺少准确尝试编号/轮次']

@@ -192,15 +192,33 @@ def serve(state_path):
 
 def main():
     p=argparse.ArgumentParser(description=__doc__)
-    p.add_argument('action',choices=['inspect-runtime','check-bindings','compile','prepare-submit','save-return','prepare-qa','clock-check','replay-return','serve'])
+    p.add_argument('action',choices=['inspect-runtime','check-bindings','compile','prepare-submit','save-return','prepare-qa','clock-check','replay-return','recover-no-image','serve'])
     p.add_argument('--state',required=True);p.add_argument('--job');p.add_argument('--raw-result')
     p.add_argument('--output');p.add_argument('--call-locator');p.add_argument('--result-locator');p.add_argument('--selected-index',type=int)
+    p.add_argument('--recovery-request');p.add_argument('--expected-state-sha256')
     p.add_argument('--panels',nargs='+');a=p.parse_args()
     try:
         if a.action=='clock-check':
             from runtime_clock import require_dispatch
             clock=require_dispatch(a.state)
             result={'status':'CLOCK_CHECKED','clock_observed':clock is not None,'image_calls':0}
+        elif a.action=='recover-no-image':
+            proc=subprocess.run([sys.executable,'-X','utf8','-B',str(HOST/'generation_host.py'),'clock-check','--state',a.state],
+                                capture_output=True,text=True,encoding='utf-8',env={**os.environ,'PYTHONDONTWRITEBYTECODE':'1'})
+            if proc.returncode:raise ValueError('HOST_CLOCK_HOLD: '+proc.stdout+proc.stderr)
+            request=read(a.recovery_request)
+            path,state,root,scripts,kind=activate(a.state)
+            # Load the installed adapter without putting it into the frozen import path.
+            spec=importlib.util.spec_from_file_location('_host_recovery_compatibility',HOST/'recovery_compatibility.py')
+            compat=importlib.util.module_from_spec(spec);spec.loader.exec_module(compat)
+            adapter=compat.prepare(a.state,request)
+            check_write_scope(path,root)
+            module=compat.load(adapter,path,request)
+            if state.get('dispatch_consistency'):
+                from managed_dispatch import authority
+                with authority([path]):result=module.recover(path,a.expected_state_sha256,request)
+            else:result=module.recover(path,a.expected_state_sha256,request)
+            result['compatibility_adapter']=adapter
         elif a.action=='serve':
             serve(a.state);return 0
         elif a.action=='inspect-runtime':result=inspect_runtime(a.state)
@@ -214,6 +232,13 @@ def main():
                 if proc.returncode:raise ValueError('HOST_CLOCK_HOLD: '+proc.stdout+proc.stderr)
             path,state,root,scripts,kind=activate(a.state)
             from production_runtime import compile_jobs,commit_updates
+            if a.action in {'compile','prepare-submit','prepare-qa'}:
+                spec=importlib.util.spec_from_file_location('_host_recovery_history',HOST/'no_image_recovery.py')
+                recovery=importlib.util.module_from_spec(spec);spec.loader.exec_module(recovery)
+                for row in state['panels']:
+                    if a.panels is None or row['panel_id'] in a.panels:
+                        errors=recovery.history_errors(state,root,row)
+                        if errors:raise ValueError(';'.join(errors))
             if a.action=='prepare-submit':check_write_scope(path,root)
             if a.action=='compile':result=compile_jobs(state,root,a.panels)
             elif a.action=='check-bindings':

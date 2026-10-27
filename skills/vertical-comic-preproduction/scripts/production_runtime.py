@@ -91,6 +91,11 @@ def compile_jobs(state, root, panel_ids=None, *, candidate=False, input_audit=Fa
 @authority_scoped
 def _compile_jobs(state, root, panel_ids=None, *, candidate=False, input_audit=False):
     """Full bulk gates once; export actual paths/prompt, never execute planned jobs."""
+    from no_image_recovery import history_errors
+    for record in state['panels']:
+        if panel_ids is None or record['panel_id'] in panel_ids:
+            errors=history_errors(state,root,record)
+            if errors:raise ValueError(';'.join(errors))
     from staged_workflow import preflight_many
     if input_audit and (candidate or state.get('parallel_context')):
         raise ValueError('接包输入审计不得使用candidate或线上调度上下文')
@@ -958,7 +963,7 @@ def prepare_review(state, root, queue):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--state", required=True)
-    parser.add_argument("--action", choices=("authoring-import", "draft-plan", "draft-derive", "draft-atlas", "preparation-plan", "preparation-review", "readiness", "preflight", "compile", "audit-inputs", "receiver-audit", "review", "checkpoint", "bundle", "commit", "submit", "submission-status", "repair-authorize", "diagnosis-record", "watch-progress", "watch-check", "watch-ack", "repair-plan", "decisions-register", "delivery-review", "production-questions"), required=True)
+    parser.add_argument("--action", choices=("authoring-import", "draft-plan", "draft-derive", "draft-atlas", "preparation-plan", "preparation-review", "readiness", "preflight", "compile", "audit-inputs", "receiver-audit", "review", "checkpoint", "bundle", "commit", "submit", "submission-status", "recover-no-image", "repair-authorize", "diagnosis-record", "watch-progress", "watch-check", "watch-ack", "repair-plan", "decisions-register", "delivery-review", "production-questions"), required=True)
     parser.add_argument("--panels", nargs="*")
     parser.add_argument("--h001-panels", nargs="+", help="合并接包审计的准确首半话范围")
     parser.add_argument("--display-progress-dir", help="派生显示目录；仅保存现有检查结果，不新增门禁")
@@ -970,6 +975,7 @@ def main():
     parser.add_argument("--prepare-qa", action="store_true", help="仅新增/变化图生成未审模板及一次组联系表")
     parser.add_argument("--dependency-plan", help="已冻结依赖补齐方案的本话相对文件路径")
     parser.add_argument("--job", help="submit使用编译器导出的原始单个job JSON")
+    parser.add_argument("--recovery-request", help="确认无图恢复请求JSON，不执行图像调用")
     parser.add_argument("--updates", help="真实返回或实际QA形成的updates JSON")
     parser.add_argument("--resolution", help="解析原未知请求的本话相对真实查证报告；不授予重发")
     parser.add_argument("--repair-authorization", help="整话滚动返修诊断文件的本话相对路径")
@@ -1046,7 +1052,11 @@ def main():
                 value = acknowledge(ledger, state, read_json(Path(args.watch_alert_ids)), config=config,
                                     independent_work_pending=args.independent_work_pending)
             print(json.dumps(value, ensure_ascii=False)); return 0
-        if args.action == "submission-status":
+        if args.action == "recover-no-image":
+            from no_image_recovery import recover
+            value=recover(path,args.expected_state_sha256,read_json(Path(args.recovery_request)))
+            print(json.dumps(value,ensure_ascii=False));return 0
+        elif args.action == "submission-status":
             if not args.job: raise ValueError("SUBMISSION_HOLD: --job required")
             print(json.dumps(submission_status(path,read_json(Path(args.job))),ensure_ascii=False)); return 0
         if args.action == "submit":

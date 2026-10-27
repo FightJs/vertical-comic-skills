@@ -113,6 +113,18 @@ class ProgressTests(unittest.TestCase):
         state['visual_basis']={'path':'new','sha256':'invalid'};self.write(sp,state)
         self.assertEqual(p.refresh(self.display)['stage_units']['receive'],0)
 
+    def test_whole_episode_audit_progress_accepts_complete_scope_only(self):
+        sp,state=self.state();p.initialize(self.display,'production',[sp])
+        result={'policy':'receiver_episode_audit_v1','preparation':{},
+                'all_inputs':{'preflight':{'status':'READY'},'compile_scope_complete':False,
+                              'next_compile_panel_ids':['P003']}}
+        p.observe_runtime(self.display,sp,'receiver-audit',result)
+        self.assertEqual(p.refresh(self.display)['stage_units']['receive'],0)
+        result['all_inputs'].update(compile_scope_complete=True,next_compile_panel_ids=[])
+        p.observe_runtime(self.display,sp,'receiver-audit',result)
+        self.assertEqual(p.refresh(self.display)['stage_units']['receive'],3)
+        self.assertEqual(p.read(sp),state)
+
     def test_false_final_pass_or_unknown_never_means_delivery(self):
         sp,state=self.state();state['panels'][0]['status']='RESULT_UNKNOWN';self.write(sp,state)
         p.initialize(self.display,'production',[sp])

@@ -98,7 +98,7 @@ def _prepare(path,replacements):
                         'actual_input_sha256':_fingerprint(after)})
     # Full original gates check the current approval scope and revocations. An
     # equivalent prompt cannot bypass package approval or a real dependency.
-    compiled=compile_jobs(new,root,ids)
+    compiled=compile_jobs(new,root,ids,complete_scope=True)
     if {j['panel_id'] for j in compiled['jobs']}!=set(ids):
         raise ValueError('REBIND_APPROVAL_OR_DEPENDENCY_REVIEW_REQUIRED:'+json.dumps(compiled['preflight'],ensure_ascii=False))
     plan={'policy':POLICY,'state':str(path),'expected_state':digest(path),'changes':changes,

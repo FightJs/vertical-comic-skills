@@ -57,12 +57,20 @@ def settings(value):
 
 
 @authority_scoped
-def compile_jobs(state, root, panel_ids=None, *, candidate=False, input_audit=False):
+def compile_jobs(state, root, panel_ids=None, *, candidate=False, input_audit=False, complete_scope=False):
     from stage_deadlines import enabled as speed_enabled, checkpoint, compile_slice, CompileSliceExpired
+    # Audits, review bundles and atomic context changes require the exact scope.
+    # Run it once in the existing shared read transaction: truncation makes the
+    # receiving gate reject valid input and retry the same first five panels.
+    # Dispatch compilation alone may return explicit continuation panel IDs.
     if not speed_enabled(state):
         return _compile_jobs(state, root, panel_ids, candidate=candidate, input_audit=input_audit)
     path = Path(root)/'00_输入审计/生产流程.json'
     mark = checkpoint(path, 'compile', state=state)
+    if candidate or input_audit or complete_scope:
+        from runtime_pipeline import budget
+        with budget(path):
+            return _compile_jobs(state, root, panel_ids, candidate=candidate, input_audit=input_audit)
     if not mark['degraded']:
         try:
             with compile_slice(path, state):

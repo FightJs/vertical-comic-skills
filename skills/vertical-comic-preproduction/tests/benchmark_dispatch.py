@@ -20,13 +20,13 @@ from unittest.mock import patch
 
 sys.path[:0] = [str(Path(__file__).resolve().parents[1] / 'scripts'), str(Path(__file__).parent)]
 from codex_reference_contract import file_session, read_json
-from staged_workflow import evaluate
+from _historical_fixture import evaluate
 from platform_io import file_lock
 
 
 def sample(state_path, mode, limit):
     from test_dispatch_preflight import original_selection
-    import batch_workflow
+    import production_evidence as batch_workflow
     state_path = Path(state_path).resolve()
     state = read_json(state_path)
     control = Path(state['parallel_context']['control_file'])

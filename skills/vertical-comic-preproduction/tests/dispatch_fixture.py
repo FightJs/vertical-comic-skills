@@ -1,4 +1,5 @@
 """Isolated real-gate dispatch inputs; all approval/image evidence is synthetic."""
+import _historical_fixture
 import copy
 
 import test_direct_handoff as handoff
@@ -60,7 +61,7 @@ class DispatchFixture:
         from PIL import Image
         from codex_reference_contract import validate_panel
         from episode_dispatch_queue import reserve_ready
-        from batch_round import snapshot, attempt_errors
+        from historical_engines.batch_round import snapshot, attempt_errors
         from make_generation_qa import _main as make_qa
         from production_runtime import authorize_episode_repair
         from slot_leases import release_unsubmitted

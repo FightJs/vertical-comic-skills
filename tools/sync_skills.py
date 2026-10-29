@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Install/update the complete bundle; preserve user changes and frozen production RVs."""
 from pathlib import Path
-import argparse,datetime,hashlib,json,os,shutil,subprocess,sys,tempfile
+import argparse,ast,datetime,hashlib,json,os,shutil,subprocess,sys,tempfile
 
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'skills/vertical-comic-preproduction/scripts'))
@@ -25,6 +25,24 @@ def safe(base,name):
     if any(x.is_symlink() for x in [result,*result.parents] if x.is_relative_to(base)):raise ValueError('Refusing symlink destination')
     return result
 
+RETIRED_ENGINES=frozenset({'batch_round','batch_workflow','half_workflow','scoped_half_workflow','recovery_compatibility'})
+
+def check_production_routes(skills_root):
+    """Reject retired executable routes before export or installation."""
+    scripts=Path(skills_root)/'vertical-comic-preproduction/scripts'
+    for path in scripts.glob('*.py'):
+        if path.stem in RETIRED_ENGINES:
+            raise ValueError('Retired production engine: '+path.name)
+        tree=ast.parse(path.read_text(encoding='utf-8-sig'),filename=str(path))
+        for node in ast.walk(tree):
+            names=([x.name for x in node.names] if isinstance(node,ast.Import) else
+                   [node.module or ''] if isinstance(node,ast.ImportFrom) else [])
+            if any(name.split('.')[0] in RETIRED_ENGINES for name in names):
+                raise ValueError('Retired production import: '+path.name)
+    caps=json.loads((scripts/'runtime_capabilities.json').read_text(encoding='utf-8'))
+    if caps.get('production_executor')!='whole_episode_light_v1':
+        raise ValueError('Unified production executor capability missing')
+
 def bundle():
     data=json.loads((ROOT/'bundle.json').read_text(encoding='utf-8-sig'))
     if data.get('policy')!='vertical_comic_bundle_v1':raise ValueError('Unknown bundle policy')
@@ -37,6 +55,7 @@ def bundle():
         seen.add(name);folded.add(name.casefold())
     actual={p.relative_to(ROOT).as_posix() for folder in ('skills','memory') for p in (ROOT/folder).rglob('*') if p.is_file() and '__pycache__' not in p.parts and p.name!='.DS_Store' and p.suffix!='.pyc'}
     if actual!=seen:raise ValueError('Unlisted bundle files or missing entries')
+    check_production_routes(ROOT/'skills')
     return data
 
 def mapped(name):

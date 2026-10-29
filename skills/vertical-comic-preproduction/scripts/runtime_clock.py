@@ -61,9 +61,17 @@ def boot_id():
     try:
         p = Path('/proc/sys/kernel/random/boot_id')
         if p.is_file(): return p.read_text().strip()
+        if platform.system() == 'Windows':
+            import ctypes
+            data=ctypes.create_string_buffer(32)
+            query=ctypes.WinDLL('ntdll').NtQuerySystemInformation
+            query.argtypes=[ctypes.c_ulong,ctypes.c_void_p,ctypes.c_ulong,ctypes.c_void_p]
+            query.restype=ctypes.c_long
+            if query(90,data,len(data),None)==0 and any(data.raw[:16]):
+                return 'windows:'+data.raw[:16].hex()
         if platform.system() == 'Darwin':
             return subprocess.check_output(['sysctl', '-n', 'kern.boottime'], timeout=.3, text=True, stderr=subprocess.DEVNULL).strip()
-    except (OSError, subprocess.SubprocessError): pass
+    except (OSError, AttributeError, subprocess.SubprocessError): pass
     return None  # No guessed boot identity on unsupported hosts.
 
 def instant():
@@ -149,7 +157,14 @@ def status(directory, *, at=None):
             # Unknown boot IDs are not proof of one monotonic epoch. Validate
             # adjacent receipts, including gaps between closed active intervals.
             if previous is not None:
-                elapsed(previous, stamp)
+                if (state in {'PAUSED','WAIT_USER'} and action in {'resume','start'}
+                        and previous.get('boot') and stamp.get('boot')):
+                    # An explicit closed pause spans no charged execution. A
+                    # reboot starts a new monotonic epoch; never subtract them.
+                    if previous['host']!=stamp['host']:
+                        raise ValueError('CLOCK_TIME_UNCERTAIN: host changed during pause')
+                else:
+                    elapsed(previous, stamp)
             previous = stamp
             if action == 'hook_probe': continue
             if action == 'uncertain': raise ValueError('CLOCK_TIME_UNCERTAIN: unclean lifecycle')

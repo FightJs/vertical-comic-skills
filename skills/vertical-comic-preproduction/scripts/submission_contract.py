@@ -69,3 +69,25 @@ def acknowledgement(job, record, *, fresh, state_sha256):
             'batch_id': job.get('batch_id'), 'attempt_id': job['attempt_id'], 'round_id': job.get('round_id'),
             'permit_id': (job.get('dispatch_receipt') or {}).get('permit_id'),
             'input_digest': record['input_digest'], 'state_sha256': state_sha256, 'image_calls': 0}
+
+PREPARED_POLICY='prepared_dispatch_v1'
+
+def prepared_panel_job(state, value, receipt):
+    row=next(r for r in state['panels'] if r['panel_id']==value['panel_id'])
+    return {'kind':'repair' if row['round_id']==2 else 'panel','book_id':state['book_id'],
+            'episode_id':state['episode_id'],'job_id':state.get('parallel_context',{}).get('job_id',state['episode_id']),
+            'panel_id':row['panel_id'],'source_panel_id':row.get('source_panel_id'),'batch_id':'EPISODE',
+            'round_id':row['round_id'],'attempt_id':row['attempt_id'],'arguments':value['arguments'],
+            'package_manifest':value['package_manifest'],'dispatch_receipt':receipt,
+            'prepared_reference':{k:value[k] for k in ('prepared_input_id','record_digest')},
+            'submission':{'policy':PREPARED_POLICY,'task_id':identity(state),
+                          'input_digest':value['semantic_input_digest'],
+                          'binding_digest':fingerprint(value['arguments']),
+                          'authority_revision':state.get('authority_revision',0)},
+            'status':'NOT_RUN','candidate_only':False,'input_audit_only':False,'dispatch_authorized':True}
+
+
+def prepared_acknowledgement(job, record, *, fresh, state_sha256):
+    return {**acknowledgement(job,record,fresh=fresh,state_sha256=state_sha256),
+            'policy':PREPARED_POLICY,'job_digest':fingerprint(job_binding(job)),
+            'binding_digest':job['submission']['binding_digest']}

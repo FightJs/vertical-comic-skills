@@ -3,12 +3,12 @@ from pathlib import Path
 from codex_reference_contract import checked_file
 from staged_workflow import POLICY, DONE, read, approval_errors
 from rule_memory import binding_errors
-from batch_round import MODE, snapshot, settings, report_errors, TERMINAL
+from historical_engines.batch_round import MODE, snapshot, settings, report_errors, TERMINAL
 from scoped_inputs import POLICY as OPT, STATE_DISPATCH, build_plan, half_view, approval_for, blocked_panels, validate_shots, global_hold, full_preparation
 
 
 def evaluate_scoped(state, root, check='status', requested=None):
-    from batch_workflow import completed_errors, input_errors, batch_review_errors, cross_episode_errors
+    from historical_engines.batch_workflow import completed_errors, input_errors, batch_review_errors, cross_episode_errors
     root=Path(root).resolve(); original=state
     def result(action, errors=(), batch=None, eligible=(), round_id=1, blocked_ids=()):
         return {'policy':POLICY,'execution_mode':MODE,'optimization_policy':OPT,

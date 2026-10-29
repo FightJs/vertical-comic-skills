@@ -67,7 +67,7 @@ def validate(value):
 
 def import_state(state_path):
     from codex_reference_contract import file_session,checked_file,read_json
-    from batch_workflow import SHOT_FIELDS
+    from production_evidence import SHOT_FIELDS
     path=Path(state_path).resolve();root=path.parent.parent
     with file_session():
         state=read_json(path);source=read_json(checked_file(root,state['source_snapshot']))

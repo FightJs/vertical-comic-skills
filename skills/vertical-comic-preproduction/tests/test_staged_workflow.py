@@ -11,7 +11,8 @@ import test_codex_reference_contract as fixtures
 from codex_reference_contract import validate_panel, digest, invalidate_execution
 from continuity_contract import reference_usage_block, check_dimension_report
 from style_contract import style_block, validate_style, review_errors, output_spec_errors
-from staged_workflow import evaluate, approval_errors, basis_errors
+from staged_workflow import approval_errors, basis_errors
+from _historical_fixture import evaluate
 from validate_preproduction import Gate
 from check_control_inputs import validate_manifest as input_gate
 
@@ -148,7 +149,7 @@ class StagedTests(unittest.TestCase):
         state = self.state()
         for i in range(3):
             self.fake_completed_for_routing(state, i)
-        with patch("staged_workflow.qa_errors", return_value=[]):
+        with patch("historical_engines.staged_workflow.qa_errors", return_value=[]):
             result = evaluate(state, self.root, "generate", "P004")
         self.assertEqual(result["next_action"], "WAIT_PILOT_APPROVAL")
 
@@ -160,7 +161,7 @@ class StagedTests(unittest.TestCase):
         for i in range(4):
             self.fake_completed_for_routing(state, i)
         state["gates"]["pilot"] = self.approve([state["visual_basis"], state["shot_manifest"], *[r["output"] for r in state["panels"][:3]]])
-        with patch("staged_workflow.qa_errors", return_value=[]):
+        with patch("historical_engines.staged_workflow.qa_errors", return_value=[]):
             result = evaluate(state, self.root, "generate", "P005")
         self.assertEqual(result["next_action"], "WAIT_NEW_STATE_APPROVAL")
 
@@ -179,7 +180,7 @@ class StagedTests(unittest.TestCase):
         self.fake_completed_for_routing(state, 0)
         artifacts = [state["visual_basis"], state["shot_manifest"], state["panels"][0]["output"]]
         state["gates"]["pilot"] = self.approve(artifacts)
-        with patch("staged_workflow.qa_errors", return_value=[]):
+        with patch("historical_engines.staged_workflow.qa_errors", return_value=[]):
             self.assertEqual(evaluate(state, self.root, "deliver")["next_action"], "WAIT_FINAL_APPROVAL")
             state["gates"]["final"] = self.approve(artifacts)
             result = evaluate(state, self.root, "deliver")

@@ -67,6 +67,7 @@ def episodes(values):
     return out
 
 def prepare(project,book,ids,*,script=None,assets=None,output=None,workers=None,request_source=None,reuse_selection=None,runtime_limit_seconds=14400,clock_session_id=None,delivery_mode='allow_parts',max_file_bytes=900000000,image_review_profile='light_story_review_v1',wall_delivery=False):
+    if image_review_profile!='light_story_review_v1':raise ValueError('RETIRED_REVIEW_MODE: new production uses light_story_review_v1')
     from runtime_clock import instant
     started=instant()
     project=Path(project).resolve();ids=episodes(ids)
@@ -119,16 +120,32 @@ def prepare(project,book,ids,*,script=None,assets=None,output=None,workers=None,
 def inspect_received_runtime(run_root, run_index, report_dir):
     from handoff_zip import inside
     local_index=read(run_index);entrypoints=[];compatibility=[]
+    from runtime_snapshot import create as freeze_executor
+    from runtime_import import resume_import
+    executor_dir=Path(run_root).parent/'00_执行器'
+    if not executor_dir.exists(): freeze_executor(executor_dir)
+    executor_manifest={'path':str((executor_dir/'manifest.json').resolve()),
+                       'sha256':__import__('hashlib').sha256((executor_dir/'manifest.json').read_bytes()).hexdigest()}
     folder=Path(report_dir);folder.mkdir(parents=True,exist_ok=False)
     for episode in local_index['episodes']:
         state_path=inside(Path(run_root),episode['state']);state=read(state_path)
-        runtime_manifest=Path(state['runtime_snapshot']['path'])
+        try:
+            imported=resume_import(state_path,executor_manifest)
+            state=read(state_path)
+        except (OSError,ValueError,KeyError) as exc:
+            compatibility.append({'episode_id':episode['episode_id'],'status':'HOLD','error':str(exc)})
+            continue
+        from runtime_import import verify_binding
+        pinned=verify_binding(state,state_path.parent.parent)[0]['executor_manifest']
+        runtime_manifest=Path(pinned['path'])
         scripts=runtime_manifest.parent/'skills/vertical-comic-preproduction/scripts'
         entry={'episode_id':episode['episode_id'],'state':str(state_path),
                'frozen_runtime_manifest':str(runtime_manifest),'frozen_scripts':str(scripts),
                'runtime_script':str(scripts/'production_runtime.py'),'execution_mode':state.get('execution_mode'),
                'optimization_policy':state.get('optimization_policy'),
-               'generation_host':str(Path(__file__).resolve().parent/'generation_host.py')}
+               'generation_host':str(scripts/'generation_host.py'),
+               'production_actions':['serve','prepare-inputs','ready-inputs','claim-and-register','save-return'],
+               'dispatch_protocol':'prepared_dispatch_v1'}
         entrypoints.append(entry)
         proc=subprocess.run([sys.executable,'-X','utf8','-B',entry['generation_host'],'inspect-runtime','--state',entry['state']],
             capture_output=True,text=True,encoding='utf-8')
@@ -141,6 +158,9 @@ def inspect_received_runtime(run_root, run_index, report_dir):
     return entrypoints,compatibility
 
 
+from handoff_zip import reception_cache
+
+@reception_cache
 def receive(zip_path=None,*,package_root=None,output=None,runtime_limit_seconds=14400,clock_session_id=None,_started=None,audit_timeout=900, eager_audit=False, wall_delivery=False):
     from runtime_clock import instant
     started=_started or instant()
@@ -212,7 +232,7 @@ def receive(zip_path=None,*,package_root=None,output=None,runtime_limit_seconds=
             'run_root':str(target),'bound_run_root':bound['run_root'],'run_index':bound['run_index'],
             'production_entrypoints':entrypoints,'originals_root':str(originals),'reception':checked,
             'episode_results':result['results'],'dispatch_authorized':False,'image_calls':0,
-            'next':('使用production_entrypoints中的本地状态和包内冻结脚本，按包内执行模式、生产窗口、有效授权及真实依赖生产。无需填写外部脚本、资产或本书配置；复用未变输入审查，不重新进行前期设计。' if result['status']=='RELEASE_CANDIDATE' else '按episode_results修复准确HOLD并继续独立工作；未放行范围不生图。不要求重新配置外部脚本、资产或本书profile。')}
+            'next':('使用production_entrypoints中的本地状态和统一固定执行器，按包内执行模式、生产窗口、有效授权及真实依赖生产。无需填写外部脚本、资产或本书配置；复用未变输入审查，不重新进行前期设计。' if result['status']=='RELEASE_CANDIDATE' else '按episode_results修复准确HOLD并继续独立工作；未放行范围不生图。不要求重新配置外部脚本、资产或本书profile。')}
 
 
 def receive_resume(run_root, *, audit_timeout=900):
@@ -260,7 +280,7 @@ def main():
     p=sub.add_parser('receive');source=p.add_mutually_exclusive_group(required=True);source.add_argument('--zip');source.add_argument('--package-root',help='已解压正式交接包根目录，含ZIP文件清单.json');p.add_argument('--output');p.add_argument('--audit-timeout',type=int,default=900);p.add_argument('--eager-audit',action='store_true',help='显式诊断才重复全包审计；默认逐格编译时校验')
     p=sub.add_parser('receive-resume');p.add_argument('--run-root',required=True);p.add_argument('--audit-timeout',type=int,default=900)
     preparation=sub.choices['prepare']
-    preparation.add_argument('--image-review-profile', choices=('light_story_review_v1','full'), default='light_story_review_v1', help='新制作默认单次轻审核，仅严重剧情问题最多返修一轮')
+    preparation.add_argument('--image-review-profile', choices=('light_story_review_v1',), default='light_story_review_v1', help='新制作默认单次轻审核，仅严重剧情问题最多返修一轮')
     preparation.add_argument('--delivery-mode',choices=['single_zip','allow_parts'],default='allow_parts',help='默认单包优先、超限自动分包；仅用户明确限制单文件时选择single_zip')
     preparation.add_argument('--max-file-bytes',type=int,default=900000000,help='微信单文件上限，最大900000000字节')
     for command in sub.choices.values():

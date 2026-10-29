@@ -135,3 +135,94 @@ def metrics(state_paths):
             'actual_image_review_seconds':sum(groups.get('qa-save/observed_image_review',[])) if 'qa-save/observed_image_review' in groups else None,
             'missing_observations_are_zero':False,'overlapping_phases_additive':False,
             'service_and_save_intervals':'see existing observed submit/return/save timestamp coverage'}
+
+
+def claim_and_register(state_path, prepared_reference):
+    """One owner transaction. Input preparation and file hashing happen before locks."""
+    import copy
+    from prepared_job_store import store,state_basis
+    from submission_contract import prepared_panel_job,registration,prepared_acknowledgement
+    from runtime_clock import require_dispatch
+    from slot_leases import ACTIVE,POLICY as LEASE
+    path=Path(state_path).resolve();started=time.monotonic()
+    initial=read_json(path);value=store(path).get(prepared_reference,initial)
+    from authority_updates import authority_context
+    from staged_workflow import approval_errors
+    authorization=initial.get('production_authorization')
+    with file_session() as authorization_reads,authority_context(initial,path.parent.parent):
+        issues=approval_errors(authorization,path.parent.parent,[initial['source_script']],initial['book_id'],initial['episode_id'])
+        if isinstance(authorization,dict) and (authorization.get('policy')=='preparation_authorization_v1' or authorization.get('phase')=='preparation'):
+            issues.append('Preparation authorization is not production authorization')
+        if value['panel_id'] not in (authorization or {}).get('panel_ids',[]) and initial['episode_id']+'-'+value['panel_id'] not in (authorization or {}).get('panel_ids',[]):
+            issues.append('Panel outside production scope')
+        if issues:raise ValueError('PRODUCTION_AUTHORITY_HOLD:'+str(issues))
+    require_dispatch(path)
+    waiting=time.monotonic()
+    with state_write_lock(path,force_shared=True):
+        locked=time.monotonic();state=read_json(path)
+        if state.get('parallel_context')!=initial.get('parallel_context'):raise ValueError('OWNER_CHANGED')
+        if state_basis(state)!=value['state_basis']:raise ValueError('PREPARED_INPUT_OR_AUTHORITY_CHANGED')
+        if state.get('cancelled'):raise ValueError('DISPATCH_HELD')
+        from scoped_inputs import blocked_panels,generation_holds
+        order=[r['panel_id'] for r in state['panels']]
+        blocked,_=blocked_panels(generation_holds(state),order,{'batch_id':'EPISODE','panel_ids':order},value['scheduling_rows'])
+        if value['panel_id'] in blocked:raise ValueError('PANEL_DISPATCH_HELD')
+        row=next(r for r in state['panels'] if r['panel_id']==value['panel_id'])
+        if any(row.get(k)!=value[k] for k in ('attempt_id','round_id')):raise ValueError('PREPARED_ATTEMPT_CHANGED')
+        # A replay returns the original exact identity, never a fresh invoke grant.
+        for old in state.get('submission_registrations',{}).values():
+            dynamic=old.get('prepared_dispatch')
+            if dynamic and dynamic['panel_id']==row['panel_id'] and dynamic['attempt_id']==row['attempt_id']:
+                if dynamic['prepared_reference']!=prepared_reference:raise ValueError('REGISTERED_INPUT_CHANGED')
+                job=prepared_panel_job(state,value,dynamic['receipt'])
+                job['submission']=dynamic['submission']
+                return {'job':job,'ack':prepared_acknowledgement(job,old,fresh=False,state_sha256=digest(path)),'image_calls':0}
+        if row['status'] not in {'PENDING','REPAIR_AUTHORIZED'} or row['package_manifest']!=value['package_manifest']:raise ValueError('ATTEMPT_NOT_DISPATCHABLE')
+        for dep,output in value['dependencies'].items():
+            actual=next(r for r in state['panels'] if r['panel_id']==dep)
+            if actual.get('output')!=output or actual['status'] not in {'VISUAL_PASS','USER_ACCEPTED'}:raise ValueError('DEPENDENCY_CHANGED')
+        context=state.get('parallel_context');receipt=None
+        if context:
+            if state.get('runtime',{}).get('dispatch_policy')!=LEASE:raise ValueError('PREPARED_REQUIRES_OWNER_LEASE')
+            control=read_json(Path(context['control_file']))
+            owner=next(j for j in control['jobs'] if j['job_id']==context['job_id'])
+            lease=owner.get('slot_lease',{})
+            if control.get('cancelled') or control.get('holds') or control.get('book_id')!=state['book_id']:
+                raise ValueError('CONTROL_HELD')
+            if Path(owner['root']).resolve()!=path.parent.parent or owner.get('episode_id')!=state['episode_id']:
+                raise ValueError('OWNER_SCOPE_CHANGED')
+            if sum(j.get('slot_lease',{}).get('slots',0) for j in control['jobs'])>control.get('max_inflight',0):
+                raise ValueError('GLOBAL_CAPACITY_EXCEEDED')
+            if lease.get('slots',0)>owner.get('max_inflight',0):raise ValueError('OWNER_CAPACITY_EXCEEDED')
+            if (control.get('dispatch_policy')!=LEASE or control.get('epoch')!=context['epoch']
+                or owner.get('worker_id')!=context['worker_id'] or lease.get('worker_id')!=context['worker_id']
+                or lease.get('epoch')!=context['epoch'] or owner.get('status') not in {'ASSIGNED','RUNNING'}
+                or owner.get('dispatch_pause') or control.get('dispatch_pause')):raise ValueError('OWNER_OR_CAPACITY_CHANGED')
+            if owner.get('active_batch_id')!='EPISODE' or not lease.get('lease_id'):raise ValueError('LEASE_MISSING')
+            active=[p for p in state.get('dispatch_ledger',[]) if p['status'] in ACTIVE]
+            if any(p.get('lease_id')!=lease['lease_id'] for p in active):raise ValueError('ACTIVE_OWNER_CHANGED')
+            if len(active)>=lease.get('slots',0):return {'status':'CAPACITY_FULL','image_calls':0,'dispatch_authorized':False}
+            receipt={**{k:context[k] for k in ('job_id','worker_id','epoch')},'lease_id':lease['lease_id'],
+                     'permit_id':uuid.uuid4().hex,'batch_id':'EPISODE','round_id':row['round_id'],'attempt_id':row['attempt_id']}
+        elif state.get('runtime',{}).get('dispatch_policy')==LEASE:raise ValueError('WAIT_CAPACITY_ASSIGNMENT')
+        require_dispatch(path)
+        store(path).assert_unchanged(value)
+        verify_read_snapshot(authorization_reads,refresh_views=False)
+        job=prepared_panel_job(state,value,receipt);key,entry=registration(job)
+        if key in state.get('submission_registrations',{}):raise ValueError('ATTEMPT_ALREADY_REGISTERED_OTHER_PROTOCOL')
+        entry['prepared_dispatch']={'panel_id':row['panel_id'],'attempt_id':row['attempt_id'],
+             'prepared_reference':prepared_reference,'receipt':receipt,'submission':job['submission']}
+        old_sha=digest(path);history=path.parent/'runtime_history';history.mkdir(exist_ok=True)
+        previous=history/(old_sha+'.json')
+        if not previous.exists():previous.write_bytes(path.read_bytes())
+        new=copy.deepcopy(state);current=next(r for r in new['panels'] if r['panel_id']==row['panel_id'])
+        current['status']='IN_FLIGHT';current['submitted_at']=datetime.now(timezone.utc).isoformat()
+        current['prepared_registration_id']=key
+        if receipt:new.setdefault('dispatch_ledger',[]).append({**receipt,'panel_id':row['panel_id'],'status':'IN_FLIGHT'})
+        new.setdefault('submission_registrations',{})[key]=entry
+        atomic_json(path,new)
+    require_dispatch(path)
+    result={'job':job,'ack':prepared_acknowledgement(job,entry,fresh=True,state_sha256=digest(path)),'image_calls':0}
+    result['timing']={'operation':time.monotonic()-started,'lock_wait':locked-waiting,'lock_hold':time.monotonic()-locked}
+    record(path,'claim-and-register',result['timing'],panel_ids=[row['panel_id']],operation_id=key)
+    return result

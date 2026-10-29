@@ -3,30 +3,33 @@ name: vertical-comic-panel-generation
 description: Compile approved inputs and generate first-batch comic panels with scoped, prioritized repairs and approved visual references. Use for whole-episode asynchronous production and rolling repairs, episode-parallel production, legacy resume or scoped repairs; requires approved visual basis and shots.
 ---
 
+正文新运行使用[准备输入与一次派发](../vertical-comic-preproduction/references/submission-runtime.md)：每话固定宿主内并行prepare-inputs，ready-inputs先就绪先调度，服务worker通过onPrepareInvoke只做一次claim-and-register。调用与收图必须使用宿主返回的最终job；不重复整话预检，不加外层全局长锁，不让编译挡住收图。每图实际快速看一次，仅严重剧情问题至多一轮质量返修，保持原暂停不计时规则。
+
+
 # 条漫第一批逐格生图
+
+统一入口为整话轻审核：新任务与旧包导入后都固定当前执行器，旧包代码仅作证据。每话启动一个 `generation_host.py serve` 常驻进程；输入未变复用，局部修改只处理受影响格；返回立即保存并释放槽位。每图快速看一次，仅严重剧情问题最多返修一轮。暂停和等待用户不计时，多话共用四小时有效预算，三小时不停止首轮。完整约定见[统一执行与恢复](../vertical-comic-preproduction/references/execution-compatibility.md)与[轻审核流程](../vertical-comic-preproduction/references/light-review.md)。
 
 新轻审核运行的自动返修阈值为essential_story_only_v1：仅主要人物明显错认、关键剧情缺失、剧情表达相反或剧情不可理解时，最多自动返修一轮。每图一次快速观察，其他问题记录并归集；具体字段及旧包分支见[轻审核流程](../vertical-comic-preproduction/references/light-review.md#必要返修阈值新轻审核运行)。
 
-**新任务默认速度优先、轻审核成品，并启用环节限时自动降级**：先按[轻审核流程](../vertical-comic-preproduction/references/light-review.md)执行。每图快速看一次人物与剧情可读性，仅严重剧情问题最多返修一轮；普通瑕疵留人工。此模式不执行下文旧全面审核的六项细节取证、逐MEM记录及整话/跨话重复复审，不为测试返修另做生图。新任务同时绑定 `speed_policy: bounded_stage_fallback_v1`：按轻审核流程内的时限表执行，超时停止可选润饰、缩小编译批次、简化审核或沿用现有图；首轮出齐优先于返修。工具以冻结状态的 `image_review_profile` 分支登记和交付；无该字段的旧任务仍按原合同，不能热改。
-
 阶段开始时按[规则归属](../vertical-comic-preproduction/references/rule-ownership.md)读取共同规则与本阶段合同；授权和进度沿用该页入口，同一运行不重复加载未变内容。新制作按[前期提速](../vertical-comic-preproduction/references/preparation-efficiency.md)先贯通代表格，再用[唯一主表](../vertical-comic-preproduction/references/draft-authoring.md)增量派生。接包直接使用已审输入。
 
-接包生产优先执行[免外部配置接包](../vertical-comic-preproduction/references/quick-start.md#接包生产免外部配置)：安装版receive取得本地逐话state和包内冻结runtime_script后直接按已审输入生产。首次安装或没有本书profile不构成缺件，不索要外部脚本/资产，不调用prepare、read_config或重新进入主表/代表格/A/B设计流程。下文前期创作指导只用于尚未制作输入的新任务或真实受影响范围修复；包内历史usage_config_path不作本机配置。
+接包生产优先执行[免外部配置接包](../vertical-comic-preproduction/references/quick-start.md#接包生产免外部配置)：安装版receive取得本地逐话state和本地固定当前runtime_script后直接按已审输入生产。首次安装或没有本书profile不构成缺件，不索要外部脚本/资产，不调用prepare、read_config或重新进入主表/代表格/A/B设计流程。下文前期创作指导只用于尚未制作输入的新任务或真实受影响范围修复；包内历史usage_config_path不作本机配置。
 
-本技能负责供人工继续加工的第一批独立逐格图片。新运行先读[生产决定与阶段交接](../vertical-comic-preproduction/references/production-decisions.md)：沿用真实审核，逐问题分三类，按影响/成本决定一次合并修复、重生或留人工；采用版本与原QA绑定，交付附简明问题表。旧RV按冻结合同，不热替换工具或规则。
+本技能负责供人工继续加工的第一批独立逐格图片。新运行先读[生产决定与阶段交接](../vertical-comic-preproduction/references/production-decisions.md)：沿用真实审核，逐问题分三类，按影响/成本决定一次合并修复、重生或留人工；采用版本与原QA绑定，交付附简明问题表。旧证据按原合同读取，后续生产使用固定的当前执行器。
 
 新整话按[服饰与单画面](../vertical-comic-preproduction/references/appearance-and-single-frame.md)编译实际prompt并携带清晰衣装/配饰参考，最多5条路径不静默删关键来源。一图只生成一个连续画面，未选场面不进入绘图指令；返修明确改哪些细节、保留哪些细节，失败图不作款式权威。
 
 从获批视觉基准和镜头编译实际请求、生成并保存逐格原图。先读已安装imagegen Skill与当前工具定义，再读共享[生图合同](../vertical-comic-preproduction/references/generation-io.md)、[Codex输入](../vertical-comic-preproduction/references/codex-imagegen.md)和[异步执行](../vertical-comic-preproduction/references/async-generation.md)。首次运行同时读[规则归属](../vertical-comic-preproduction/references/rule-ownership.md)，规则按阶段和命中加载。
 
-新任务按[整话异步](../vertical-comic-preproduction/references/episode-async.md)与[逐格就绪](../vertical-comic-preproduction/references/panel-readiness.md)执行；旧RV继续原冻结快照。分工模式先读[双电脑交接](../vertical-comic-preproduction/references/split-production.md)与[直接交付](../vertical-comic-preproduction/references/direct-delivery.md)，新版按完整话范围领取就绪格；旧包按冻结格式恢复。接包通过不等于生图放行。
+新任务按[整话异步](../vertical-comic-preproduction/references/episode-async.md)与[逐格就绪](../vertical-comic-preproduction/references/panel-readiness.md)执行；旧包先完成数据导入。分工模式先读[双电脑交接](../vertical-comic-preproduction/references/split-production.md)与[直接交付](../vertical-comic-preproduction/references/direct-delivery.md)，新版按完整话范围领取就绪格；旧包按冻结格式恢复。接包通过不等于生图放行。
 
 1. 从本批快照运行production_runtime.py --action compile，批量预检当前就绪格；若返回next_compile_panel_ids，接着编译该余下选集，不从首5格重跑。复用权威源序、visual_basis和shot_manifest，不另造镜头、参考或审批账本。
 2. 接包时直接采用已审实际prompt；只对真实输入变化做准确范围修复。尚未准备输入的新任务按[提示词合同](../vertical-comic-preproduction/references/prompt-package.md)写本格画面事实，去除重复与相反旧指令；身份、衣装、场景方向、接触、裁切及批准画风进入真实输入。按已有检查条件编译肢体归属、自然持物、人物视线与物件正反面，不整套堆砌负面词。元数据签名、预算与审批状态不当作绘图指令。
 3. 每请求最多5条真实本地参考路径，同图合并用途。实际数组/编号、prompt.txt和JSON一致，完整门禁核对当前场景选区及关键细节确实携带。全景/全身参考不扩大取景，失败图不成为身份或画风来源。
-4. 用本话[容量租约](../vertical-comic-preproduction/references/batch-runtime.md)领取唯一回执，完整预检后一次提交。独立格持续并发，高风险、校准及真实前图依赖按准确范围等待；状态保存串行。共享async_generation.js注入真实调用与持久化，未结束Promise保持存活；乱序返回按话/格/轮次/attempt保存。
+4. 用本话[容量租约](../vertical-comic-preproduction/references/batch-runtime.md)领取唯一回执，复用本格有效预检并核对动态条件后提交。独立格持续并发，高风险、校准及真实前图依赖按准确范围等待；状态保存串行。共享async_generation.js注入真实调用与持久化，未结束Promise保持存活；乱序返回按话/格/轮次/attempt保存。
 5. 返回原件、真实请求/响应及图片立即落盘后释放生图槽，通知[图片验收](../vertical-comic-image-review/SKILL.md)。回调不能填视觉PASS。记录实际提交、返回、保存和QA时间；服务未公开的时间留未知。
-6. 轻审核只修影响剧情理解的严重问题，普通瑕疵直接留人工；完整三类收益权衡仅用于全面审核。先依据实际生产决定选择留人工、一次合并局部修复或一次重生；仅值得处理的问题才用额度。需要调用时再按[实际执行质量](../vertical-comic-preproduction/references/execution-quality.md)分流：仅裁切不生图；局部错定向编辑；空间/动作/参考错先修输入；重复失败停止诊断。用repair_input_guard.py核对真实底图与待修迁移要素。肢体改姿同时说明旧结构移除、新结构及连接，不只新增一条正确手臂。
+6. 轻审核只修影响剧情理解的严重问题，普通瑕疵直接留人工。先依据实际生产决定选择留人工、一次合并局部修复或一次重生；仅值得处理的问题才用额度。需要调用时再按[实际执行质量](../vertical-comic-preproduction/references/execution-quality.md)分流：仅裁切不生图；局部错定向编辑；空间/动作/参考错先修输入；重复失败停止诊断。用repair_input_guard.py核对真实底图与待修迁移要素。肢体改姿同时说明旧结构移除、新结构及连接，不只新增一条正确手臂。
 7. 原格最多一轮自动修正，超过5张真实失败先原子登记共因诊断，重复低收益策略可提前停止。修正绑定真实失败、新包和具体约束，保留有效修正；额外授权单独记次数，不重置旧历史。未知请求先查证，不按超时重发或占用返修轮次。
 
 B和实际包按[合并审查](../vertical-comic-preproduction/references/grouped-review.md)准确决定；明确用户委托可由执行者在范围内作有证据决定，不伪造用户逐项批准。原比例、源稿和身份资产不因模型失败擅自放宽。最终由验收阶段完成实际QA、连续性、采用版本选择及第一批逐格图片和问题表。
@@ -43,6 +46,6 @@ B和实际包按[合并审查](../vertical-comic-preproduction/references/groupe
 
 新协议正文和返修按[统一提交登记](../vertical-comic-preproduction/references/submission-runtime.md)提供真实onBeforeInvoke；编译/领取通过不是稍后调用的长期许可。
 
-接包使用receive返回的配套冻结执行器与generation_host，旧协议按[接收端配套接线](../vertical-comic-preproduction/references/submission-runtime.md#接收端配套接线)执行。实际返回通过正式save-return保存；持久化失败恢复原返回，不新增生图。
+接包使用receive返回的配套冻结执行器与generation_host，当前协议按[接收端配套接线](../vertical-comic-preproduction/references/submission-runtime.md#接收端配套接线)执行。实际返回通过正式save-return保存；持久化失败恢复原返回，不新增生图。
 
-确认无图的技术恢复按[统一恢复入口](../vertical-comic-preproduction/references/submission-runtime.md#确认无图恢复)执行；已有用户明确授权时无需再次确认兼容副本或必要重试。技术重试增加attempt而不增加质量返修round；未知结果先查证，原图、批准、证据和有效计时保留。
+确认无图的技术恢复按[统一恢复入口](../vertical-comic-preproduction/references/submission-runtime.md#确认无图恢复)执行；已有用户明确授权时无需再次确认必要技术恢复或重试。技术重试增加attempt而不增加质量返修round；未知结果先查证，原图、批准、证据和有效计时保留。

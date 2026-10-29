@@ -15,7 +15,8 @@ import authority_updates as authority
 from codex_reference_contract import checked_file, digest, file_session, read_json
 from episode_dispatch_queue import reserve_ready
 from platform_io import atomic_json
-from staged_workflow import evaluate, approval_errors
+from staged_workflow import approval_errors
+from _historical_fixture import evaluate
 
 
 def writer_process(kind, state_path, token, changes, entered, proceed, attempted, results):

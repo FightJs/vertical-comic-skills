@@ -3,6 +3,33 @@
 (async function runHalfWave(jobs, limit, invoke, onResult, options = {}) {
   if (!Array.isArray(jobs) || !Number.isInteger(limit) || limit < 1 || typeof invoke !== 'function' || typeof onResult !== 'function')
     throw new Error('jobs/confirmed concurrency/invoke/onResult required');
+  // Pure SHA-256: functions.exec does not require Node/crypto globals.
+  const canonical = v => v === null || typeof v !== 'object' ? JSON.stringify(v) :
+    Array.isArray(v) ? '['+v.map(canonical).join(',')+']' :
+    '{'+Object.keys(v).sort().map(k=>JSON.stringify(k)+':'+canonical(v[k])).join(',')+'}';
+  function sha256(text) {
+    const bytes=Array.from(unescape(encodeURIComponent(text)),c=>c.charCodeAt(0));
+    const bitLength=bytes.length*8; bytes.push(128);while(bytes.length%64!==56)bytes.push(0);
+    for(let i=7;i>=0;i--) bytes.push(i>=4?0:(bitLength>>> (i*8))&255);
+    const primes=[],K=[],H=[];
+    for(let n=2;primes.length<64;n++) {
+      if(primes.every(p=>n%p!==0)) {primes.push(n);K.push((Math.cbrt(n)%1*4294967296)|0);if(H.length<8)H.push((Math.sqrt(n)%1*4294967296)|0);}
+    }
+    const rotr=(x,n)=>(x>>>n)|(x<<(32-n));
+    for(let offset=0;offset<bytes.length;offset+=64) {
+      const w=Array(64);
+      for(let i=0;i<16;i++)w[i]=(bytes[offset+i*4]<<24)|(bytes[offset+i*4+1]<<16)|(bytes[offset+i*4+2]<<8)|bytes[offset+i*4+3];
+      for(let i=16;i<64;i++) {const a=w[i-15],b=w[i-2];w[i]=(w[i-16]+(rotr(a,7)^rotr(a,18)^(a>>>3))+w[i-7]+(rotr(b,17)^rotr(b,19)^(b>>>10)))|0;}
+      let [a,b,c,d,e,f,g,h]=H;
+      for(let i=0;i<64;i++) {const t1=(h+(rotr(e,6)^rotr(e,11)^rotr(e,25))+((e&f)^(~e&g))+K[i]+w[i])|0;
+        const t2=((rotr(a,2)^rotr(a,13)^rotr(a,22))+((a&b)^(a&c)^(b&c)))|0;
+        h=g;g=f;f=e;e=(d+t1)|0;d=c;c=b;b=a;a=(t1+t2)|0;}
+      [a,b,c,d,e,f,g,h].forEach((v,i)=>H[i]=(H[i]+v)|0);
+    }
+    return H.map(v=>(v>>>0).toString(16).padStart(8,'0')).join('');
+  }
+  const preparedMode = options.protocol === 'prepared_dispatch_v1';
+  if (preparedMode && typeof options.onPrepareInvoke !== 'function') throw new Error('onPrepareInvoke required');
   // Keep the exact checked input across the asynchronous registration boundary.
   const freeze = value => {
     if (value && typeof value === 'object') { Object.values(value).forEach(freeze); Object.freeze(value); }
@@ -24,9 +51,9 @@
     if (Array.isArray(refs) && new Set(refs).size !== refs.length)
       throw new Error(`REFERENCE_DUPLICATE_HOLD: ${job.panel_id}, merge same-file purposes before submitting`);
   }
-  if (typeof options.onBeforeInvoke !== 'function')
+  if (!preparedMode && typeof options.onBeforeInvoke !== 'function')
     throw new Error('SUBMISSION_HOLD: all jobs require durable onBeforeInvoke');
-  if (jobs.some(j => j.submission?.policy !== 'durable_image_submission_v1' ||
+  if (!preparedMode && jobs.some(j => j.submission?.policy !== 'durable_image_submission_v1' ||
       !j.submission.task_id || !/^[a-f0-9]{64}$/.test(j.submission.input_digest) || !j.book_id || !j.episode_id))
     throw new Error('SUBMISSION_HOLD: exact compiled job/owner protocol required');
   if (options.onBeforeInvoke !== undefined && typeof options.onBeforeInvoke !== 'function') throw new Error('onBeforeInvoke must be a function');
@@ -130,14 +157,51 @@
     progressTimer = setTimeout(poll, progressPollMs);
   }
   const seenRegistrations = new Set();
+  const saveLanes = new Map();
+  function persistFor(job, action) {
+    if (!preparedMode) { const work=persistence.then(action); persistence=work.catch(()=>{}); return work; }
+    const key=JSON.stringify([job.submission.task_id,job.episode_id,job.job_id]);
+    const work=(saveLanes.get(key) ?? Promise.resolve()).then(action);
+    saveLanes.set(key,work.catch(()=>{})); return work;
+  }
+  let pulling=Promise.resolve(), ended=false;
+  async function nextJob() {
+    const work=pulling.then(async()=>{
+      if (stop) return null;
+      if (cursor < jobs.length) { const index=cursor++; return {index,job:jobs[index]}; }
+      if (!preparedMode || !options.nextPrepared || ended) return null;
+      const value=await options.nextPrepared();
+      if (value == null) { ended=true; return null; }
+      const job=freeze(JSON.parse(JSON.stringify(value))), index=jobs.length;
+      jobs.push(job);cursor++;return {index,job};
+    }); pulling=work.catch(()=>{});return work;
+  }
   async function worker() {
-    while (!stop && cursor < jobs.length) {
-      const index = cursor++, job = jobs[index];
+    while (!stop) {
+      const next=await nextJob(); if (!next) break;
+      const index=next.index; let job=next.job;
       let item = {job_id: job.job_id, kind: job.kind ?? 'panel', panel_id: job.panel_id, asset_id: job.asset_id, attempt_id: job.attempt_id, batch_id: job.batch_id, round_id: job.round_id, ...(job.ready_at ? {ready_at:job.ready_at} : {})};
       {
         try {
-          const ack = await options.onBeforeInvoke(job);
-          if (ack?.policy !== 'durable_image_submission_v1' || ack.status !== 'SUBMISSION_REGISTERED' || ack.invoke_allowed !== true ||
+          let ack;
+          if (preparedMode) {
+            const expected = job;
+            const prepared = await options.onPrepareInvoke(expected);
+            job = freeze(JSON.parse(JSON.stringify(prepared?.job ?? null)));
+            ack = prepared?.ack;
+            if (!job || job.candidate_only || job.input_audit_only || job.dispatch_authorized !== true ||
+                job.submission?.policy !== 'prepared_dispatch_v1' ||
+                job.prepared_reference?.prepared_input_id !== expected.prepared_input_id ||
+                job.prepared_reference?.record_digest !== expected.record_digest ||
+                ['book_id','episode_id','panel_id','attempt_id','round_id'].some(k => job[k] !== expected[k]) ||
+                ack?.binding_digest !== job.submission.binding_digest ||
+                sha256(canonical(job.arguments)) !== job.submission.binding_digest ||
+                !Array.isArray(job.arguments?.referenced_image_paths) || job.arguments.referenced_image_paths.length > 5 ||
+                new Set(job.arguments.referenced_image_paths).size !== job.arguments.referenced_image_paths.length)
+              throw new Error('PREPARED_FINAL_JOB_MISMATCH');
+            item = {...item,job_id:job.job_id,kind:job.kind,registration_id:ack.registration_id};
+          } else ack = await options.onBeforeInvoke(job);
+          if (ack?.policy !== (preparedMode ? 'prepared_dispatch_v1' : 'durable_image_submission_v1') || ack.status !== 'SUBMISSION_REGISTERED' || ack.invoke_allowed !== true ||
               !/^[a-f0-9]{64}$/.test(ack.registration_id) || seenRegistrations.has(ack.registration_id) ||
               ack.scope?.task_id !== job.submission.task_id || ack.scope?.job_id !== job.job_id ||
               ack.scope?.book_id !== job.book_id || ack.scope?.episode_id !== job.episode_id ||
@@ -149,6 +213,11 @@
             const failure = new Error('SUBMISSION_HOLD: no fresh exact registration; do not repeat image call');
             failure.registration_ack = ack;
             throw failure;
+          }
+          if (preparedMode) {
+            const keys=['kind','book_id','episode_id','job_id','panel_id','asset_id','batch_id','round_id','attempt_id','arguments','dispatch_receipt','submission'];
+            const binding=Object.fromEntries(keys.map(k=>[k,job[k]??null]));
+            if (sha256(canonical(binding))!==ack.job_digest) throw new Error('PREPARED_ACK_JOB_DIGEST_MISMATCH');
           }
           seenRegistrations.add(ack.registration_id);
           item.registration_id = ack.registration_id;
@@ -188,7 +257,7 @@
       item.returned_at = new Date().toISOString();
       results[index] = item;
       // Single-writer persistence, without serializing the image calls themselves.
-      const save = persistence.then(() => { item.save_started_at = new Date().toISOString(); return onResult(job, item); });
+      const save = persistFor(job, () => { item.save_started_at = new Date().toISOString(); return onResult(job, item); });
       persistence = save.catch(() => {});
       try {
         await save;
@@ -197,14 +266,14 @@
         if (options.onPersisted) {
           // Persist final save timing in the same single-writer lane. This hook
           // records metadata only; no retry and no visual verdict is implied.
-          const timedSave = persistence.then(() => options.onPersisted(job, item));
+          const timedSave = persistFor(job, () => options.onPersisted(job, item));
           persistence = timedSave.catch(() => {});
           await timedSave;
         }
-        if (options.onInputHeadRefresh && job.kind !== 'asset') {
+        if (!preparedMode && options.onInputHeadRefresh && job.kind !== 'asset') {
           // Refresh only after the real save and final timing persistence. This
           // callback invokes capture/bind, never image tools or QA approval.
-          const refresh = persistence.then(() => options.onInputHeadRefresh(job, item));
+          const refresh = persistFor(job, () => options.onInputHeadRefresh(job, item));
           persistence = refresh.catch(() => {});
           try {
             const head = await refresh;
@@ -230,7 +299,7 @@
       catch (err) { stop = true; item.persistence_error = String(err); item.persistence_error_detail = errorData(err); }
     }
   }
-  const workers = await Promise.allSettled(Array.from({length: Math.min(limit, jobs.length)}, () => worker()));
+  const workers = await Promise.allSettled(Array.from({length: (preparedMode && options.nextPrepared ? limit : Math.min(limit, jobs.length))}, () => worker()));
   const workerErrors = workers.filter(x => x.status === 'rejected').map(x => errorData(x.reason));
   await persistence;
   flushReview();

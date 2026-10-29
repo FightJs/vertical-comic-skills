@@ -71,7 +71,7 @@ class FrameRatios(unittest.TestCase):
     def test_full_half_generate_binds_ratio_plan_and_blocks_deleted_policy(self):
         import test_execution_lifecycle as lifecycle
         from execution_contract import toolchain
-        from staged_workflow import evaluate
+        from _historical_fixture import evaluate
         root=self.root/'episode';s,m,p,shots=lifecycle.build_calibration(root);src=lifecycle.read(root,s['source_snapshot'])
         plan={**template(s,src),'panels':rows(['9:16','3:4','4:5','9:16'])};ref=lifecycle.write(root,'ratio-plan.json',plan)
         headers={'frame_ratio_policy':POLICY,'frame_ratio_plan':ref,'source_snapshot':s['source_snapshot']};s.update(headers);m.update(headers);shots.update(headers)

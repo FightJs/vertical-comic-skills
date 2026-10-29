@@ -1,4 +1,5 @@
 """Isolated batch-routing tests plus actual preflight/QA integration; no image calls."""
+import _historical_fixture
 import copy
 import json
 from pathlib import Path
@@ -10,8 +11,8 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import test_staged_workflow as staged_fixtures
-from batch_workflow import build_plan, dependency_basis, cross_episode_errors
-from staged_workflow import evaluate
+from historical_engines.batch_workflow import build_plan, dependency_basis, cross_episode_errors
+from _historical_fixture import evaluate
 from codex_reference_contract import digest, validate_panel
 
 
@@ -67,7 +68,7 @@ class BatchTests(unittest.TestCase):
 
     def routed(self, state, check="status", pid=None):
         # These tests isolate scheduling. Full input and image QA run below.
-        with patch("batch_workflow.input_errors", return_value=[]), patch("batch_workflow.qa_errors", return_value=[]):
+        with patch("historical_engines.batch_workflow.input_errors", return_value=[]), patch("historical_engines.batch_workflow.qa_errors", return_value=[]):
             return evaluate(state, self.root, check, pid)
 
     def test_five_pending_panels_are_eligible_together(self):
@@ -267,19 +268,19 @@ class BatchTests(unittest.TestCase):
 
     def test_cross_episode_report_accepts_exact_current_images(self):
         context, _, _, _ = self.cross_fixture()
-        with patch("batch_workflow.qa_errors", return_value=[]):
+        with patch("historical_engines.batch_workflow.qa_errors", return_value=[]):
             self.assertEqual(cross_episode_errors(context), [])
 
     def test_cross_episode_failed_qa_is_not_overridden_by_report_pass(self):
         context, _, _, _ = self.cross_fixture()
-        with patch("batch_workflow.qa_errors", return_value=["IMAGE_STYLE_HOLD"]):
+        with patch("historical_engines.batch_workflow.qa_errors", return_value=["IMAGE_STYLE_HOLD"]):
             self.assertTrue(cross_episode_errors(context))
 
     def test_cross_episode_other_output_or_epoch_change_invalidates_report(self):
         context, control, _, other_root = self.cross_fixture()
         control["epoch"] = 2
         self.write("control.json", control)
-        with patch("batch_workflow.qa_errors", return_value=[]):
+        with patch("historical_engines.batch_workflow.qa_errors", return_value=[]):
             self.assertTrue(cross_episode_errors(context))
         control["epoch"] = 1
         self.write("control.json", control)
@@ -289,7 +290,7 @@ class BatchTests(unittest.TestCase):
         new_image.write_text('{"SYNTHETIC_CHANGED":true}', encoding='utf-8', newline='\n')
         other["panels"][0]["output"] = {"path": new_image.name, "sha256": digest(new_image)}
         state_path.write_text(json.dumps(other), encoding='utf-8', newline='\n')
-        with patch("batch_workflow.qa_errors", return_value=[]):
+        with patch("historical_engines.batch_workflow.qa_errors", return_value=[]):
             self.assertTrue(cross_episode_errors(context))
     def test_real_batch_preflight_through_qa_and_delivery(self):
         from PIL import Image

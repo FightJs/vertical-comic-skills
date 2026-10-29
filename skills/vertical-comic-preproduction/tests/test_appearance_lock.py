@@ -129,7 +129,7 @@ class AppearanceLockTests(unittest.TestCase):
             self.assertEqual(json.loads((root/'00_输入审计/生产流程.json').read_text(encoding='utf-8-sig'))['gates'],{})
     def test_real_complete_gate_carries_constraints_and_detects_removed_actual_block(self):
         from PIL import Image
-        from staged_workflow import evaluate
+        from _historical_fixture import evaluate
         h,b=visual_fixtures.actual_fixture(self);p=h.panel
         costume=next(r for r in p['reference_images'] if r['sha256']==b['appearance_details']['earring']['reference_sha256'])
         with Image.open(h.root/costume['path']) as im:box=[0,0,min(8,im.width),min(8,im.height)]

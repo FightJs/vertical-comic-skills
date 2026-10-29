@@ -5,9 +5,11 @@ description: Review actual comic images against approved evidence, preserve trut
 
 # 条漫图片轻审核与成品交付
 
+统一入口为整话轻审核：新任务与旧包导入后都固定当前执行器，旧包代码仅作证据。每话启动一个 `generation_host.py serve` 常驻进程；输入未变复用，局部修改只处理受影响格；返回立即保存并释放槽位。每图快速看一次，仅严重剧情问题最多返修一轮。暂停和等待用户不计时，多话共用四小时有效预算，三小时不停止首轮。完整约定见[统一执行与恢复](../vertical-comic-preproduction/references/execution-compatibility.md)与[轻审核流程](../vertical-comic-preproduction/references/light-review.md)。
+
 新轻审核运行的自动返修阈值为essential_story_only_v1：仅主要人物明显错认、关键剧情缺失、剧情表达相反或剧情不可理解时，最多自动返修一轮。每图一次快速观察，其他问题记录并归集；具体字段及旧包分支见[轻审核流程](../vertical-comic-preproduction/references/light-review.md#必要返修阈值新轻审核运行)。
 
-先读取状态的image_review_profile：新任务默认light_story_review_v1，按[轻审核流程](../vertical-comic-preproduction/references/light-review.md)执行。speed_policy=bounded_stage_fallback_v1时执行该页环节限时；暂停及等用户不计时，三小时不停止首轮，四小时为累计有效预算。旧冻结任务不迁移。
+先读取状态的image_review_profile：新任务默认light_story_review_v1，按[轻审核流程](../vertical-comic-preproduction/references/light-review.md)执行。speed_policy=bounded_stage_fallback_v1时执行该页环节限时；暂停及等用户不计时，三小时不停止首轮，四小时为累计有效预算。旧任务先导入原证据并保留时钟。
 
 ## 默认轻审核
 
@@ -22,6 +24,4 @@ description: Review actual comic images against approved evidence, preserve trut
 
 接包QA使用generation_host核验过本机规则地址的实际执行副本，并绑定其哈希；原批准包保留。地址修复不改变实际观察和原证据。
 
-## 明确全面审核或旧冻结合同
-
-只有状态未启用轻审核或用户明确要求全面审核时，按[完整图片审查](../vertical-comic-preproduction/references/stage-image-review.md)、[规则归属](../vertical-comic-preproduction/references/rule-ownership.md)、[具体视觉证据](../vertical-comic-preproduction/references/visual-evidence.md)及[参考连续性](../vertical-comic-preproduction/references/reference-continuity.md)执行六项、适用MEM、原尺寸局部、修复保留比较及跨话边界。服饰核对见[服饰与单画面](../vertical-comic-preproduction/references/appearance-and-single-frame.md)，结构返修见[坐标引导返修](../vertical-comic-preproduction/references/coordinate-repair.md)。按原授权记录D/委托决定，不用轻审核QA替换旧证据。
+历史全面QA保持原文件、原结论和原引用，由导入器按原证据读取，不要求重填六项。用户另设的审核点继续保留；未审图不能自动补PASS。

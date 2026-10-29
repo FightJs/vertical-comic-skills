@@ -113,6 +113,6 @@ python scripts/continuity_contract.py --manifest <B包>/全话提示词索引.js
 python scripts/continuity_contract.py --manifest <B包>/全话提示词索引.json --qa-report <QA目录>/生成图QA报告.json
 ```
 
-第二条只确认分项记录与冻结来源相符，成功状态为 `DIMENSION_REVIEW_RECORDED`；`layout_release` 始终为 false。试产并排（batch5_v1 为首五格，旧模式首三格）、相邻机位、既有 HOLD 和用户批准仍按 Phase F 执行；批次模式另按 [batch-parallel.md](batch-parallel.md) 审查批内/跨批连续性。字段检查不能证明复核者确实看图，也不能自动批准底图。身份 PASS、衣装 PASS 但递手机接触 FAIL 时整体继续 HOLD，不能平均打分放行。
+第二条只确认分项记录与冻结来源相符，成功状态为 `DIMENSION_REVIEW_RECORDED`；`layout_release` 始终为 false。试产并排（batch5_v1 为首五格，旧模式首三格）、相邻机位、既有 HOLD 和用户批准仍按 Phase F 执行；批次模式另按 [execution-compatibility.md](execution-compatibility.md) 审查批内/跨批连续性。字段检查不能证明复核者确实看图，也不能自动批准底图。身份 PASS、衣装 PASS 但递手机接触 FAIL 时整体继续 HOLD，不能平均打分放行。
 
 visual_evidence_v1补充本格具体预期和实际观察，继续使用本文件五维度及独立画风审查，不另建替代总分。人物状态、可见首饰原参考及跨切场连续性按 [具体视觉证据](visual-evidence.md) 校验。

@@ -107,6 +107,9 @@ def formal_context_errors(root,index):
     return errors
 
 
+from handoff_zip import reception_cache
+
+@reception_cache
 def bind(package_root,run_root,*,execution_context=None):
     from handoff_zip import audit_index,reference,inside,files,sha,write
     from runtime_snapshot import verify

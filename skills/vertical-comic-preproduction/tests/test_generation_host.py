@@ -5,7 +5,7 @@ from PIL import Image
 sys.path[:0]=[str(Path(__file__).resolve().parents[1]/'scripts'),str(Path(__file__).parent)]
 import test_direct_handoff as fixture
 from codex_reference_contract import digest
-from production_runtime import compile_jobs
+from _historical_fixture import compile_jobs
 from handoff_delivery import local_execution_view,bind
 from runtime_snapshot import create,verify
 from test_rule_memory import library

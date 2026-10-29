@@ -187,174 +187,9 @@ def _evaluate_impl(state, root, check="status", requested=None):
     if state.get("execution_mode") == "episode_async_v1":
         from scoped_episode_workflow import evaluate_episode
         return evaluate_episode(state, root, check, requested)
-    """Return next action. Never edits state, advances cursor, or grants acceptance."""
-    if state.get("execution_mode") == "half_episode_async_v1":
-        from half_workflow import evaluate_half
-        return evaluate_half(state, root, check, requested)
-    if state.get("execution_mode") == "batch5_v1":
-        from batch_workflow import evaluate_batch
-        return evaluate_batch(state, root, check, requested)
-    if state.get("execution_mode") not in (None, "sequential_v1"):
-        return {"status": "HOLD", "next_action": "EXECUTION_MODE_HOLD", "errors": ["未知执行模式；不得降级为旧顺序流程"]}
-    book, episode = state.get("book_id"), state.get("episode_id")
-    def result(action, errors=(), cursor=None):
-        ok = not errors and action in {"READY_FOR_CURRENT_PANEL", "READY_TO_PACKAGE"}
-        return {"policy": POLICY, "status": "PASS" if ok else "HOLD", "next_action": action,
-                "cursor": cursor, "errors": list(errors), "user_acceptance": "NOT_GRANTED_BY_SCRIPT"}
-    if state.get("policy") != POLICY or not book or not episode:
-        return result("COMPLETE_INPUT_AUDIT", ["流程版本或本书/本话标识缺失"])
-    if state.get("cancelled") is True:
-        return result("CANCELLED", ["用户取消；不得自动恢复"])
-    if state.get("holds"):
-        return result("RESOLVE_HOLD", state["holds"])
-    try:
-        checked_file(root, state.get("source_script"))
-        source = read(checked_file(root, state.get("source_snapshot")))
-        order = source.get("panel_ids")
-        if not isinstance(order, list) or not order or any(not isinstance(x, str) for x in order) or len(set(order)) != len(order):
-            return result("COMPLETE_INPUT_AUDIT", ["源格序为空或重复"])
-        if source.get("source_sha256") != state["source_script"]["sha256"]:
-            return result("COMPLETE_INPUT_AUDIT", ["源格序快照与剧本版本不一致"])
-        if not isinstance(source.get("locked_scripts"), dict) or set(source["locked_scripts"]) != set(order):
-            return result("COMPLETE_INPUT_AUDIT", ["源快照缺少逐格原文"])
-        # Source extraction still needs actual comparison against the original script.
-        basis = state.get("visual_basis")
-        basis_data = read(checked_file(root, basis))
-        if basis_data.get("book_id") != book or basis_data.get("episode_id") != episode:
-            return result("COMPLETE_INPUT_AUDIT", ["视觉基准本书/本话不一致"])
-        basis_refs = basis_data.get("reference_files", [])
-        if not basis_refs:
-            return result("COMPLETE_INPUT_AUDIT", ["视觉基准没有实际参考文件"])
-        for ref in basis_refs:
-            checked_file(root, ref)
-        gates = state.get("gates", {})
-        errors = approval_errors(gates.get("visual_basis"), root, [state["source_script"], state["source_snapshot"], basis], book, episode)
-        if errors:
-            return result("WAIT_VISUAL_BASIS_APPROVAL", errors)
-        shot_ref = state.get("shot_manifest")
-        shots = read(checked_file(root, shot_ref))
-        memory_binding = memory_binding_errors(state, shots=shots)
-        if memory_binding:
-            return result("MEMORY_HOLD", memory_binding)
-        if shots.get("execution_mode") in {"batch5_v1", "half_episode_async_v1"}:
-            return result("EXECUTION_MODE_HOLD", ["批次镜头不能删除状态模式标识后走旧门禁"])
-        shot_panels = shots.get("panels", shots.get("shot_design", []))
-        if [p.get("panel_id") for p in shot_panels] != order:
-            return result("REPAIR_SHOTS", ["全话镜头格序与源快照不一致"])
-        errors = []
-        for p in shot_panels:
-            if p.get("locked_script") != source["locked_scripts"][p["panel_id"]]:
-                errors.append(f"{p['panel_id']}:镜头原文与源快照不一致")
-            keys = p.get("visual_state_keys")
-            if not isinstance(keys, list) or not keys or any(not isinstance(k, str) or not k.strip() for k in keys):
-                errors.append(f"{p['panel_id']}:缺少可追溯的视觉状态键")
-        errors.extend(approval_errors(gates.get("shot_design"), root, [basis, shot_ref], book, episode))
-        if errors:
-            return result("WAIT_SHOT_APPROVAL", errors)
-        records = state.get("panels", [])
-        if [p.get("panel_id") for p in records] != order:
-            return result("COMPLETE_INPUT_AUDIT", ["流程逐格清单与源格序不一致"])
-        completed = 0
-        for record in records:
-            if record.get("status") not in DONE:
-                break
-            errors = qa_errors(root, record)
-            if errors:
-                return result("REVIEW_CURRENT_PANEL", errors, record["panel_id"])
-            # Verify the generated package still came from the approved shot.
-            packet = read(checked_file(root, record["package_manifest"]))
-            original = shot_panels[completed]
-            derived = packet["panels"][0]
-            memory_binding = memory_binding_errors(state, packet=packet)
-            memory_binding.extend(memory_errors(state.get("memory_source"), "shot_design", original, root))
-            if memory_binding:
-                return result("MEMORY_HOLD", memory_binding, record["panel_id"])
-            if packet.get("book_id") != book or packet.get("episode_id") != episode:
-                return result("INVALIDATE_DEPENDENT_OUTPUT", ["旧输出包本书/本话不一致"], record["panel_id"])
-            errors = basis_errors(derived, basis_data)
-            if errors:
-                return result("INVALIDATE_DEPENDENT_OUTPUT", errors, record["panel_id"])
-            for key in ("locked_script", "framing", "frame_ratio", "camera_view_signature", "character_bindings", "scene_binding", "continuity_contract", "visual_state_keys", "memory_tags"):
-                if derived.get(key) != original.get(key):
-                    return result("INVALIDATE_DEPENDENT_OUTPUT", [f"{record['panel_id']}:{key}与批准镜头不一致"], record["panel_id"])
-            completed += 1
-        pilot_count = min(3, len(order))
-        if completed >= pilot_count:
-            pilot_outputs = [p["output"] for p in records[:pilot_count]]
-            errors = approval_errors(gates.get("pilot"), root, [basis, shot_ref, *pilot_outputs], book, episode)
-            if errors:
-                return result("WAIT_PILOT_APPROVAL", errors, order[completed] if completed < len(order) else None)
-        seen = set()
-        for i, shot in enumerate(shot_panels[:completed]):
-            new_keys = set(shot["visual_state_keys"]) - seen
-            seen.update(shot["visual_state_keys"])
-            if i >= pilot_count and new_keys:
-                # One scoped user message may approve every new state in this panel.
-                approval = state.get("state_reviews", {}).get(shot["panel_id"])
-                errors = approval_errors(approval, root, [basis, shot_ref, records[i]["output"]], book, episode)
-                if errors:
-                    return result("WAIT_NEW_STATE_APPROVAL", errors, shot["panel_id"])
-        if completed == len(order):
-            errors = approval_errors(gates.get("final"), root, [basis, shot_ref, *[p["output"] for p in records]], book, episode)
-            if errors:
-                return result("WAIT_FINAL_APPROVAL", errors)
-            if check == "generate":
-                return result("EPISODE_COMPLETE", ["本话无待生成格"])
-            return result("READY_TO_PACKAGE")
-        current = records[completed]
-        pid = current["panel_id"]
-        if check == "deliver":
-            return result("EPISODE_INCOMPLETE", ["缺少已验收图片，不能交付成品包"], pid)
-        if current.get("status") not in ("PENDING", "REPAIR_AUTHORIZED"):
-            return result("REVIEW_OR_RESOLVE_CURRENT_PANEL", ["当前格待验收、失败、取消或状态无效；不能继续下一格"], pid)
-        if check == "status":
-            return result("PREPARE_CURRENT_PANEL_INPUT", cursor=pid)
-        if requested != pid:
-            return result("SOURCE_ORDER_HOLD", [f"只能生成当前格{pid}，不能跳到{requested}"], pid)
-        authorization = state.get("production_authorization")
-        if isinstance(authorization, dict) and (authorization.get('policy') == 'preparation_authorization_v1' or authorization.get('phase') == 'preparation'):
-            return result('INPUT_HOLD', ['前期记录不能用作正文生产授权'])
-        errors = approval_errors(authorization, root, [state["source_script"]], book, episode)
-        if pid not in (authorization or {}).get("panel_ids", []):
-            errors.append("当前格不在已授权生产范围")
-        if errors:
-            return result("WAIT_PRODUCTION_AUTHORIZATION", errors, pid)
-        manifest_path = checked_file(root, current.get("package_manifest"))
-        packet = read(manifest_path)
-        if packet.get("book_id") != book or packet.get("episode_id") != episode:
-            return result("INPUT_HOLD", ["执行包本书/本话不一致"], pid)
-        subset_path = checked_file(root, current.get("shot_subset"))
-        subset = read(subset_path)
-        if state.get("input_priority_policy") and (subset.get("input_priority_policy") != state["input_priority_policy"] or packet.get("input_priority_policy") != state["input_priority_policy"]):
-            return result("INPUT_HOLD", ["镜头选集与执行包input_priority_policy须与本话冻结合同一致"], pid)
-        if subset.get("panels") != [shot_panels[completed]]:
-            return result("INPUT_HOLD", ["单格镜头快照不是获批全话记录的准确选集"], pid)
-        if packet.get("style_policy") != STYLE_POLICY or packet.get("workflow_policy") != POLICY or len(packet.get("panels", [])) != 1:
-            return result("INPUT_HOLD", ["单格执行包须声明阶段/画风合同且只含当前格"], pid)
-        panel = packet["panels"][0]
-        errors = memory_binding_errors(state, packet=packet)
-        errors.extend(memory_errors(state.get("memory_source"), "shot_design", shot_panels[completed], root))
-        errors.extend(memory_errors(state.get("memory_source"), "generation", panel, manifest_path.parent))
-        if state.get("memory_source") and current.get("status") == "REPAIR_AUTHORIZED" and panel.get("operation") != "repair":
-            errors.append("MEMORY_HOLD:返修执行包必须声明operation=repair")
-        if panel.get("memory_tags") != shot_panels[completed].get("memory_tags"):
-            errors.append("MEMORY_HOLD:执行包标签与获批镜头不一致")
-        if errors:
-            return result("MEMORY_HOLD", errors, pid)
-        if panel.get("panel_id") != pid or panel.get("visual_state_keys") != shot_panels[completed]["visual_state_keys"]:
-            return result("INPUT_HOLD", ["执行格号或视觉状态与获批镜头不一致"], pid)
-        errors = basis_errors(panel, basis_data)
-        if errors:
-            return result("INPUT_HOLD", errors, pid)
-        from validate_preproduction import Gate
-        errors = Gate(root, expected_panel_ids=[pid]).run(subset_path, manifest_path)["errors"]
-        errors.extend(validate_style(panel, manifest_path.parent))
-        errors.extend(output_spec_errors(panel))
-        if panel.get("generation_execution", {}).get("status") != "NOT_RUN":
-            errors.append("新调用计划须为NOT_RUN，已有结果应验收/复用或建立新返修版本")
-        return result("INPUT_HOLD" if errors else "READY_FOR_CURRENT_PANEL", errors, pid)
-    except (OSError, ValueError, TypeError, KeyError, AttributeError, IndexError) as exc:
-        return result("INPUT_EVIDENCE_HOLD", [str(exc)])
+    return {"status":"HOLD", "next_action":"IMPORT_HISTORICAL_DATA",
+            "errors":["RETIRED_EXECUTION_MODE: import original evidence into the whole-episode executor"],
+            "ready_panel_ids":[], "dispatch_authorized":False}
 
 
 def _evaluate_with_session(state, root, check="status", requested=None):
@@ -417,7 +252,35 @@ def preflight_many(state, root, panel_ids=None, candidate=False, input_audit=Fal
                 'ready_panel_ids': [], 'reports': []}
     if input_audit and (candidate or state.get('execution_mode')!='episode_async_v1' or state.get('parallel_context')):
         raise ValueError('接包输入审计只适用于未领容量的整话新制，不授予生产许可')
-    return evaluate(state, root, 'input_audit_batch' if input_audit else 'candidate_batch' if candidate else 'generate_batch', panel_ids)
+    check = 'input_audit_batch' if input_audit else 'candidate_batch' if candidate else 'generate_batch'
+    from validation_pool import _POOL
+    if candidate or input_audit or _POOL.get() is None:
+        return evaluate(state, root, check, panel_ids)
+    # This fact is private to the worker and bound to ALL dynamic state plus
+    # the exact read dependencies. It is not a caller-supplied approval token.
+    from audit_cache import derived, content_key
+    import copy
+    from codex_reference_contract import file_session, READ_POLICY
+    with file_session() as memo:
+        key = [str(Path(root).resolve()), state, panel_ids]
+        result = derived('submission_preflight', key,
+            lambda: evaluate(state, root, check, panel_ids),
+            accept=lambda r: r.get('status') == 'READY')
+        # A batch compile already validated every returned panel. Publish its
+        # single-panel equivalent so submit does not rerun that complete gate.
+        token = content_key([READ_POLICY, 'submission_preflight', key, None])
+        saved = memo['derived'].get(token)
+        if saved is not None:
+            from audit_cache import freeze
+            for report in result.get('reports', []):
+                pid = report['panel_id']
+                if pid not in result.get('ready_panel_ids', []): continue
+                one = copy.deepcopy(result)
+                one.update(ready_panel_ids=[pid], reports=[copy.deepcopy(report)])
+                subkey = [str(Path(root).resolve()), state, [pid]]
+                subtoken = content_key([READ_POLICY, 'submission_preflight', subkey, None])
+                _POOL.get().put('submission_preflight', subtoken, freeze(one), saved[1], memo)
+        return copy.deepcopy(result)
 
 
 def main():

@@ -48,7 +48,7 @@ class TaskContextTests(unittest.TestCase):
         self.state.pop('task_context');self.assertTrue(task.state_errors(self.state,self.root))
         self.assertEqual(task.state_errors({},self.root/'legacy'),[])
     def test_runtime_gate_rejects_wrong_task_before_generation(self):
-        from staged_workflow import evaluate
+        from _historical_fixture import evaluate
         self.state['task_context']=task.fresh('SYNTHETIC',['E001'])
         self.assertEqual(evaluate(self.state,self.root)['next_action'],'TASK_SCOPE_HOLD')
     def test_foreign_history_is_rejected_unless_explicitly_selected(self):

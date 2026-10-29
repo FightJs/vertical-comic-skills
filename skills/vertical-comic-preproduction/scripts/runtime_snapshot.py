@@ -21,7 +21,7 @@ def sha(path):
     return digest(Path(path))
 
 
-def verify(ref, *, executing_script=None):
+def _verify(ref, *, executing_script=None):
     path = Path(ref['path'])
     if not path.is_absolute() or is_symlink(path) or sha(path) != ref['sha256']:
         raise ValueError('SNAPSHOT_HOLD: manifest版本不一致')
@@ -51,6 +51,12 @@ def verify(ref, *, executing_script=None):
     if memory:
         memory = {**memory, 'root': str(root / 'memory'), 'runtime_snapshot': ref}
     return {'scripts': str(scripts), 'memory_source': memory, 'data': data}
+
+
+def verify(ref, *, executing_script=None):
+    from audit_cache import derived
+    return __import__('copy').deepcopy(derived('runtime_snapshot',[ref,str(executing_script) if executing_script else None],
+                   lambda:_verify(ref,executing_script=executing_script)))
 
 
 def create(destination, *, skills_root=None, memory_source=None):

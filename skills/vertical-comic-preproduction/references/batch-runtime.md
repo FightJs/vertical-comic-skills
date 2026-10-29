@@ -13,7 +13,7 @@ python <安装scripts>/runtime_snapshot.py --destination <本批总控目录/运
 python <快照scripts>/init_preproduction.py --config <使用配置.json> --runtime-snapshot <运行快照/manifest.json> --output <本话新RV> --book <书名> --episode <话号> --backend codex_builtin_imagegen
 ```
 
-第一条只运行一次，保存返回的manifest路径/哈希与scripts路径；各话共用。所有后续检查、规则读取及Skill正文均从快照路径运行或读取，不混用安装版。快照保持skills/<五个目录>结构，跨skill相对链接仍有效。规则root改为快照memory，索引和正文内容不改；保留原来源。初始化仅建未批准模板。旧配置未启用新策略仍按原合同；启用snapshot_policy时缺少--runtime-snapshot会拒绝初始化。
+第一条只运行一次，保存返回的manifest路径/哈希与scripts路径；各话共用。所有后续检查、规则读取及Skill正文均从快照路径运行或读取，不混用安装版。快照保持skills/<五个目录>结构，跨skill相对链接仍有效。规则root改为快照memory，索引和正文内容不改；保留原来源。初始化仅建未批准模板。旧配置不再创建旧模式；启用snapshot_policy时缺少--runtime-snapshot会拒绝初始化。
 
 备份与快照不复制生产原图，使用文件副本而非指向可写安装文件的硬链接。原图/参考优先共享只读来源，保持准确原路径/哈希；空间不足先暂停新提交并保存已返回图，不删除其他项目或会话。
 
@@ -58,7 +58,7 @@ python <scripts>/slot_leases.py --state <生产流程.json> --expected-sha256 <�
 
 ## 同一范围的权威上下文
 
-新运行在production_runtime与整话门禁中共用scoped_inputs.resolve_context：核对源序/计划后读取准确范围的基准、镜头和进度。它只读，不从当前镜头重写历史attempt的package_manifest、实际输入、输出或QA。恢复、预检和交付均从冻结入口执行；安装目录修改不进入既有快照。上下文或版本错误先修技术依据，不按视觉失败触发生图。
+新运行在production_runtime与整话门禁中共用scoped_inputs.resolve_context：核对源序/计划后读取准确范围的基准、镜头和进度。它只读，不从当前镜头重写历史attempt的package_manifest、实际输入、输出或QA。导入后的恢复、预检和交付均从固定当前执行器执行；安装目录修改不进入既有快照。上下文或版本错误先修技术依据，不按视觉失败触发生图。
 
 
 总控任务记录、真实等待、收尾检查与中断恢复统一见[任务协调与恢复](task-recovery.md)。新运行最终交付使用task_coordination.py finish-check，不能以进度摘要、子任务口头完成或等待超时结束轮次。

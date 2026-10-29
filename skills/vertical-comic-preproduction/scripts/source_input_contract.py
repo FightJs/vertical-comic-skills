@@ -26,7 +26,7 @@ source_snapshot visual_basis shot_manifest gates production_authorization state_
 cancelled authority_policy authority_revision approval_revocations preparation_authorization
 parallel_context runtime_pipeline_policy source_input_policy local_execution_context
 execution_context runtime_execution_context source_adapter_policy context_rebind_history
-half_gates half_inputs calibration_reviews active_input_scope'''.split())
+runtime_import half_gates half_inputs calibration_reviews active_input_scope'''.split())
 PROGRESS=frozenset('panels dispatch_ledger runtime_history delivery_materials qa_revision_history reservation_requests submission_registrations runtime_operations unknown_resolutions delivery_review delivery_review_history'.split())
 
 class SourceView(ReadOnlyDict):

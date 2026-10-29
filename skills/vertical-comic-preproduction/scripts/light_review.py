@@ -2,6 +2,16 @@
 from pathlib import Path
 from codex_reference_contract import read_json, path_exists, checked_file, digest, physical_file
 
+from contextvars import ContextVar
+from contextlib import contextmanager
+_HISTORICAL = ContextVar('comic_original_review_contract', default=False)
+
+@contextmanager
+def original_review_contract():
+    token=_HISTORICAL.set(True)
+    try: yield
+    finally: _HISTORICAL.reset(token)
+
 POLICY = 'light_story_review_v1'
 FIELD = 'image_review_profile'
 CHECKS = ('identity', 'story_readability')
@@ -31,8 +41,10 @@ def enabled(state):
 
 
 def at_root(root):
+    if _HISTORICAL.get(): return False
     path = Path(root) / '00_输入审计/生产流程.json'
-    return enabled(read_json(path)) if path_exists(path) else False
+    from source_input_contract import read as source_inputs
+    return enabled(source_inputs(path)) if path_exists(path) else False
 
 
 def template(record, state=None):
@@ -89,6 +101,18 @@ def review_errors(item, *, require_pass=False):
 
 def evidence_errors(root, record, *, require_pass=False):
     """Keep content identity, decoding, actual return and request evidence checks."""
+    state_path=Path(root)/'00_输入审计/生产流程.json'
+    state=read_json(state_path)
+    if state.get('runtime_import'):
+        from runtime_import import historical_record
+        old=historical_record(state,root,record)
+        if old is not None and not enabled(old):
+            from production_evidence import attempt_errors
+            with original_review_contract():
+                errors=attempt_errors(old,root,record)
+            if require_pass and record.get('status') not in {'VISUAL_PASS','USER_ACCEPTED'}:
+                errors.append('Imported review records actual visual issues')
+            return errors
     if not at_root(root):
         return ['LIGHT_QA: frozen run has not enabled lightweight review']
     manifest_path = checked_file(root, record['package_manifest'])
@@ -100,7 +124,8 @@ def evidence_errors(root, record, *, require_pass=False):
             or len(panels) != 1 or len(items) != 1 or panels[0].get('panel_id') != record['panel_id']
             or items[0].get('panel_id') != record['panel_id'] or items[0].get('image_sha256') != digest(output)):
         return ['LIGHT_QA: image/package/review binding mismatch']
-    state=read_json(Path(root)/'00_输入审计/生产流程.json')
+    from source_input_contract import read as source_inputs
+    state=source_inputs(Path(root)/'00_输入审计/生产流程.json')
     if items[0].get('light_review',{}).get(REPAIR_FIELD)!=state.get(REPAIR_FIELD):
         return ['LIGHT_QA: frozen repair threshold mismatch']
     errors = review_errors(items[0], require_pass=require_pass)

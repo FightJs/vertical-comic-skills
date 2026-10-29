@@ -43,7 +43,7 @@ class EpisodeAsyncTests(unittest.TestCase):
         state, _ = self.state(30)
         with patch('execution_contract.state_errors', return_value=[]), \
              patch('scoped_episode_workflow.binding_errors', return_value=[]), \
-             patch('batch_workflow.completed_errors', return_value=[]):
+             patch('production_evidence.completed_errors', return_value=[]):
             initial = evaluate_episode(state, self.root)
             self.assertEqual(initial['next_action'], 'SUBMIT_READY_EPISODE_REQUESTS', initial)
             self.assertEqual(len(initial['eligible_panel_ids']), 30)
@@ -82,7 +82,7 @@ class EpisodeAsyncTests(unittest.TestCase):
             output=self.fixture.write('P001-output.json', {'synthetic': True}))
         with patch('execution_contract.state_errors', return_value=[]), \
              patch('scoped_episode_workflow.binding_errors', return_value=[]), \
-             patch('batch_workflow.completed_errors', return_value=[]):
+             patch('production_evidence.completed_errors', return_value=[]):
             report = evaluate_episode(state, self.root)
         self.assertEqual(report['next_action'], 'WAIT_NEW_STATE_APPROVAL', report)
         self.assertIn('P002', report['blocked_panel_ids'])

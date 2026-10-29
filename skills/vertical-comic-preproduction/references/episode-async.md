@@ -2,16 +2,11 @@
 
 新运行统一按[第一批生产决定](production-decisions.md)衔接审核、返修与交付：真实FAIL不改写，处理动作与交付结论分别记录；旧冻结合同不迁移。下文审核方法、源稿/批准/证据要求仍适用。
 
-新RV显式使用 `preparation_policy=episode_preparation_v1`、`readiness_policy=panel_readiness_v1`、`execution_mode=episode_async_v1`、`optimization_policy=scoped_episode_review_v1`、`execution_contract=comic_execution_v2` 和 `runtime.policy=incremental_runtime_v2`。每话一名唯一执行agent，最多按配置同时运行多话；整话 `batch_plan` 只有 `EPISODE`，格号与原稿顺序一一对应。旧半话RV继续按原冻结合同，不把H001/H002、C或批准范围直接改名为EPISODE。
+新RV显式使用 `preparation_policy=episode_preparation_v1`、`readiness_policy=panel_readiness_v1`、`execution_mode=episode_async_v1`、`optimization_policy=scoped_episode_review_v1`、`execution_contract=comic_execution_v2` 和 `runtime.policy=incremental_runtime_v2`。每话一名唯一执行agent，最多按配置同时运行多话；整话 `batch_plan` 只有 `EPISODE`，格号与原稿顺序一一对应。旧半话数据须有完整整话批准映射才可导入；不得直接改名扩大范围。
 
 默认亲审节点为A视觉基准、B镜头与全话生图包分别批准、实际高风险新状态的单独确认、D整话/跨话最终验收。明确用户委托覆盖的节点按[完整交付请求](grouped-review.md#完整交付请求)记录执行者决定，不再重复等用户；保留亲审项和旧冻结合同不自动取消。没有固定半话C停点。普通新状态只有在B明确 `merge_into_D`、批准依据和本格生图包齐全时才可并发；`user_required`、`requires_state_review`、`calibration_anchor` 和真实 `generation_dependencies` 仍等待相应实图/批准。首现状态与实图依赖锚点优先返图自审，不等待普通格逐张返回才提交后续独立格。
 
-每次调度先运行readiness/status，列出整话eligible_panel_ids和逐格阻塞理由。新配置按[批次运行](batch-runtime.md)由总控一次分配容量租约，本话用episode_dispatch_queue.py在租约内批量领取唯一回执，再运行production_runtime.py --action compile --panels完整预检，通过后登记提交窗口并立即实际调用。真实返回保存和证据核验后，本话原子登记图片与COMPLETED回执，不逐请求等根节点同步。编译失败且确定未进入提交窗口的预留可显式释放；未知请求继续占槽并查原请求。旧未启用租约的RV保留总控单写permit及双哈希CAS，不静默迁移。普通独立格按核定容量持续补入；一个请求最多五条参考，与实际在途容量无关。保存回调不填QA或用户批准。
-
-```text
-python <scripts>/episode_dispatch_queue.py --state <本话/00_输入审计/生产流程.json> --expected-state-sha256 <当前状态sha256> --expected-control-sha256 <当前调度控制sha256>
-python <scripts>/production_runtime.py --state <生产流程.json> --action compile --panels <上一步reserved中的格号>
-```
+公共输入准备与逐格调度按[一次派发](submission-runtime.md)。readiness/status用于启动或输入变更诊断，不在每次派单前运行。宿主prepare-inputs并行准备，worker有容量时claim-and-register一次；返回保存后释放本话租约额度。新路径不生成dispatch输入副本，不运行reserve→compile→submit；旧格式仅保留读取与恢复。
 
 B阶段只为真实有风险的格填写镜头 `production_risks`：`lower_edge`（画面下缘）、`action_target`（动作对象）、`support_contact`（承托接触）、`prop_count`（道具数量）；每项写 `{kind, constraint}`。单格包复制相同清单，实际prompt逐字包含具体约束，候选包和请求预检核对。没有该风险的格保持空清单，避免统一叠加长提示词。
 
@@ -19,9 +14,7 @@ B阶段只为真实有风险的格填写镜头 `production_risks`：`lower_edge`
 
 返修若实际携带失败图，先按 [生图合同的返修输入冲突预检](generation-io.md#返修输入冲突预检) 填 `repair_focus`，核对失败图用途与真实失败项不互相冲突；接触关系修正写可观察的人物和手臂路径。`repair-authorize` 与随后每次调用前都会拦截冲突和过期流程文字，不消耗请求额度。旧RV人工额外补救先用同一脚本检查，但不把旧授权、轮次或QA自动迁移到整话模式。
 
-批量许可生成的返修派发包仅添加 `dispatch_source_package` 与一次性 `dispatch_receipt`；校验器逐字段比对原授权包，不允许借派发换prompt或参考。
-
-派单支持`--max-count <本次最多领取数>`：在实际剩余容量内按源序检查未领取候选，足够即停止；遇到局部输入问题继续寻找后续可派格。全话批准、状态屏障和真实依赖仍先核验。具体缓存边界、计时与原双锁范围见[runtime-efficiency.md](runtime-efficiency.md#派单按容量预检)；不为优化自行添加覆盖所有话和只读编译的全局串行封装。
+返修输入先按准确新attempt准备；派发只新增小型动态登记，输出证据包在真实返回后附加准确回执，不能借此更换prompt或参考。普通独立格持续补入，未知结果不超时回收容量。
 
 所有源格的图片/审核/未完成去向均登记后，`batch_reviews.EPISODE` 记录整话真实连续性核对；D还核对全话画幅分布、实际跨话图、原批准样例、身份/衣装/场景及最终图片哈希。未返回、未审或局部HOLD不能计为可用图；第一批交接索引仍须列出这些格。交接按源序保存采用图片及问题表，不拼接、上气泡。
 
@@ -38,4 +31,4 @@ B阶段只为真实有风险的格填写镜头 `production_risks`：`lower_edge`
 现有就绪集合保持异步，不为全话普通镜头增加锚点串行屏障。当前方向/状态已有足够证据时直接编译；确实需要真实前图才能确定的接触、空间或高风险状态才保留依赖。返回落盘与QA队列分离，技术上下文HOLD先诊断输入，不能触发整图返修。真实事件与未知结果处理见runtime-efficiency.md、batch-runtime.md。
 
 
-需要短锁派单时，先读[一致性协议](dispatch-consistency.md)。新协议默认关闭；只有显式准入且保存器接好submit/evidence/save/recover的租约运行可用。候选input_read_head不能启用生产路径；普通及不支持运行继续原合同。
+已有managed owner的历史运行按[一致性协议](dispatch-consistency.md)完成恢复，不旁开writer。普通新运行使用prepared_dispatch_v1，无需为提速启用旧input_read_head协议。

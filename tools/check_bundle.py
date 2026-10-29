@@ -6,7 +6,7 @@ import yaml
 from sync_skills import bundle,ROOT,digest
 
 def main():
-    data=bundle()
+    data=bundle()  # Includes retired route and executor capability checks.
     for name in data['skills']:
         source=(ROOT/'skills'/name/'SKILL.md').read_text(encoding='utf-8-sig');front=source.split('---',2)
         meta=yaml.safe_load(front[1])

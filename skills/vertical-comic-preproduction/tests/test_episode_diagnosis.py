@@ -32,7 +32,7 @@ class EpisodeDiagnosisTests(unittest.TestCase):
 
     def test_atomic_record_binds_actual_report(self):
         self.assertTrue(systemic_errors(self.state, self.state['panels'], self.root))
-        with patch('batch_round.attempt_errors', return_value=[]):
+        with patch('production_evidence.attempt_errors', return_value=[]):
             value = record_episode_diagnosis(self.path, digest(self.path), 'diagnosis.json')
         self.assertEqual(value['status'], 'DIAGNOSIS_RECORDED')
         state = json.loads(self.path.read_text(encoding='utf-8-sig'))
@@ -41,7 +41,7 @@ class EpisodeDiagnosisTests(unittest.TestCase):
         self.assertTrue(systemic_errors(state, state['panels'], self.root))
 
     def test_stale_state_and_incomplete_coverage_rejected(self):
-        with patch('batch_round.attempt_errors', return_value=[]):
+        with patch('production_evidence.attempt_errors', return_value=[]):
             with self.assertRaisesRegex(ValueError, 'STATE_CHANGED'):
                 record_episode_diagnosis(self.path, '0'*64, 'diagnosis.json')
             report = json.loads((self.root / 'diagnosis.json').read_text(encoding='utf-8-sig'))

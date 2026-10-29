@@ -21,7 +21,7 @@ SHOT_FIELDS = ("locked_script", "framing", "frame_ratio", "camera_view_signature
 def build_plan(state, shots, source=None):
     """Deterministic source-contiguous batches; dependency edges remain per shot."""
     if state.get("execution_mode") in {"half_episode_async_v1", "episode_async_v1"}:
-        from half_workflow import build_plan as half_plan
+        from historical_engines.half_workflow import build_plan as half_plan
         return half_plan(state, shots, source)
     panels = shots.get("panels", shots.get("shot_design", []))
     if not panels:
@@ -144,7 +144,7 @@ def cross_episode_errors(context, *, first_batch=False):
             if other.get('execution_mode') == 'episode_async_v1':
                 from scoped_episode_workflow import evaluate_episode as evaluate_scoped
             else:
-                from scoped_half_workflow import evaluate_scoped
+                from historical_engines.scoped_half_workflow import evaluate_scoped
             verified = evaluate_scoped(other,episode_root,'scope_complete')
             if verified.get('next_action')!='READY_FOR_CROSS_REVIEW': errors.extend([f"{job['episode_id']}:半话放行不完整",*verified.get('errors',[])])
         source = read(checked_file(episode_root, other["source_snapshot"]))
@@ -163,7 +163,7 @@ def cross_episode_errors(context, *, first_batch=False):
             checked_file(episode_root, r.get("output"))
             checked_file(episode_root, r.get("qa_report"))
             if first_batch:
-                from batch_round import attempt_errors
+                from historical_engines.batch_round import attempt_errors
                 errors.extend(attempt_errors(other, episode_root, r))
             else:
                 errors.extend(f"{job['episode_id']}:{r['panel_id']}:{e}" for e in qa_errors(episode_root, r))
@@ -181,7 +181,7 @@ def completed_errors(state, root, record, shot, basis, records, *, require_pass=
     if require_pass:
         errors = qa_errors(root, record)
     else:
-        from batch_round import attempt_errors
+        from historical_engines.batch_round import attempt_errors
         errors = attempt_errors(state, root, record)
         packet_path = checked_file(root, record['package_manifest'])
         packet = read(packet_path); panel = packet['panels'][0]

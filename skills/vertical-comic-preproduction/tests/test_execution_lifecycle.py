@@ -1,4 +1,5 @@
 """Independent execution-v2 lifecycle regressions. Synthetic artifacts, no tool calls or gate mocks."""
+import _historical_fixture
 import sys, json, copy, tempfile, shutil, subprocess, unittest
 from pathlib import Path
 BASE=Path(__file__).resolve().parents[1]
@@ -6,13 +7,13 @@ sys.path[:0]=[str(BASE/'scripts'),str(BASE/'tests')]
 from PIL import Image
 import test_staged_workflow as fixtures
 from codex_reference_contract import digest,validate_panel
-from staged_workflow import evaluate
+from _historical_fixture import evaluate
 from scoped_inputs import POLICY,build_plan,half_view
 from execution_contract import POLICY as EXEC,toolchain,CHECKS
 from source_adapter import adapted
 from continuity_context import load_context,contextual_tags,binding_errors
 from continuity_contract import validate_manifest as continuity_validate,reference_usage_block
-from batch_round import snapshot,attempt_errors,template
+from historical_engines.batch_round import snapshot,attempt_errors,template
 
 def observe(name,actual,expected=None):
     if expected is not None and actual!=expected:
@@ -207,7 +208,7 @@ class ExecutionLifecycleTests(unittest.TestCase):
     def test_technical_pass_cannot_waive_failed_mem010_check(self):
         from rule_memory import select
         from validate_preproduction import Gate
-        from batch_workflow import input_errors
+        from historical_engines.batch_workflow import input_errors
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp)/'episode';s,m,p,shots=build_calibration(root)
             library=root/'rules';library.mkdir();body=library/'rule.md'

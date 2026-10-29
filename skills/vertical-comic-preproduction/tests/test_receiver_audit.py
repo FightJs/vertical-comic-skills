@@ -10,7 +10,7 @@ from unittest.mock import patch
 sys.path[:0] = [str(Path(__file__).resolve().parents[1]/'scripts'), str(Path(__file__).parent)]
 import test_direct_handoff as fixtures
 import production_runtime as runtime
-import batch_workflow
+import production_evidence as batch_workflow
 from codex_reference_contract import file_session
 
 METRICS = {'file_reuse_statistics', 'audit_reuse_statistics', 'preflight_elapsed_seconds',
@@ -109,12 +109,12 @@ class ReceiverAuditTests(unittest.TestCase):
         self.fixture.index['episodes'][0]['runtime_manifest']=self.fixture.ref('runtime/manifest.json')
         self.fixture.save()
 
-    def test_absent_capability_uses_legacy_independent_scopes(self):
+    def test_absent_capability_requires_import_without_fallback(self):
         self.set_capability(None)
         _,_,_,report=self.fixture.pipeline()
-        self.assertEqual(report['status'],'RELEASE_CANDIDATE',report)
-        self.assertNotIn('receiver-audit',report['results'][0]['argv'])
-        self.assertTrue((self.fixture.base/'rehearsal/E000_all_inputs.json').is_file())
+        self.assertEqual(report['status'],'HOLD',report)
+        self.assertIn('IMPORT_REQUIRED',str(report))
+        self.assertTrue(all(r.get('argv') is None for r in report['results']))
 
     def test_unknown_capability_holds_without_fallback(self):
         self.set_capability({'policy':'unsupported'})

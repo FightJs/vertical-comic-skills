@@ -1,4 +1,5 @@
 """Batch isolation, explicit grouped approval and local capacity transactions."""
+import _historical_fixture
 from _portable_config import config_path
 import copy
 import json
@@ -165,7 +166,7 @@ class LeaseTests(unittest.TestCase):
         receipt=self.state()['dispatch_ledger'][0]
         self.assertTrue(receipt_errors(self.h.context,self.h.episode,'book','E021','P001',receipt))
         update['status']='RESULT_UNKNOWN'
-        with patch('batch_round.attempt_errors',return_value=[]):
+        with patch('production_evidence.attempt_errors',return_value=[]):
             commit_updates(self.h.state_path,digest(self.h.state_path),[update])
         self.assertEqual(self.state()['dispatch_ledger'][0]['status'],'RESULT_UNKNOWN')
         self.assertEqual(self.h.control_path.read_bytes(),original)
@@ -255,9 +256,9 @@ class FeasibilityAndBoundaryTests(unittest.TestCase):
                          'comparison_only':True,'evidence':'SYNTHETIC pending actual boundary comparison only'}]
         with patch('execution_contract.state_errors',return_value=[]), \
              patch('scoped_episode_workflow.binding_errors',return_value=[]), \
-             patch('batch_workflow.completed_errors',return_value=[]), \
+             patch('production_evidence.completed_errors',return_value=[]), \
              patch('production_runtime.package_review_errors',return_value=[]), \
-             patch('batch_workflow.batch_review_errors',return_value=[]):
+             patch('production_evidence.batch_review_errors',return_value=[]):
             report=evaluate_episode(state,h.root)
             self.assertEqual(report['eligible_panel_ids'],['P001','P002'],report)
             state['holds'].append({'scope':'states','state_keys':shots[0]['visual_state_keys'],

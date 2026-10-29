@@ -1,4 +1,5 @@
 """A dispatch receipt may only wrap the exact authorized repair packet."""
+import _historical_fixture
 import json
 import sys
 import tempfile
@@ -8,7 +9,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 from codex_reference_contract import digest
-from batch_round import snapshot
+from historical_engines.batch_round import snapshot
 from episode_repair import repair_errors
 
 

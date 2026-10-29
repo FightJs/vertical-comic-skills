@@ -175,7 +175,10 @@ def load_decision(root, record, attempt_id):
         raise ValueError('QA与实际采用图不一致')
     from light_review import at_root, FIELD, POLICY as LIGHT_POLICY
     if at_root(root) != (report.get(FIELD) == LIGHT_POLICY):
-        raise ValueError('QA review profile differs from the frozen run')
+        from runtime_import import historical_record
+        current=read_json(Path(root)/'00_输入审计/生产流程.json')
+        if historical_record(current,root,attempt) is None:
+            raise ValueError('QA review profile differs from the frozen run')
     errors = decision_errors(decision, attempt, item)
     if errors:
         raise ValueError(';'.join(errors))
@@ -263,7 +266,7 @@ def _register(state_path, expected_sha256, proposal_ref, *, _prepare_only=False)
     from authority_updates import state_write_lock
     from dispatch_publication import require_legacy
     from platform_io import atomic_json
-    from batch_round import attempt_errors
+    from production_evidence import attempt_errors
     state_path = Path(state_path).resolve(); root = state_path.parent.parent
     from contextlib import nullcontext
     with (nullcontext() if _prepare_only else state_write_lock(state_path)):

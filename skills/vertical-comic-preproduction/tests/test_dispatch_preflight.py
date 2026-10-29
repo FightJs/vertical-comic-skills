@@ -1,4 +1,5 @@
 """Compare bounded reservation checks with the original full selection algorithm."""
+import _historical_fixture
 import copy
 import json
 from pathlib import Path
@@ -11,10 +12,10 @@ sys.path[:0] = [str(Path(__file__).resolve().parents[1] / 'scripts'), str(Path(_
 from dispatch_fixture import DispatchFixture
 from codex_reference_contract import checked_file, digest, file_session, read_json
 from episode_dispatch_queue import reserve_ready
-from staged_workflow import evaluate, preflight_many
+from _historical_fixture import evaluate, preflight_many
 from scoped_episode_workflow import evaluate_episode
 from platform_io import atomic_json
-import batch_workflow
+import production_evidence as batch_workflow
 
 
 def original_selection(state, root, limit, excluded=()):

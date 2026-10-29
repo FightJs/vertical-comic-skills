@@ -11,7 +11,8 @@ sys.path[:0] = [str(Path(__file__).resolve().parents[1] / 'scripts'), str(Path(_
 import input_semantics as sem
 import test_panel_readiness as fixture
 from codex_reference_contract import checked_file, read_json, file_session
-from production_runtime import episode_bundle, compile_jobs
+from production_runtime import episode_bundle
+from _historical_fixture import compile_jobs
 
 
 def reviewed(inputs):

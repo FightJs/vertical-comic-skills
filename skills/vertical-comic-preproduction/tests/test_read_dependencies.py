@@ -240,7 +240,7 @@ class DispatchDependencyTests(unittest.TestCase):
 
     def test_absent_task_origin_created_after_real_preflight_cannot_commit(self):
         from episode_dispatch_queue import reserve_ready
-        from staged_workflow import evaluate
+        from _historical_fixture import evaluate
         from task_context import ORIGIN_FILE
         before = self.f.state_path.read_bytes()
         def add_origin(*args, **kwargs):

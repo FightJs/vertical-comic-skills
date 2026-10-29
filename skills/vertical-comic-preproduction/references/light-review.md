@@ -4,7 +4,7 @@
 
 ## 启动与范围
 
-`comic_start.py prepare` 默认使用轻审核，也可显式传 `--image-review-profile light_story_review_v1`。低层 `init_preproduction.py` 兼容入口需显式传 `--image-review-profile light_story_review_v1 --speed-policy bounded_stage_fallback_v1`。状态的 `image_review_profile` 冻结本次审核范围，接包自动沿用。用户明确要求全面精审时才使用 `--image-review-profile full`。没有该字段的旧冻结任务仍执行原审核；不要手改在途状态或将新QA装入旧包。
+新建入口只使用light_story_review_v1；旧包由runtime_import保留旧QA并绑定新执行合同。不得手工改在途状态或用新QA覆盖旧证据。
 
 前期继续复用批准资产和主表，不做可选润饰、额外构图图或无实际问题的返修演练。复杂格在首批正常生产中验证，必要返修只针对真实严重问题；不单独生图测试返修接口。输入层正式合同尚未变化，不声称前期所有检查已经取消。
 
@@ -84,4 +84,4 @@ verdict仍是实际PASS/FAIL；有普通瑕疵就在issues保留，严重遗留�
 
 示例：`{"single_observation":"本图实际人物与关键动作观察","issues":[]}`。该示例不能代替看图。自动返修还受首轮、确认依据、原剩余预算及阶段限时约束；没有关闭自动返修。混合问题只修达到阈值的项，其余留人工；第二轮仍不自动追加。
 
-每图采用后沿delivery_materials增量归集，最后只做缺图/坏文件/源格对应及必要证据与容器完整性核验，不再增加视觉复审。源文、格序、图片字节和已有批准仍保留。旧冻结任务及未声明此阈值的轻审核任务按原合同，不热迁移。
+每图采用后沿delivery_materials增量归集，最后只做缺图/坏文件/源格对应及必要证据与容器完整性核验，不再增加视觉复审。源文、格序、图片字节和已有批准仍保留。历史证据按原合同读取，导入后的新观察使用轻审核；不改原QA或增加历史返修额度。

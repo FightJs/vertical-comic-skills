@@ -1,4 +1,5 @@
 """Scoped progress and approval reuse with isolated artifacts; no production or image calls."""
+import _historical_fixture
 import copy,json,subprocess
 from pathlib import Path
 import sys,unittest
@@ -7,7 +8,8 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'scripts'))
 import test_half_workflow as fixtures
 import test_rule_memory as config_fixtures
 from scoped_inputs import POLICY,build_plan,half_view,approval_for
-from staged_workflow import evaluate,qa_errors
+from historical_engines.staged_workflow import qa_errors
+from _historical_fixture import evaluate
 from review_reuse import session,fingerprint
 from review_queue import build_queue
 from usage_config import read_config
@@ -195,38 +197,13 @@ class ScopedConfigTests(unittest.TestCase):
         self.assertEqual(result.returncode,0,result.stderr)
         return out,json.loads((out/'00_输入审计/生产流程.json').read_text(encoding='utf-8-sig'))
 
-    def test_opted_new_scaffold_has_scoped_inputs_but_no_approvals(self):
-        self.h.config['optimization']={'policy':POLICY,'approval_scope':'half_episode','review_strategy':'on_return','unchanged_qa':'reuse_recorded'}
-        out,state=self.initialize('new-scoped')
-        self.assertEqual(state['optimization_policy'],POLICY);self.assertEqual(state['half_inputs'],{});self.assertEqual(state['half_gates'],{});self.assertEqual(state['gates'],{})
-        index=json.loads((out/state['approval_index']['path']).read_text(encoding='utf-8-sig'));self.assertEqual(index['entries'],[])
-
-    def test_episode_preparation_scaffold_has_one_basis_and_no_half_inputs(self):
-        self.h.config['preparation']={'policy':'episode_preparation_v1'}
-        self.h.config['optimization']={'policy':POLICY,'approval_scope':'generation_half_only','review_strategy':'on_return','unchanged_qa':'reuse_recorded'}
-        self.h.config['execution']={'contract':'comic_execution_v2','request_log':'structured','semantic_audit':'before_freeze','id_mapping':'source_preserving'}
-        out,state=self.initialize('new-episode-preparation')
-        self.assertEqual(state['preparation_policy'],'episode_preparation_v1')
-        self.assertNotIn('half_inputs',state)
-        self.assertNotIn('half_gates',state)
-        self.assertIsNone(state['semantic_audit'])
-        self.assertEqual(state['generation_packages'],{})
-        self.assertEqual(state['gates'],{})
-        self.assertNotIn('readiness_policy',state)
-
-    def test_readiness_scaffold_is_explicit_and_does_not_grant_approvals(self):
-        self.h.config['preparation']={'policy':'episode_preparation_v1'}
-        self.h.config['readiness']={'policy':'panel_readiness_v1'}
-        self.h.config['optimization']={'policy':POLICY,'approval_scope':'generation_half_only','review_strategy':'on_return','unchanged_qa':'reuse_recorded'}
-        self.h.config['execution']={'contract':'comic_execution_v2','request_log':'structured','semantic_audit':'before_freeze','id_mapping':'source_preserving'}
-        out,state=self.initialize('new-readiness')
-        self.assertEqual(state['readiness_policy'],'panel_readiness_v1');self.assertEqual(state['gates'],{});self.assertEqual(state['generation_packages'],{})
-        for value in ([],{'policy':'unknown'}):
-            self.h.config['readiness']=value;self.h.save()
-            with self.assertRaises(ValueError):read_config(self.h.path)
-
-    def test_old_half_config_does_not_silently_enable_optimization(self):
-        _,state=self.initialize('old-half');self.assertNotIn('optimization_policy',state);self.assertNotIn('approval_index',state)
+    def test_retired_half_configuration_requires_import_without_writes(self):
+        self.h.save();out=self.h.root/'retired'
+        result=subprocess.run([sys.executable,'-B',str(Path(__file__).resolve().parents[1]/'scripts/init_preproduction.py'),
+            '--config',str(self.h.path),'--output',str(out),'--book','UNIT','--episode','E001'],capture_output=True,text=True)
+        self.assertNotEqual(result.returncode,0)
+        self.assertIn('RETIRED_EXECUTION_MODE',result.stderr)
+        self.assertFalse(out.exists())
 
     def test_malformed_or_unknown_optimization_fails_closed(self):
         for value in ([],{'policy':'unknown'}):

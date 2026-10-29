@@ -50,7 +50,7 @@ def read_config(path, *, frozen_memory_source=None):
             value = settings.get(key)
             if value != automatic and (type(value) is not int or value < 1):
                 raise ValueError(f"{key}须为{automatic}或正整数")
-        from batch_round import settings as review_settings
+        from production_evidence import settings as review_settings
         review_settings({"review_policy": config.get("review", {})})
     else:
         if settings.get("execution_mode") not in (None, "batch5_v1", "sequential_v1"):

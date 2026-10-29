@@ -5,7 +5,7 @@ description: Design approved-script-driven per-panel shots, crop and physical co
 
 # 条漫镜头与空间设计
 
-**新任务默认速度优先、轻审核成品，并启用环节限时自动降级**：先按[轻审核流程](../vertical-comic-preproduction/references/light-review.md)执行。每图快速看一次人物与剧情可读性，仅严重剧情问题最多返修一轮；普通瑕疵留人工。此模式不执行下文旧全面审核的六项细节取证、逐MEM记录及整话/跨话重复复审，不为测试返修另做生图。新任务同时绑定 `speed_policy: bounded_stage_fallback_v1`：按轻审核流程内的时限表执行，超时停止可选润饰、缩小编译批次、简化审核或沿用现有图；首轮出齐优先于返修。工具以冻结状态的 `image_review_profile` 分支登记和交付；无该字段的旧任务仍按原合同，不能热改。
+统一入口为整话轻审核：新任务与旧包导入后都固定当前执行器，旧包代码仅作证据。每话启动一个 `generation_host.py serve` 常驻进程；输入未变复用，局部修改只处理受影响格；返回立即保存并释放槽位。每图快速看一次，仅严重剧情问题最多返修一轮。暂停和等待用户不计时，多话共用四小时有效预算，三小时不停止首轮。完整约定见[统一执行与恢复](../vertical-comic-preproduction/references/execution-compatibility.md)与[轻审核流程](../vertical-comic-preproduction/references/light-review.md)。
 
 普通格默认按[五项最小镜头模板](../vertical-comic-preproduction/assets/templates/普通格最小镜头模板.md)只填写人物、关键动作、景别、必要背景和参考；共同设置在主表shared维护一次。派生入口自动复用同主表上一轮记录，禁止为局部修改重做未变化整话。
 
@@ -17,7 +17,7 @@ description: Design approved-script-driven per-panel shots, crop and physical co
 
 首次读共享[共同约束](../vertical-comic-preproduction/references/production-foundation.md)和[规则归属](../vertical-comic-preproduction/references/rule-ownership.md)，本阶段读[镜头流程](../vertical-comic-preproduction/references/stage-shot-design.md)、[裁切](../vertical-comic-preproduction/references/shot-framing.md)与[空间连续性](../vertical-comic-preproduction/references/visual-continuity.md)。规则正文按实际命中加载，不复制成新判据。
 
-新任务按[整话异步](../vertical-comic-preproduction/references/episode-async.md)准备完整源序、镜头和候选实际包；普通格准确就绪即可放行。旧RV按原冻结合同；分工制作先读[双电脑交接](../vertical-comic-preproduction/references/split-production.md)，新版按整话准备与就绪调度，不因分工增加半话停点。
+新任务按[整话异步](../vertical-comic-preproduction/references/episode-async.md)准备完整源序、镜头和候选实际包；普通格准确就绪即可放行。旧包先完成数据导入；分工制作先读[双电脑交接](../vertical-comic-preproduction/references/split-production.md)，新版按整话准备与就绪调度，不因分工增加半话停点。
 
 先从动作及真实物理条件推导机位，执行[可实现性与输入质量](../vertical-comic-preproduction/references/execution-quality.md)：谁的哪条肢体接触哪个对象/部位、动作阶段、承托和遮挡是什么；当前裁切能否同时容纳并辨认。坐标可相对表达，不编参考无法证明的几何。困难接触先修镜头，不交模型自行补猜。
 

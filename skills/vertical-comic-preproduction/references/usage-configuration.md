@@ -42,7 +42,7 @@ review配置为systemic_failure_count_gt=5、max_auto_correction_rounds=1，保�
 
 旧配置省略 loading_policy 只适配未升级的旧索引。新旧不一致立即 HOLD，不能默认补上字段。新任务使用上述配置直接初始化；无配置且直接 --memory-root 时另显式提供 --memory-loading-policy stage_baseline_loading_v1。配置和命令同时指定时必须一致；初始化只绑定来源，不加载正文或批准生产。旧任务迁移使用新RV核验版本/原批准，保持旧记录原样。
 
-实际worker数取请求数、话数及当前可用子槽位的最小值。CLI --agent-slots含总控，五子agent＋总控填6；Codex自身max_concurrent_threads_per_session计数不含主agent。以当前实际工具容量为准，Skill不修改全局TOML。[OpenAI 配置参考](https://learn.chatgpt.com/docs/config-file/config-reference)
+实际worker数取请求数、话数及当前可用子槽位的最小值。CLI --agent-slots含总控，五子agent＋总控填6；Codex自身max_concurrent_threads_per_session计数不含主agent。以当前实际工具容量为准；正式新任务启动时按下述流程检查并在不足时直接调整Codex全局配置。[OpenAI 配置参考](https://learn.chatgpt.com/docs/config-file/config-reference)
 
 整话额度演算用--episode-panel-counts（源审计总格数JSON）和--active-episodes；--current-half-counts仅供旧半话RV。没有真实格数不虚报待提交池；没有实际核定backend-limit时max_inflight=null。容量确认后将全局上限写control.max_inflight，本话上限写job.max_inflight，active_batch_id=EPISODE；新策略再分配槽位租约，本话领取唯一许可。
 
@@ -124,3 +124,12 @@ python <快照scripts>/init_preproduction.py --config <配置JSON> --runtime-sna
 
 
 显示默认无需首次配置：`progress.policy=task_progress_v1`，`active_seconds=600`、`service_wait_seconds=900`、`yield_seconds=30`。它是通知节奏，不调整生图容量、QA组大小、人工审核节点或worker_watchdog阈值；旧RV不回写该配置。可在新任务配置中调整通知间隔，服务等待不得比正常制作更频繁，让出检查不超过60秒。具体接线见[阶段与交付进度](review-progress.md)。
+
+
+## 启动时子agent配置与实际容量
+
+安装版 `comic_start.py prepare` 与 `receive` 入口调用 `agent_capacity.py`，目标为总控1人加最多6个子agent（Codex配置值6不含总控）。有实际用户明确的更低 `--workers` 时只检查、不修改。配置至少6时保持已有值，较高值不降低；字段缺失或不足时直接更新；已显式禁用子agent时开启。保留其他内容，不另存备份，临时文件通过语法/差异核对后原子替换。新旧上限冲突、复杂写法、权限错误及配置损坏均报告错误而不覆盖；继续按实际可用容量安排，不擅自更改管理策略。项目配置、启动参数和宿主管理设置可能覆盖全局配置。
+
+启动返回的 `agent_capacity` 区分配置状态与当前会话容量；脚本无法读取宿主容量时返回 unknown，不能据配置声称6个子agent已可用。总控用实际宿主反馈或真实创建结果确定可用数，不预先创建空agent探测。若当前会话不可用，说明配置已修改但实际未生效，提示新会话验证或按可用容量继续；不重复改写、不等待无限重试。实际执行者数量取本批话数、episode_workers及真实可用槽位的最小值，图片服务请求并发另计。
+
+独立诊断可执行 `python -B scripts/agent_capacity.py check`（只读）或 `ensure`（必要时写入当前用户Codex配置）；不使用 `receive-resume` 或安装更新入口隐式修改。不能因本地配置成功断言当前会话或其他平台生效；项目与用户自定义更低并发应获尊重。

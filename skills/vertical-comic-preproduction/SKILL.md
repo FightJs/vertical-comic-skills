@@ -31,6 +31,8 @@ description: Coordinate first-batch per-panel comic production for further human
 
 ## 简易入口（首次使用优先）
 
+前期 prepare / 接包 receive 的安装版入口自动检查并配置[子agent容量](references/usage-configuration.md#启动时子agent配置与实际容量)：默认目标总控1＋子agent最多6；仅检查配置、无需创建空agent。修改配置不证明当前会话生效，按真实工具容量调度。用户明确要求更低的执行者数时只检查、不扩大配置。旧运行恢复不改配置。
+
 首次执行先按[短启动的执行环境](references/quick-start.md#执行环境)检查当前Python；Windows使用原生跨平台运行时，不安装fcntl、不修改旧冻结包。
 
 仅前期制作的用户首次使用或缺配置时，按[首次配置引导](references/quick-start.md#安装后的首次配置引导)一次收集缺少的书名、脚本、资产和话号，自动校验并生成本书配置；不要求用户预建JSON。已有配置只询问差异。

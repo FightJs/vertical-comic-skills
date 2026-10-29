@@ -6,7 +6,8 @@ import input_semantics as sem
 import test_input_semantics as legacy
 import test_rule_memory as rules
 from codex_reference_contract import checked_file,read_json
-from production_runtime import episode_bundle,compile_jobs
+from production_runtime import episode_bundle
+from _historical_fixture import compile_jobs
 
 
 class PreparedInputs(unittest.TestCase):

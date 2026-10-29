@@ -100,15 +100,12 @@ class HandoffZipTests(unittest.TestCase):
         (run/'00_输入审计').mkdir();(run/'00_输入审计/state.json').write_text(json.dumps(state), encoding='utf-8', newline='\n');(run/'mapping.json').write_text(json.dumps({'test':'SYNTHETIC relocation mapping; relative original inputs'}), encoding='utf-8', newline='\n')
         index=self.base/'run-index.json';index.write_text(json.dumps({'package_id':'TEST_ONLY','episodes':[{'episode_id':'E000','state':'00_输入审计/state.json','binding_evidence':{'path':'mapping.json','sha256':h.sha(run/'mapping.json')}}]}), encoding='utf-8', newline='\n')
         return z,received,run,index,state
-    def test_real_frozen_gate_relocated_then_formal_zip_roundtrip(self):
+    def test_retired_half_rehearsal_cannot_release_or_change_originals(self):
         z,received,run,index,state=self.real_fixture();before=h.files(received)
         result=h.rehearse(z,received,run,index,self.base/'report',timeout=15)
-        self.assertEqual(result['status'],'RELEASE_CANDIDATE',result);self.assertEqual(result['ready_h001_count'],1)
+        self.assertEqual(result['status'],'HOLD',result)
+        self.assertEqual(result['ready_h001_count'],0)
         self.assertEqual(result['image_calls'],0);self.assertEqual(h.files(received),before)
-        raw=json.loads((self.base/'report/E000_stdout.json').read_text(encoding='utf-8-sig'));self.assertFalse(raw['candidate_only']);self.assertEqual(len(raw['jobs']),1)
-        for path in raw['jobs'][0]['arguments']['referenced_image_paths']:self.assertTrue(Path(path).resolve().is_relative_to(run.resolve()))
-        report=self.base/'report/演练报告.json';approval=self.base/'approval.json';approval.write_text(json.dumps({'status':'APPROVED','source_kind':'user_message','source_locator':'SYNTHETIC_NOT_REAL','quote':'SYNTHETIC TEST ONLY','candidate_zip_sha256':h.sha(z),'rehearsal_report_sha256':h.sha(report)}), encoding='utf-8', newline='\n')
-        with self.assertRaisesRegex(ValueError,'direct_delivery_v2'):h.release(z,report,approval,self.base/'formal.zip')
 
     def test_declared_ready_but_real_gate_hold_prevents_release(self):
         z,received,run,index,state=self.real_fixture();state['holds']=['SYNTHETIC system HOLD'];(run/'00_输入审计/state.json').write_text(json.dumps(state), encoding='utf-8', newline='\n')

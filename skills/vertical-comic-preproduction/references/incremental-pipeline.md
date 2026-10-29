@@ -1,12 +1,14 @@
+当前快速路径为 prepared_dispatch_v1，详见[一次派发](submission-runtime.md)。准备结果按内容持久化；新领取和提交不运行整话preflight。每话常驻宿主将准备放到独立工作池，短写队列优先收图，跨话保存互不排队。整个运行仍只有原有效时钟，暂停不计时；下面的旧commit/reserve接口仅用于兼容记录，不是新生产的默认循环。
+
 # 公共校验、短锁与审核修订
 
-用于新版新建整话任务的 runtime_pipeline_policy=observed_incremental_pipeline_v1。不向已有状态手工补标记，不热替换冻结工具。旧任务和已准入 managed_dispatch 的运行继续自己的协议；后者不因新版安装而降级。
+用于统一整话任务。旧数据经runtime_import导入，原件保留；未完成导入不能启动旧执行器。
 
 ## 同一运行复用校验工作进程
 
-内部优先启动冻结 scripts/workflow_session.py --serve，每话所有者使用自己的受控本地 JSONL 工作进程连续处理准备、编译、领取、提交登记和审核保存，结束运行时关闭。总控可保留自己的只读批次进程；不得把五话操作排到同一个全局串行工作进程。不要每格重启解释器并重做相同全话检查。进程不调用图片服务；实际服务仍由原 async_generation.js 及 onBeforeInvoke 提交回执控制。工作进程入口不要求用户填写技术字段。
+生产启动固定当前 scripts/generation_host.py serve --state <本话状态>，每话所有者使用自己的受控本地 JSONL 工作进程连续处理准备、编译、领取、提交登记和审核保存，结束运行时关闭。总控可保留自己的只读批次进程；不得把五话操作排到同一个全局串行工作进程。不要每格重启解释器并重做相同全话检查。进程不调用图片服务；实际服务由async_generation.js及对应协议的提交回执控制，新正文使用onPrepareInvoke。工作进程入口不要求用户填写技术字段。
 
-每行请求包含 request_id、action、state 及该动作原本的准确参数。支持 preparation-review（可带 panels 准确选集）、receiver-audit、compile、reserve（两份当前哈希、实际 max_count）、submit（原始完整 job）、commit（expected_state、真实 updates）、qa-save（expected_state、observations）、pilot-check、final-check。响应原样保留原门禁结果；工作进程存活或缓存命中均不授予提交权限。submit 首次回执才可触发一次调用，重复回执不重发。
+每行请求包含 request_id、action、state 及该动作原本的准确参数。支持 preparation-review（可带 panels 准确选集）、receiver-audit、compile、reserve（两份当前哈希、实际 max_count）、submit（原始完整 job）、save-return（job/raw文件路径、call_locator/result_locator）、commit（expected_state、真实 updates）、qa-save（expected_state、observations）、pilot-check、final-check。响应原样保留原门禁结果；工作进程存活或缓存命中均不授予提交权限。submit 首次回执才可触发一次调用，重复回执不重发。
 
 进程内有限缓存只保存原校验器的公共派生事实，按完整内容、书话、范围、阶段、候选/正式上下文及撤销版本区分。每次操作建立新的读取事务，重新哈希实际依赖，并核对路径目标、缺失和目录查询；公共证明只完整解释一次，格号范围、当前状态、实际容量和真实依赖继续逐次核验。跨命令不继承文件时间戳，不在磁盘保存永久 PASS；输入变化即重算。工作进程的只读操作内不逐次重放同一依赖闭包，先传递完整依赖，在操作结束及状态CAS前统一核对全部读取版本；复核成功前不输出可提交结果、不写生产状态。直接使用原 CLI 仍有效，但新进程无法复用上一进程的内存。
 
@@ -24,36 +26,13 @@ plan返回 EQUIVALENT_READY 后，将原样 `plan` 传给 `context-rebind-apply`
 
 新版普通返回/QA提交、生产决定登记：锁外执行原完整校验，锁内按原排序取得本话状态锁及适用的短共享权威锁，复核完整读取版本与 CAS 后原子写入。输入、批准、暂停、容量或状态变化时丢弃旧预检，报告准确冲突；不能覆盖同话其他返回，也不重发生图。
 
-新版 episode_slot_lease_v1 的领取同样在锁外做预检、复制和哈希派发包，锁内只检查版本并提交本话账本。旧共享 permit 两文件模式保持原路径。冲突时未引用候选包不等于已预约，不能调用服务；不得据此删除未知结果或重置预算。
+新版 episode_slot_lease_v1 的领取同样在锁外做预检、复制和哈希派发包，锁内只检查版本并提交本话账本。新生产只使用每话租约；历史共享permit保留为证据，未移交owner不启动新writer。冲突时未引用候选包不等于已预约，不能调用服务；不得据此删除未知结果或重置预算。
 
 图像实际保存后沿原 GENERATED 登记释放服务槽，QA独立排队；不要再用进程外全局锁包住整条生产或审核链。每话仍只有一个状态所有者。
 
-## 看图后一次保存 QA、问题和采用
+## 看图后一次保存
 
-先用原 review --prepare-qa 取得准确单格未审模板。审核者真实看图，填写观察及问题处理；使用 review_pipeline.py，或工作进程 qa-save。工具复制本格身份、attempt、轮次、实际包和图片哈希；不把未审项默认填为 PASS。
-
-轻审核使用[轻审核登记格式](light-review.md#登记入口)，不填写下列六项结构。以下 observations 提案仅用于旧冻结或明确全面审核任务：
-
-```json
-{
-  "panel_id": "P001", "attempt_id": "P001-r1",
-  "base_qa": {"path":"原QA相对路径","sha256":"准确旧哈希"},
-  "reviewer":"实际看图者", "reason":"这次观察或修订的依据", "verdict":"FAIL",
-  "observations": {
-    "dimension_review": {"action_interaction": {"status":"FAIL","evidence":"具体实际观察"}}
-  }
-}
-```
-
-首次保存时 base_qa 为 null，qa_template 指原 review 队列返回的准确模板引用。其余必审观察仍须全部填写。observations 按原结构做小范围合并，列表使用字符串索引对象（如 memory_review 的 "0"）；预计目标、规则身份、图片、样例及哈希不可编辑。规则审核使用 reviewed:true 自动填 APPLIED；适用性 APPLIES 不作为执行状态。字段错误在保存前给出准确路径。
-
-可在同一提案附 decision，其字段为原生产决定中的真实 action、reason、issues、fix_now/opportunistic/manual，以及动作需要的取舍与保留约束；policy、身份和引用由工具填写。adopt=true 时同时登记采用，原图不复制、不重命名。不得省略原 FAIL／未核实项的问题去向，也不降低类别。
-
-修订使用准确 base_qa 和当前 state 哈希，允许同一 attempt 的同一审核状态更新。原 QA、决定与状态快照全部保留。工具只重检受影响格，生成新 QA 和决定版本，同一次 CAS 更新原决定及采用引用。未改问题内容时可复用原决定的描述；新增观察改变问题去向时必须提供新的真实处理决定。不能自动重签用户批准；原精确最终审查引用失效时保留历史并重新收敛对应交付索引。
-
-单图质量通过而必要比较未闭合时，quality_review 单独记录 PASS 和准确 pending_comparisons，执行状态保持 GENERATED；不冒充可用生成参考。队列转为 COMPLETE_RELATED_COMPARISONS，复核原QA后只补相关比较。缺图、UNKNOWN及未审仍不通过完整交付；必要比较绑定原实际采用图，未变化图片不重审。
-
-每次采用增量写 delivery_materials，记录本格原图、QA、决定和问题，明确 MATERIALS_ONLY_NOT_FINAL_DELIVERY。最终从原采用版本完成边界比较、完整源格覆盖及原D/委托门禁，再全量核验、压缩和CRC；不能把材料索引当正式交付证据。
+使用[轻审核登记格式](light-review.md#登记入口)，通过qa-save一次写真实观察、问题、决定和采用。工具填写身份、路径、哈希与关联引用，不手工拼六项QA。修订绑定准确base_qa和状态哈希，旧记录不覆盖；每次只更新本格delivery_materials。最后从采用版本做完整源格、真实返回、文件有效性、审核引用和ZIP核验，不再做整话/跨话细节复审。用户指定的审核点照范围保留。
 
 ## 代表格与按需返修
 
@@ -67,7 +46,7 @@ plan返回 EQUIVALENT_READY 后，将原样 `plan` 传给 `context-rebind-apply`
 
 ## 三小时目标、四小时硬限和分段计时
 
-新职责默认按[runtime-clock.md](runtime-clock.md)累计有效运行：明确暂停/等用户不计时，服务等待和实际工作计时。2.5小时收敛可选工作，三小时是效率目标，不新增达成率统计，之后仍可继续生图；四小时才拒绝新步骤。所有话共用剩余额度；旧运行沿原协议。handoff rehearse 的 --budget-root 指向实际职责根目录；所有话共享剩余预算，单话 --timeout 只是更小的技术上限，不给每话新开1200秒。子检查运行中每0.5秒检查暂停、时钟异常和剩余预算；到限或不确定时终止只读子检查，保存原始输出，不记录成功。时钟跨启动回退仍记不确定，不能改用文件时间推算或清零旧账。
+新职责默认按[runtime-clock.md](runtime-clock.md)累计有效运行：明确暂停/等用户不计时，服务等待和实际工作计时。2.5小时收敛可选工作，三小时是效率目标，不新增达成率统计，之后仍可继续生图；四小时才拒绝新步骤。所有话共用剩余额度；旧运行导入保留历史计时。handoff rehearse 的 --budget-root 指向实际职责根目录；所有话共享剩余预算，单话 --timeout 只是更小的技术上限，不给每话新开1200秒。子检查运行中每0.5秒检查暂停、时钟异常和剩余预算；到限或不确定时终止只读子检查，保存原始输出，不记录成功。时钟跨启动回退仍记不确定，不能改用文件时间推算或清零旧账。
 
 工作进程记录编译等实际操作耗时，领取/提交/审核记录校验、等锁、版本复核、写入与持锁区间；最终发布回执记录压缩及内容核验耗时。服务等待及保存沿用真实 submitted/returned/saved 时间戳。真实看图耗时仅使用实际观测的 observed_review_seconds；没有观测保持未知，不能用“保存后到登记”冒充看图时间。
 
@@ -76,3 +55,13 @@ production_metrics.py 汇总 pipeline_metrics、原服务/保存时间戳覆盖�
 ## 接收宿主衔接
 
 generation_host.py serve为新策略提供每话独立JSONL入口，复用原WorkflowSession而非再建缓存。新旧判定、批准撤销、负查询与目录变化仍须对照验证。接收结果的内容绑定复用只用于接收恢复，实际提交的容量、批准、预算和时钟继续实时核对。旧冻结包的兼容保存与新版新运行的短锁收益分别报告。
+
+## 四小时内优先出齐
+
+接包及公共校验目标10分钟；主生成安排到190分钟；必要缺图恢复和有余量的重大返修安排到225分钟；保留15分钟核验封包。审核与归集同生成重叠。常驻入口返回completion_forecast，按同一任务有效秒数与真实已登记返回数估计剩余时间；样本不足明确OBSERVING，不添加三小时达成率。
+
+缺图优先；无缺图后才用余量返修。若返修恰是后续缺图的真实依赖，可先解除该依赖。剩余15分钟禁止新质量返修，首轮按原四小时预算继续。AT_RISK时跳过可选润饰，核对闲置槽位与本地堵塞，不靠重复提交未知请求加速。
+
+缓存当前减少公共文件的物理读取/哈希和重复预检；仍保留路径、查询与动态状态检查。Windows无法可靠检测还原mtime后的同尺寸修改时不启用跨操作字节快取。离线校验用时不能证明真实服务四小时出齐；超时或缺一格仍是未达标。
+
+当前缓存边界：prepared输入与动态state分离，普通保存/QA不重编。公共批准或冻结输入变化时保守拒绝过期记录，重新准备准确受影响范围。重启重新核内容，运行中按文件身份与修改标记复用已核字节，最终严格核验；本地耗时不等于图像服务耗时。

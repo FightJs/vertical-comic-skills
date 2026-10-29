@@ -29,7 +29,7 @@ def runtime_source_state(source,base,book):
         raise ValueError('来源状态不存在或逃逸来源根')
     from panel_readiness import review_scope
     from source_input_contract import read as source_inputs
-    state=read_json_readonly(path) if review_scope() is not None else source_inputs(path)
+    state=source_inputs(path)
     if state.get('book_id')!=book or state.get('episode_id')!=source.get('episode_id'):
         raise ValueError('来源运行状态书话不一致')
     for key in SOURCE_FILES[:4]:

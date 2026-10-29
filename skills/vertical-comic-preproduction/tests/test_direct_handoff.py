@@ -9,7 +9,8 @@ import handoff_delivery as d
 import test_panel_readiness as f
 from runtime_snapshot import create
 from continuity_context import portable_context,load_context
-from production_runtime import compile_jobs,episode_bundle,EPISODE_DEFAULTS
+from production_runtime import episode_bundle, EPISODE_DEFAULTS
+from _historical_fixture import compile_jobs
 from execution_contract import toolchain
 
 class DirectHandoffTests(unittest.TestCase):

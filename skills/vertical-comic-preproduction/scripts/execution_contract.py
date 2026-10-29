@@ -13,13 +13,17 @@ def semantic_checks(state):
     return CHECKS + (('framing_feasibility',) if state.get('runtime',{}).get('question_policy')=='grouped_review_v1' or state.get('input_quality_policy')=='execution_quality_v1' else ())
 SKILLS=('vertical-comic-preproduction','vertical-comic-visual-assets','vertical-comic-shot-design','vertical-comic-panel-generation','vertical-comic-image-review')
 
-def toolchain(base=None):
+def _toolchain(base=None):
     base=resolve_path(Path(base)) if base is not None else resolve_path(Path(__file__)).parent
     members=scan_directory(base,suffixes=('.py','.js'))
     if is_file(base/'runtime_capabilities.json'):members.append(base/'runtime_capabilities.json')
     files=[{'path':p.relative_to(base).as_posix(),'sha256':digest(p)} for p in sorted(members)]
     entries=[{'path':str(base.parent.parent/name/'SKILL.md'),'sha256':digest(base.parent.parent/name/'SKILL.md')} for name in SKILLS]
     return {'policy':'comic_toolchain_v1','release':POLICY,'root':str(base),'files':files,'skill_entries':entries}
+
+def toolchain(base=None):
+    from audit_cache import derived
+    return __import__('copy').deepcopy(derived('toolchain',str(base or Path(__file__).resolve().parent),lambda:_toolchain(base)))
 
 def state_errors(state,root):
     try:
@@ -80,7 +84,13 @@ def state_errors(state,root):
             raise ValueError('SNAPSHOT_HOLD: 新策略缺少本批运行快照，不退回安装版本')
         if state.get('runtime_snapshot'):
             from runtime_snapshot import verify
-            frozen=verify(state['runtime_snapshot'],executing_script=__file__)
+            if state.get('runtime_import'):
+                from runtime_import import verify_binding
+                receipt, original=verify_binding(state,root)
+                verify(receipt['executor_manifest'],executing_script=__file__)
+                frozen=verify(state['runtime_snapshot'])
+            else:
+                frozen=verify(state['runtime_snapshot'],executing_script=__file__)
             if state.get('memory_source') != frozen['memory_source']:
                 raise ValueError('SNAPSHOT_HOLD: 规则来源未绑定本批快照')
         if state.get('toolchain')!=toolchain():raise ValueError('实际检查器/Skill版本与运行冻结记录不一致；使用共享入口，旧RV显式迁移')

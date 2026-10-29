@@ -4,7 +4,7 @@ from pathlib import Path
 from codex_reference_contract import checked_file
 from staged_workflow import POLICY, DONE, read, approval_errors
 from rule_memory import binding_errors
-from batch_round import MODE, snapshot, settings, report_errors, PASS, TERMINAL
+from historical_engines.batch_round import MODE, snapshot, settings, report_errors, PASS, TERMINAL
 
 
 def build_plan(state, shots, source=None):
@@ -36,9 +36,9 @@ def build_plan(state, shots, source=None):
 
 def evaluate_half(state, root, check='status', requested=None):
     if state.get('optimization_policy') == 'scoped_half_review_v1':
-        from scoped_half_workflow import evaluate_scoped
+        from historical_engines.scoped_half_workflow import evaluate_scoped
         return evaluate_scoped(state, root, check, requested)
-    from batch_workflow import completed_errors, input_errors, batch_review_errors, cross_episode_errors
+    from historical_engines.batch_workflow import completed_errors, input_errors, batch_review_errors, cross_episode_errors
     root = Path(root).resolve()
     def result(action, errors=(), batch=None, eligible=(), round_id=1):
         return {'policy': POLICY, 'execution_mode': MODE, 'status': 'PASS' if not errors and action in {'READY_FOR_HALF_PANEL', 'READY_TO_PACKAGE'} else 'HOLD',

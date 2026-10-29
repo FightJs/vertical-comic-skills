@@ -1,6 +1,6 @@
 """Validate rolling second-round authorization against an actual failed image."""
 from codex_reference_contract import checked_file, read_json
-from batch_round import attempt_errors, snapshot
+from production_evidence import attempt_errors, snapshot
 
 
 def returned_authorized_copy(original, returned, root, package_root, record, authorized_ref):

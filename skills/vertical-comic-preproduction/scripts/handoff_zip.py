@@ -26,7 +26,22 @@ REQUIRED = ('交接说明.md', '接包生产执行要求.md', INDEX)
 KINDS = {'READY_H001', 'PREPARED_H002', 'WAIT_DEPENDENCY', 'HOLD', 'REUSE'}
 
 
+def reception_cache(function):
+    """One receive/bind operation shares verified bytes; no caller-supplied PASS."""
+    from functools import wraps
+    @wraps(function)
+    def call(*args,**kwargs):
+        from validation_pool import _POOL,ValidationPool,session
+        if _POOL.get() is not None:return function(*args,**kwargs)
+        with session(ValidationPool(byte_limit=256*1024*1024)):
+            return function(*args,**kwargs)
+    return call
+
+
 def sha(path):
+    from validation_pool import _POOL
+    pool=_POOL.get()
+    if pool is not None and Path(path).stat().st_size<=16*1024*1024:return pool.file_bytes(Path(path))[1]
     h=hashlib.sha256()
     with Path(path).open('rb') as f:
         for block in iter(lambda:f.read(1024*1024),b''): h.update(block)
@@ -274,6 +289,7 @@ def delivery_evidence(manifest,read_bytes):
     return {'format':'self_contained_handoff_v1','package_id':idx['package_id']}
 
 
+@reception_cache
 def check_delivery_directory(package_root):
     root,manifest=directory_inventory(package_root)
     if manifest.get('container_policy')!='self_contained_handoff_v1':
@@ -442,8 +458,16 @@ def rehearse(zip_path,package_root,run_root,run_index,report,*,timeout=900,budge
             # Never treat the old snapshot absolute path as the local executable.
             manifest_path=reference(package_root,episode['runtime_manifest']);snap_ref=state.get('runtime_snapshot',{})
             if Path(snap_ref.get('path','')).resolve()!=manifest_path.resolve() or snap_ref.get('sha256')!=sha(manifest_path):raise ValueError('本地运行未绑定解压包内实际冻结快照')
-            frozen=verify(snap_ref);script=Path(frozen['scripts'])/'production_runtime.py'
+            verify(snap_ref)  # Original bytes are evidence, never the chosen old executor.
+            if state.get('runtime_import'):
+                from runtime_import import verify_binding
+                executor_ref=verify_binding(state,state_path.parent.parent)[0]['executor_manifest']
+            else:executor_ref=snap_ref
+            frozen=verify(executor_ref);script=Path(frozen['scripts'])/'production_runtime.py'
             capability=Path(frozen['scripts'])/'runtime_capabilities.json'
+            caps=read(capability) if capability.is_file() else None
+            if not isinstance(caps,dict) or caps.get('production_executor')!='whole_episode_light_v1':
+                raise ValueError('未知冻结接包审计能力 / IMPORT_REQUIRED: old package code cannot run')
             combined=False
             if capability.is_file() and data.get('delivery_policy')=='direct_delivery_v2' and state.get('execution_mode')=='episode_async_v1':
                 caps=read(capability)
@@ -483,7 +507,16 @@ def rehearse(zip_path,package_root,run_root,run_index,report,*,timeout=900,budge
                 from handoff_delivery import input_review
                 input_review(package_root,data)
                 proof=read(mapping)
-                if proof.get('policy')!='runtime_only_relocation_v1' or proof.get('local_state_sha256')!=sha(state_path):raise ValueError('须使用包内确定性bind建立运行，不能由接手人临时改状态')
+                bound_sha=sha(state_path)
+                if state.get('runtime_import'):
+                    from runtime_import import verify_binding
+                    import_receipt,original=verify_binding(state,state_path.parent.parent)
+                    changed={'runtime_import','image_review_profile','repair_threshold_policy','runtime_pipeline_policy',
+                             'source_input_policy','toolchain','speed_policy'}
+                    if {k:v for k,v in state.items() if k not in changed}!={k:v for k,v in original.items() if k not in changed}:
+                        raise ValueError('IMPORT_BIND_STATE_CHANGED: original bind proof cannot approve later changes')
+                    bound_sha=import_receipt['source_state']['sha256']
+                if proof.get('policy')!='runtime_only_relocation_v1' or proof.get('local_state_sha256')!=bound_sha:raise ValueError('须使用包内确定性bind建立运行，不能由接手人临时改状态')
                 for key in ('source_script','source_snapshot','visual_basis','shot_manifest'):
                     target='production_source_snapshot' if key=='source_snapshot' else key
                     if sha(reference(state_path.parent.parent,state.get(key)))!=sha(reference(package_root,episode.get(target))):raise ValueError('实际执行依据不等于最终审查输入:'+key)

@@ -85,6 +85,9 @@ def export(source,output,max_file_bytes=LIMIT,*,package_mode="allow_parts"):
         except Exception:
             shutil.rmtree(output);raise
 
+from handoff_zip import reception_cache
+
+@reception_cache
 def restore(entry,destination):
     from handoff_zip import check_delivery_directory
     from platform_io import check_destination_paths
@@ -127,12 +130,20 @@ def restore(entry,destination):
             if len(paths)!=len(set(paths)) or len({p.split('/')[0] for p in paths})!=1:raise ValueError('原路径重复或包根不唯一')
             required=sum(r['bytes'] for r in rows)+256*1024*1024
             if shutil.disk_usage(staging).free<required:raise ValueError('恢复落盘空间不足')
+            restored_objects={}
             for row in rows:
                 h=row['sha256']
                 if len(h)!=64 or any(c not in '0123456789abcdef' for c in h):raise ValueError('非法对象哈希')
                 target=staging/row['path'];target.parent.mkdir(parents=True,exist_ok=True)
-                with z.open('objects/'+h) as a,target.open('wb') as b:shutil.copyfileobj(a,b,1024*1024)
-                if target.stat().st_size!=row['bytes'] or digest(target)!=h:raise ValueError('恢复文件损坏: '+row['path'])
+                original=restored_objects.get(h)
+                if original is None:
+                    with z.open('objects/'+h) as a,target.open('wb') as b:shutil.copyfileobj(a,b,1024*1024)
+                    if target.stat().st_size!=row['bytes'] or digest(target)!=h:raise ValueError('恢复文件损坏: '+row['path'])
+                    restored_objects[h]=target
+                else:
+                    if original.stat().st_size!=row['bytes']:raise ValueError('同一对象大小冲突')
+                    shutil.copyfile(original,target)  # Independent bytes, no writable hard links.
+                    if target.stat().st_size!=row['bytes']:raise ValueError('恢复副本不完整')
         root=staging/paths[0].split('/')[0];check_delivery_directory(root)
         shutil.move(str(staging),str(destination))
         return {'root':str(destination/root.name),'status':'RESTORED_CHECKED','file_count':len(rows)}

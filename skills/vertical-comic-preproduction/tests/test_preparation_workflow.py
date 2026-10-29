@@ -52,7 +52,7 @@ class OfflineCompilation(unittest.TestCase):
         result=subprocess.run(cmd,capture_output=True,text=True,encoding='utf-8',timeout=30)
         value=json.loads(result.stdout);self.assertEqual(len(value['jobs']),1,value)
         self.assertIs(value['jobs'][0]['dispatch_authorized'],False)
-        from staged_workflow import evaluate
+        from _historical_fixture import evaluate
         result=evaluate(self.state,self.root,'reservation_batch',{'limit':1,'excluded':[]})
         self.assertFalse(result.get('ready_panel_ids'),result)
         self.assertEqual(path.read_bytes(),before)

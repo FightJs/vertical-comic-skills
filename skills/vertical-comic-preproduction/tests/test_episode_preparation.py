@@ -1,4 +1,5 @@
 """Episode-wide preparation with half-only image production (synthetic evidence)."""
+import _historical_fixture
 import json
 import sys
 import tempfile
@@ -11,8 +12,8 @@ sys.path[:0] = [str(BASE / 'scripts'), str(BASE / 'tests')]
 
 from codex_reference_contract import digest
 from scoped_inputs import STATE_DISPATCH, build_plan, half_view, validate_shots, state_leads
-from scoped_half_workflow import evaluate_scoped
-from batch_round import snapshot
+from historical_engines.scoped_half_workflow import evaluate_scoped
+from historical_engines.batch_round import snapshot
 from production_runtime import episode_bundle
 from execution_contract import semantic_template
 import test_staged_workflow as staged_fixtures
@@ -89,10 +90,10 @@ class EpisodePreparationTests(unittest.TestCase):
     def test_C_opens_H002_without_second_asset_or_shot_approval(self):
         state, _ = self.state(4)
         with patch('execution_contract.state_errors', return_value=[]), \
-             patch('scoped_half_workflow.binding_errors', return_value=[]), \
-             patch('batch_workflow.completed_errors', return_value=[]), \
-             patch('batch_workflow.batch_review_errors', return_value=[]), \
-             patch('scoped_half_workflow.report_errors', return_value=[]):
+             patch('historical_engines.scoped_half_workflow.binding_errors', return_value=[]), \
+             patch('historical_engines.batch_workflow.completed_errors', return_value=[]), \
+             patch('historical_engines.batch_workflow.batch_review_errors', return_value=[]), \
+             patch('historical_engines.scoped_half_workflow.report_errors', return_value=[]):
             self.assertEqual(evaluate_scoped(state, self.root)['next_action'], 'SUBMIT_READY_HALF_REQUESTS')
             for row in state['panels'][:2]:
                 row.update(status='VISUAL_PASS', round_id=1,
@@ -124,7 +125,7 @@ class EpisodePreparationTests(unittest.TestCase):
              'preparation_policy':'episode_preparation_v1','panels':panels})
         state['gates']['shot_design'] = self.approval([state['visual_basis'], state['shot_manifest']])
         with patch('execution_contract.state_errors', return_value=[]), \
-             patch('scoped_half_workflow.binding_errors', return_value=[]):
+             patch('historical_engines.scoped_half_workflow.binding_errors', return_value=[]):
             report=evaluate_scoped(state,self.root)
             self.assertEqual(report['eligible_panel_ids'],[f'P{i:03d}' for i in range(1,19)],report)
         self.assertEqual(state_leads(panels[:18]),{'P001','P004','P017'})
@@ -144,7 +145,7 @@ class EpisodePreparationTests(unittest.TestCase):
              'preparation_policy':'episode_preparation_v1','panels':panels})
         state['gates']['shot_design'] = self.approval([state['visual_basis'], state['shot_manifest']])
         with patch('execution_contract.state_errors', return_value=[]), \
-             patch('scoped_half_workflow.binding_errors', return_value=[]):
+             patch('historical_engines.scoped_half_workflow.binding_errors', return_value=[]):
             report=evaluate_scoped(state,self.root)
         self.assertEqual(report['eligible_panel_ids'],['P001','P002','P003','P005','P006','P008','P010'],report)
         self.assertEqual(report['blocked_panel_ids'],['P004','P007'])

@@ -1,4 +1,5 @@
 """Behavioral contracts for actual comic continuity, detail review and repairs."""
+import _historical_fixture
 import copy
 import json
 import sys
@@ -191,8 +192,8 @@ class VisualEvidenceTests(unittest.TestCase):
         self.assertEqual(repair_binding_errors(p,{'attempt_id':'P001-r1','output':{'sha256':'base'}}), [])
 
     def test_failed_local_review_is_required_but_does_not_block_failure_registration(self):
-        from staged_workflow import evaluate
-        from batch_round import attempt_errors
+        from _historical_fixture import evaluate
+        from historical_engines.batch_round import attempt_errors
         h,_=actual_fixture(self)
         self.assertEqual(evaluate(h.state,h.root,'generate','P001')['status'],'PASS')
         record=h.returned(fail=True)
@@ -226,11 +227,11 @@ class VisualEvidenceTests(unittest.TestCase):
             with self.assertRaises(ValueError):repair_basis(state,d,p,basis,{'P001':record})
 
     def test_real_episode_repair_authorization_and_input_gate_keep_the_failed_image(self):
-        from batch_round import snapshot
+        from historical_engines.batch_round import snapshot
         from codex_reference_contract import digest
         from continuity_contract import reference_usage_block
         from production_runtime import authorize_episode_repair
-        from batch_workflow import input_errors
+        from historical_engines.batch_workflow import input_errors
         h,basis=actual_fixture(self)
         h.state['execution_mode']='episode_async_v1';h.h.manifest['execution_mode']='episode_async_v1'
         h.h.manifest['round_context']['batch_id']='EPISODE';h.sync()

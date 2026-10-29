@@ -10,7 +10,8 @@ from codex_reference_contract import read_json,digest
 from platform_io import atomic_json
 import managed_dispatch as managed
 import runtime_clock as clock
-from production_runtime import compile_jobs,submit
+from production_runtime import submit
+from _historical_fixture import compile_jobs
 
 
 def simultaneous_submit(state,job,barrier,queue):

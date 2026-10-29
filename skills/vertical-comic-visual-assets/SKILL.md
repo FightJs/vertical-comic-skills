@@ -5,7 +5,7 @@ description: Lock episode-specific character identities, costume states, scenes 
 
 # 条漫视觉基准与资产
 
-**新任务默认速度优先、轻审核成品，并启用环节限时自动降级**：先按[轻审核流程](../vertical-comic-preproduction/references/light-review.md)执行。每图快速看一次人物与剧情可读性，仅严重剧情问题最多返修一轮；普通瑕疵留人工。此模式不执行下文旧全面审核的六项细节取证、逐MEM记录及整话/跨话重复复审，不为测试返修另做生图。新任务同时绑定 `speed_policy: bounded_stage_fallback_v1`：按轻审核流程内的时限表执行，超时停止可选润饰、缩小编译批次、简化审核或沿用现有图；首轮出齐优先于返修。工具以冻结状态的 `image_review_profile` 分支登记和交付；无该字段的旧任务仍按原合同，不能热改。
+统一入口为整话轻审核：新任务与旧包导入后都固定当前执行器，旧包代码仅作证据。每话启动一个 `generation_host.py serve` 常驻进程；输入未变复用，局部修改只处理受影响格；返回立即保存并释放槽位。每图快速看一次，仅严重剧情问题最多返修一轮。暂停和等待用户不计时，多话共用四小时有效预算，三小时不停止首轮。完整约定见[统一执行与恢复](../vertical-comic-preproduction/references/execution-compatibility.md)与[轻审核流程](../vertical-comic-preproduction/references/light-review.md)。
 
 阶段开始时按[规则归属](../vertical-comic-preproduction/references/rule-ownership.md)读取共同规则与本阶段合同；授权和进度沿用该页入口，同一运行不重复加载未变内容。新制作按[前期提速](../vertical-comic-preproduction/references/preparation-efficiency.md)先贯通代表格，再用[唯一主表](../vertical-comic-preproduction/references/draft-authoring.md)增量派生。接包直接使用已审输入。
 
@@ -15,7 +15,7 @@ description: Lock episode-specific character identities, costume states, scenes 
 
 共享合同在同级vertical-comic-preproduction。首次读[共同约束](../vertical-comic-preproduction/references/production-foundation.md)与[规则归属](../vertical-comic-preproduction/references/rule-ownership.md)；本阶段再读[身份确认](../vertical-comic-preproduction/references/identity-confirmation.md)及[资产流程](../vertical-comic-preproduction/references/stage-asset-production.md)。配置指定规则库时按[规则记忆](../vertical-comic-preproduction/references/rule-memory.md)只加载本阶段命中项。
 
-新任务沿[整话异步](../vertical-comic-preproduction/references/episode-async.md)全话准备、逐格就绪。已有RV用原冻结快照和批准范围，不静默迁移。分工模式先读[双电脑交接](../vertical-comic-preproduction/references/split-production.md)；导出前执行[ZIP接包演练](../vertical-comic-preproduction/references/zip-handoff.md)，原批准不因路径变化重签。
+新任务沿[整话异步](../vertical-comic-preproduction/references/episode-async.md)全话准备、逐格就绪。已有RV保留原冻结证据和批准范围，经统一入口导入后继续。分工模式先读[双电脑交接](../vertical-comic-preproduction/references/split-production.md)；导出前执行[ZIP接包演练](../vertical-comic-preproduction/references/zip-handoff.md)，原批准不因路径变化重签。
 
 1. 对照批准源稿核对称呼、身份关系、人物状态及真实可见范围；未知事实留缺口，不以模糊文字或一次性角色豁免掩盖。
 2. 多话共用资产由总控冻结版本，各话只登记适用范围。场景参考证明布局，人物板证明身份/衣装，漫画样例证明画风，不能互相覆盖。

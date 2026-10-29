@@ -37,6 +37,16 @@ EPISODE_DEFAULTS = {**DEFAULTS, "policy": "incremental_runtime_v2",
 EPISODE_DEFAULTS.pop("half_review_dispatch")
 
 
+def prepare_jobs(state_path, panel_ids=None, *, workers=4):
+    from prepared_job_store import store
+    return store(state_path).prepare(panel_ids,workers)
+
+
+def claim_and_register(state_path, prepared_reference):
+    from runtime_pipeline import claim_and_register as claim
+    return claim(state_path,prepared_reference)
+
+
 def settings(value):
     if not isinstance(value, dict):raise ValueError("runtime须为对象")
     for key, policy in (('snapshot_policy','batch_snapshot_v1'),('question_policy','grouped_review_v1'),('dispatch_policy','episode_slot_lease_v1')):
@@ -458,7 +468,7 @@ def _episode_bundle(state, root, dependency_plan=None, *, panel_ids=None):
     from rule_memory import binding_errors as memory_binding_errors
     from frame_ratio_plan import panel_errors as ratio_panel_errors
     from staged_workflow import basis_errors
-    from batch_workflow import SHOT_FIELDS
+    from production_evidence import SHOT_FIELDS
     from style_contract import validate_style, output_spec_errors
     from panel_readiness import enabled as scoped_preparation,report as readiness_report,review_context
     import time
@@ -560,7 +570,7 @@ def _episode_bundle(state, root, dependency_plan=None, *, panel_ids=None):
             errors=basis_errors(panel,basis);errors.extend(ratio_panel_errors(state,root,[panel],prompt=True))
             errors.extend(validate_style(panel,path.parent));errors.extend(output_spec_errors(panel))
             if readiness:
-                from batch_workflow import input_errors
+                from production_evidence import input_errors
                 with review_context(state,root,True):errors.extend(input_errors(state,root,record,by_shot[pid],basis,by_record,candidate=True,preparation_only=True))
             if errors:raise ValueError(';'.join(errors))
             inputs.append(package_signature(packet,path.parent))
@@ -622,7 +632,7 @@ def commit_updates(state_path, expected_sha256, updates, *, resolution_ref=None,
 def _commit_updates(state_path, expected_sha256, updates, *, resolution_ref=None, submission_job=None, _prepare_only=False):
     """Single-writer CAS: real receipts/QA only; never changes frozen inputs/gates."""
     from staged_workflow import qa_errors
-    from batch_round import attempt_errors
+    from production_evidence import attempt_errors
     from codex_reference_contract import execution_errors
     state_path = Path(state_path).resolve(); root = state_path.parent.parent
     allowed = {"status", "output", "qa_report", "call_evidence", "failure_diagnosis",
@@ -696,13 +706,26 @@ def _commit_updates(state_path, expected_sha256, updates, *, resolution_ref=None
                     original=next(r for r in state["panels"] if r["panel_id"]==pid)
                     before=checked_file(root,original["package_manifest"])
                     before_packet=read_json(before)
-                    if state.get('runtime',{}).get('dispatch_policy')=='episode_slot_lease_v1' and any(
-                            packet.get(k)!=before_packet.get(k) for k in ('dispatch_receipt','round_context','dispatch_source_package')):
-                        raise ValueError('返回登记不得修改原租约回执或轮次')
-                    if package_signature(read_json(before),before.parent)!=package_signature(packet,path.parent):
-                        raise ValueError("返回登记不能改变已提交的实际prompt或参考输入")
-                    errors, submission = validate_panel(panel,path.parent)
-                    if errors or submission is None:raise ValueError(";".join(errors))
+                    if original.get('prepared_registration_id'):
+                        from prepared_job_store import store
+                        entry=state['submission_registrations'][original['prepared_registration_id']]
+                        dynamic=entry['prepared_dispatch']
+                        prepared=store(state_path).get(dynamic['prepared_reference'],check_inputs=False,check_state=False)
+                        expected=copy.deepcopy(prepared['packet']);actual_packet=copy.deepcopy(packet)
+                        for item in (expected,actual_packet):
+                            item.pop('dispatch_receipt',None);item.pop('dispatch_source_package',None)
+                            item['panels'][0].pop('generation_execution',None)
+                        if expected!=actual_packet or packet.get('dispatch_receipt')!=dynamic['receipt']:
+                            raise ValueError('RETURN_PREPARED_INPUT_CHANGED')
+                        submission=prepared['submission_plan']
+                    else:
+                        if state.get('runtime',{}).get('dispatch_policy')=='episode_slot_lease_v1' and any(
+                                packet.get(k)!=before_packet.get(k) for k in ('dispatch_receipt','round_context','dispatch_source_package')):
+                            raise ValueError('返回登记不得修改原租约回执或轮次')
+                        if package_signature(read_json(before),before.parent)!=package_signature(packet,path.parent):
+                            raise ValueError("返回登记不能改变已提交的实际prompt或参考输入")
+                        errors, submission = validate_panel(panel,path.parent)
+                        if errors or submission is None:raise ValueError(";".join(errors))
                     errors=execution_errors(panel["generation_execution"],submission,path.parent,pid)
                     response=read_json(checked_file(path.parent,panel["generation_execution"]["response_evidence"]))
                     checked_file(root,row["output"])
@@ -801,7 +824,7 @@ def authorize_episode_repair(state_path, expected_sha256, authorization_ref):
 
 def _authorize_episode_repair(state_path, expected_sha256, authorization_ref):
     """Atomically open one second-round attempt without waiting for every panel."""
-    from batch_round import snapshot, attempt_errors
+    from production_evidence import snapshot, attempt_errors
     from episode_repair import systemic_errors
     state_path=Path(state_path).resolve();root=state_path.parent.parent
     initial = read_json(state_path)
@@ -846,7 +869,7 @@ def _authorize_episode_repair(state_path, expected_sha256, authorization_ref):
         if repair_input_issues:raise ValueError(';'.join(repair_input_issues))
         new=copy.deepcopy(state);target=next(r for r in new['panels'] if r['panel_id']==pid)
         old=copy.deepcopy(target)
-        for key in ('output','qa_report','call_evidence','failure_diagnosis','ready_at','submitted_at','returned_at','save_started_at','saved_at','qa_completed_at','qa_recorded_at','timing_observations','quality_review','qa_revisions'):
+        for key in ('output','qa_report','call_evidence','failure_diagnosis','ready_at','submitted_at','returned_at','save_started_at','saved_at','qa_completed_at','qa_recorded_at','timing_observations','quality_review','qa_revisions','prepared_registration_id'):
             target.pop(key,None)
         target.update(status='REPAIR_AUTHORIZED',round_id=2,attempt_id=attempt,
                       package_manifest=packet_ref,shot_subset=subset_ref,attempt_history=[old])
@@ -868,7 +891,7 @@ def _authorize_episode_repair(state_path, expected_sha256, authorization_ref):
 def record_episode_diagnosis(state_path, expected_sha256, diagnosis_ref):
     """Atomically bind an actual common-cause review before >5 rolling repairs."""
     from episode_repair import failure_ids
-    from batch_round import attempt_errors
+    from production_evidence import attempt_errors
     state_path=Path(state_path).resolve();root=state_path.parent.parent
     with state_write_lock(state_path):
         if digest(state_path)!=expected_sha256:raise ValueError('STATE_CHANGED')
@@ -913,7 +936,7 @@ def _atomic_runtime_state(state_path, value):
 def prepare_review(state, root, queue):
     """Create only missing real-image QA templates; one contact sheet per selected group."""
     from make_generation_qa import _main
-    from batch_round import write_contact_sheet
+    from production_evidence import write_contact_sheet
     root=Path(root);records={r["panel_id"]:r for r in state["panels"]}
     for item in queue["items"]:
         row=records[item["panel_id"]]

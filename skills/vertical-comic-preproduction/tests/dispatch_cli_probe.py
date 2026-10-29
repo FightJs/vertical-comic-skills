@@ -22,7 +22,7 @@ def sample(scripts, state_path, limit, managed=False):
     sys.path.insert(0, str(scripts))
     import codex_reference_contract as contract
     import execution_contract
-    import batch_workflow
+    import production_evidence as batch_workflow
     import panel_readiness
     import platform_io
     import task_context

@@ -1,23 +1,16 @@
-# 生产兼容与提速合同
+# 统一生产执行与历史数据导入
 
-当前新RV按 [整话异步生产](episode-async.md) 使用 `episode_async_v1`、`scoped_episode_review_v1`、`incremental_runtime_v2`：全话总览保持完整，就绪设计和完整输入按准确范围交B及包审；总控批量领取真实空闲permit后完整预检；整话完成后交D。本文源号、图集、前格上下文、日志与规则合同继续适用。下文涉及H001/H002、C、`half_episode_async_v1` 的段落只供旧RV恢复，不用于新RV发令。
+唯一生产模式是整话轻审核。旧包冻结脚本、原批准、原图和QA是来源证据；不得加入sys.path或再次启动旧半话/五格生产引擎。
 
-当前全话准备启用 `episode_preparation_v1`、`panel_readiness_v1` 和 `comic_execution_v2`。按 [全话准备、逐格放行](panel-readiness.md) 审查准确范围；前格设计未定、真实实图依赖及高风险新状态继续等待。冻结共享脚本及五个Skill入口的真实哈希，所有阶段使用同一源稿、批准依据和逐格记录。旧RV不自动升级，不用各话临时复制的检查器。
+接包receive、恢复receive-resume先核对数据，写不可变导入收据和原状态副本，再通过CAS切换本地执行状态。收据绑定原状态哈希、完整源格序、原批准和尝试历史、原时钟引用，以及本次固定执行器清单。重复导入幂等，失败保留原件；运行途中不追随安装版更新。
 
-## 一次准备完整话
+目前可导入episode_async_v1与episode_preparation_v1完整数据。half/batch缺少完整整话批准映射、第三轮及以上用户修改账、受管owner未移交或在途未对账，接包阶段给出准确HOLD，不假装迁移成功、不静默退回旧执行器。先从原请求保存返回或确认无图，解决实际数据缺口后沿原运行恢复；不重置时钟、质量轮次或批准范围。
 
-先确定完整本话真实源序及范围，再核对原图、实际批准和各格衣装/场景。联系表用于定位，身份和空间关键细节须打开原图及实际选区。历史批准外链丢失记追溯限制；有适用原批准和原图时不自动判成未批准。本话必要缺项须在全话A/B前解决；其他作品缺项不扩大阻断。
+receive返回source_manifest、executor_manifest与frozen_scripts，核对实际执行身份。每话使用该目录的generation_host.py serve，通过JSONL连续处理reserve、compile、submit、save-return、qa-save和final-check。禁止把编译、哈希、图片解码或QA包进production-global.lock。共用容量领取用短锁，各话保存使用独立写锁。
 
-episode_preparation_v1每话完成一次 `semantic_audit_v1`，绑定source_snapshot、根visual_basis、根shot_manifest及完整panel_ids，放在生产流程根semantic_audit。逐格记录REVIEWED、真实reviewer/evidence及六项具体核对；模板默认UNREVIEWED。旧half_scoped_v1的half_inputs[H001/H002].semantic_audit仅用于原RV恢复。
+无图重试统一使用recover-no-image；无需现场复制兼容脚本。确认无图才增加attempt，质量round不增加；未知结果保留原尝试查证。已授权的必要技术恢复不反复询问。
 
-语义核对由执行者完成，随 A/B 现有审查包一起展示，不新增人工停点。原批准已覆盖完全相同基准与镜头时，技术核对报告可随原证明复用；报告本身仍须实际审查及版本核验。候选已保存、文件齐全和技术 PASS 均不表示已完成视觉核对。
-
-```text
-python <scripts>/execution_contract.py --state <本话/00_输入审计/生产流程.json> --batch EPISODE --write-semantic <本话/00_输入审计/全话语义核对.json>
-python <scripts>/execution_contract.py --state <生产流程.json> --batch-preflight
-```
-
-全话语义报告保留完整源序并登记真实哈希；启用readiness时已核对范围可先交B，待补项维持真实未审状态和HOLD，不补写PASS。未启用时须完成全话语义核对再冻结A/B。随后在一个进程批量预检当前整话实际就绪格并复用未变QA，只提交完整generate门禁PASS的格。预检不生图、不授予批准。
+公共输入的真实字节及派生事实只在本进程、有界缓存中复用；文件身份、变更时间、内容哈希、路径目标和目录查询变化均导致重验。进程重启重新验证，最终交付强制完整读取。缓存不存持久PASS，当前批准撤销、容量、租约、调用身份和时钟仍检查。具体边界与验证限制见[incremental-pipeline.md](incremental-pipeline.md)。
 
 ## 源格号只做无损技术映射
 
@@ -53,7 +46,7 @@ python <scripts>/continuity_context.py --state <生产流程.json> --panel P002 
 
 ## 新状态首格校准修正
 
-仅在 B 已批准 requires_state_review/calibration_anchor 的格或真实新状态屏障发生首轮 VISUAL_FAIL 时，允许创建单格 `state_calibration_round_v1` 候选；不要求尚未提交的整半话先有 QA。
+仅在 B 已批准 requires_state_review/calibration_anchor 的格或真实新状态屏障发生首轮 VISUAL_FAIL 时，允许创建单格 `state_calibration_round_v1` 候选；不要求其他未提交格先有QA，且仅严重剧情问题进入修复。
 
 ```text
 python <scripts>/calibration_repair.py --state <生产流程.json> --panel P001 --write <本话/06_图片验收/P001_校准报告.json>
@@ -63,7 +56,7 @@ python <scripts>/calibration_repair.py --state <生产流程.json> --panel P001 
 
 state.calibration_reviews[P001] 登记真实报告哈希。原首轮记录放 attempt_history，当前改 REPAIR_AUTHORIZED、round_id=2、新 attempt_id；新包 operation=repair，保留原镜头，calibration_repair={policy:state_calibration_repair_v1,panel_id,source_review_sha256,source_attempt_id}、repair_source_output 指向原失败图。原批准 bindings 完整保留，仅追加已核验失败图的动作/空间/构图用途；参考预算仍五条，画风/身份/衣装不得被失败图代替。
 
-修正使用本半话唯一第二轮预算。第二轮 FAIL 或未知停止诊断，不能改称新校准重置轮次。首轮半话汇总保留原校准 FAIL；第二轮汇总引用实际校准 round2 及其他保留的 round1，约束与原校准诊断相同。高风险仍须原实图确认；普通 B 批准合并状态按 C/D 原策略处理。
+修正占用本格唯一一次自动质量返修，历史首轮FAIL保留。第二轮仍失败保留较可用版本与问题，未知调用先对账；不能通过改称校准重置轮次。只有真实图片依赖及用户指定审核点等待。
 
 ## 通用记忆与本次例外
 
@@ -81,21 +74,20 @@ shot 与执行 panel.rule_exceptions 登记该文件 path/sha256。执行记录�
 
 ## 冻结与恢复
 
-每话执行者只写本话，总控只写shared control。全话准备使用一套source_script/source_snapshot/visual_basis/shot_manifest；启用readiness时先绑定含明确待补范围的真实版本，后续变更由总控核对许可及影响再绑定新版本；H001→H002只变当前活动批次和额度，不重冻资产镜头。真实修改共用基准时总控核对在途与历史许可，按parallel_dispatch合同更新精确冻结清单。
+每话执行者只写本话，总控只写shared control。全话准备使用一套source_script/source_snapshot/visual_basis/shot_manifest；启用readiness时先绑定含明确待补范围的真实版本，后续变更由总控核对许可及影响再绑定新版本，不因内部调度窗口变更重冻资产镜头。真实修改共用基准时总控核对在途与历史许可，按parallel_dispatch合同更新精确冻结清单。
 
-旧RV使用原冻结策略。启用新全话准备应在新RV核对在途/未知结果、保留原调用与成功图，建无损源号映射、全话语义核对、真实前格上下文与当前共享工具哈希，复用适用原批准并集中审新增差异。不能只添标记或补造QA。
+旧RV只作为数据与证据来源，不执行其脚本。启用新全话准备应在新RV核对在途/未知结果、保留原调用与成功图，建无损源号映射、全话语义核对、真实前格上下文与当前共享工具哈希，复用适用原批准并集中审新增差异。不能只添标记或补造QA。
 
 读取扩展显式使用stage_baseline_loading_v1，索引新增load_policy，执行合同与QA格式保留。semantic_audit.rule_triggers须绑定准确matched_rules版本清单；启用人体规则且有可见角色时明确人体适用性及依据，APPLIES须有冻结标签。执行合同依旧核验共享工具真实哈希；旧RV不只添字段或改原哈希，使用新RV复核新增记录与适用依据。 归属与正式来源见 [rule-ownership.md](rule-ownership.md)。
 
 读取来源在配置、state、镜头及执行包中一致绑定；阶段入口load-stage、逐格load共用当前agent/运行缓存。预读不扩展执行命中、批准或例外范围。旧来源不含loading_policy时只接受同样未升级的索引；读取策略/版本变化在新RV重新核验受影响规则签名、例外与批准依据。字段与命令见 [规则记忆](rule-memory.md)。
 
-旧runtime的H001→H002只在C通过、全话包适用且旧半话无在途许可后更新本话active_batch_id与实际容量。当前整话模式仅用 `active_batch_id=EPISODE`，不增加frozen_halves，保留全话frozen_inputs版本与其他话状态。
 
 启用readiness的上下文可用shot_approvals保留多份原范围B证明；shot_approval可为null，原证明不合成或扩张。加载时逐个来源格核对原消息范围与适用冻结设计。--candidate只读本话完全相同四项冻结来源；旧话及实际调用仍须真实批准。
 
 ## 本批运行版本
 
-新配置的batch_snapshot_v1按[批次运行](batch-runtime.md)冻结五件套和实际规则正文；只校验实际执行快照，不因安装目录更新要求本批迁移。旧RV继续原toolchain合同。
+新配置的batch_snapshot_v1按[批次运行](batch-runtime.md)冻结五件套和实际规则正文；只校验实际执行快照，不因安装目录更新要求本批迁移。导入收据分别记录原toolchain证据与当前执行器身份。
 
 新交接中的规则例外可用 `evidence_root_mode=exception_relative_v1`，`evidence_root` 为例外 JSON 所在目录内的相对目录（同目录填 `.`），`artifacts` 相对该目录。先完整保留原批准依据再创建候选，不修改已批准例外。移动后仍按原哈希核验；不允许 `..`、绝对路径或符号链接逃逸。旧绝对 evidence_root 保持原行为，不能宣称已可移植；包外迁移候选须重验。
 

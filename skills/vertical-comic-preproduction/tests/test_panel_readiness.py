@@ -6,10 +6,11 @@ import test_execution_lifecycle as fixtures
 from codex_reference_contract import checked_file,read_json,digest,file_session
 from scoped_inputs import PREPARATION,approval_for
 from execution_contract import CHECKS,toolchain
-from production_runtime import DEFAULTS,episode_bundle,package_review_errors,compile_jobs
+from production_runtime import DEFAULTS, episode_bundle, package_review_errors
+from _historical_fixture import compile_jobs
 from panel_readiness import POLICY,report,compatible_collection,review_context
 from continuity_context import load_context
-from staged_workflow import evaluate
+from _historical_fixture import evaluate
 
 def fixture(root,candidate=False):
     s,m,p,old=fixtures.build_calibration(root)

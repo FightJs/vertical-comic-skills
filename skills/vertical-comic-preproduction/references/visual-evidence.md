@@ -64,7 +64,7 @@ check的kind只取space/presence/contact/hand/accessory/clarity，id唯一，sub
 
 包内panel.visual_evidence必须与获批镜头完全一致，派生context必须与当前基准一致。基准和镜头的根策略也须相同。实际参考持续携带批准画风、身份衣装、场景和必要细节；每请求最多5条路径。单图多用途去重；忠实人物图集只有裁区实际覆盖该细节source_region才可证明携带了细节。看过原图、相同源哈希但裁掉耳环的图集都不能替代实际细节输入。
 
-调用前由execution_contract语义门禁、batch_workflow实际输入门禁、codex_reference_contract实际参数导出共同检查。技术检查只能证明输入一致和缺项被拦截，不能证明几何和图片已经正确。
+调用前由execution_contract语义门禁、production_evidence实际输入门禁、codex_reference_contract实际参数导出共同检查。技术检查只能证明输入一致和缺项被拦截，不能证明几何和图片已经正确。
 
 ## 返图：全图、原尺寸局部、连续镜头
 

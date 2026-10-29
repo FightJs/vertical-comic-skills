@@ -1,4 +1,5 @@
 """Real isolated contracts and synthetic images; no image service or agents."""
+import _historical_fixture
 import copy
 import json
 import sys
@@ -10,13 +11,14 @@ sys.path[:0]=[str(Path(__file__).resolve().parents[1]/"scripts"),str(Path(__file
 import test_half_workflow as fixtures
 from scoped_inputs import POLICY, build_plan, half_view
 from codex_reference_contract import digest, file_session
-from staged_workflow import evaluate, preflight_many
-from production_runtime import DEFAULTS, compile_jobs, review_bundle, checkpoint, commit_updates, settings
+from _historical_fixture import evaluate, preflight_many
+from production_runtime import DEFAULTS, review_bundle, checkpoint, commit_updates, settings
+from _historical_fixture import compile_jobs
 from production_runtime import prepare_review
 from production_runtime import dependency_plan_matches
 from codex_reference_contract import validate_panel
 from review_queue import build_queue
-from batch_round import repair_route_errors
+from historical_engines.batch_round import repair_route_errors
 
 
 class RuntimeTests(unittest.TestCase):

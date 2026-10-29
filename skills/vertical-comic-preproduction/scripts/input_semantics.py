@@ -202,6 +202,11 @@ def _basis(state, root, shot):
     memory = state.get('memory_source') or {}
     rule_hash = digest(Path(memory['root']) / memory.get('index', '记忆索引.json')) if memory.get('root') else None
     toolchain = state.get('toolchain') or {}
+    if state.get('runtime_import'):
+        from runtime_import import verify_binding
+        _,original=verify_binding(state,root)
+        if all(state.get(k)==original.get(k) for k in ('source_snapshot','visual_basis','shot_manifest','semantic_audit')):
+            toolchain=original.get('toolchain') or {}
     from preparation_gate_policy import enabled as light_preparation, FIELD
     return {**({FIELD: state[FIELD]} if light_preparation(state) else {}),
             'book_id': state['book_id'], 'episode_id': state['episode_id'],
@@ -214,7 +219,7 @@ def _basis(state, root, shot):
 def actual_input(state, root, shot, packet, package_root):
     from audit_cache import derived, content_key
     authority = {k: state.get(k) for k in ('book_id', 'episode_id', 'source_snapshot',
-                 'visual_basis', 'shot_manifest', 'toolchain', 'memory_source', 'input_semantics_policy', 'preparation_gate_policy')}
+                 'visual_basis', 'shot_manifest', 'toolchain', 'memory_source', 'input_semantics_policy', 'preparation_gate_policy','runtime_import')}
     from panel_readiness import review_scope
     return derived('final_semantic_input', content_key([str(root), str(package_root), authority, shot, packet, review_scope()]),
                    lambda: _actual_input(state, root, shot, packet, package_root))

@@ -31,8 +31,8 @@ class StageDeadlineTests(unittest.TestCase):
         before=(path.parent/'stage-runtime.json').read_bytes()
         checkpoint(path,'review','P001');self.assertEqual(before,(path.parent/'stage-runtime.json').read_bytes())
 
-    def test_remaining_half_hour_defers_repair_but_keeps_generation(self):
-        h,path,row,p=self.fixture();self.now=12600
+    def test_delivery_reserve_defers_repair_but_keeps_generation(self):
+        h,path,row,p=self.fixture();self.now=13500
         self.assertTrue(checkpoint(path,'repair','P001')['degraded'])
         self.assertTrue(runtime_clock.require_dispatch(path)['new_calls_allowed'])
 

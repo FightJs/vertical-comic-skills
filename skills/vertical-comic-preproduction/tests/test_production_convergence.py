@@ -103,7 +103,7 @@ class AuthorityTests(unittest.TestCase):
         ref=h.h.h.f.write('actual-agent-decision.json',p)
         s['approval_index']=h.h.h.f.write('actual-index.json',{'policy':'approval_index_v1','entries':[
             {'phase':'generation_package','book_id':s['book_id'],'episode_ids':[s['episode_id']],'panel_ids':['P001'],'approval':ref}]})
-        from production_runtime import compile_jobs
+        from _historical_fixture import compile_jobs
         self.assertEqual(len(compile_jobs(s,h.root)['jobs']),1)
 
     def test_delegated_prior_context_keeps_accurate_A_and_B_scope(self):

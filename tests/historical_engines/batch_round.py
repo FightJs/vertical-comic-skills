@@ -73,7 +73,7 @@ def attempt_errors(state, root, item):
     if panels[0].get('generation_execution', {}).get('attempt_id') != item['attempt_id']:
         errors.append(f'{pid}:轮次记录与实际调用attempt_id不一致')
     if 'parallel_context' in state:
-        from batch_workflow import dispatch_errors
+        from historical_engines.batch_workflow import dispatch_errors
         errors.extend(dispatch_errors(state, root, packet, pid, digest(output)))
     from light_review import enabled as light_enabled, evidence_errors as light_errors
     if light_enabled(state):

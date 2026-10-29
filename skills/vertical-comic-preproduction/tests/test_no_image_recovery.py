@@ -7,7 +7,8 @@ from dispatch_fixture import DispatchFixture
 from codex_reference_contract import digest,read_json,checked_file
 from platform_io import atomic_json
 from episode_dispatch_queue import reserve_ready
-from production_runtime import compile_jobs,submit,commit_updates,package_signature
+from production_runtime import submit, commit_updates, package_signature
+from _historical_fixture import compile_jobs
 from no_image_recovery import recover,history_errors
 import managed_dispatch as managed
 
@@ -186,8 +187,8 @@ class RecoveryHostTests(unittest.TestCase):
         expected=digest(state_path)
         result=fixture.host('recover-no-image','--recovery-request',request,'--expected-state-sha256',expected)
         self.assertEqual(result['status'],'NO_IMAGE_RETRY_READY')
-        adapter=read_json(Path(result['compatibility_adapter']['path']))
-        self.assertFalse(adapter['frozen_tools_replaced'])
+        self.assertNotIn('compatibility_adapter',result)
+        self.assertFalse((state_path.parent/'recovery_execution').exists())
         after=read_json(state_path);self.assertEqual(after['runtime_snapshot'],before['runtime_snapshot']);self.assertEqual(digest(snapshot),before['runtime_snapshot']['sha256'])
         retry=fixture.host('recover-no-image','--recovery-request',request,'--expected-state-sha256',expected)
         self.assertEqual(retry['status'],'NO_IMAGE_RECOVERY_ALREADY_SAVED')

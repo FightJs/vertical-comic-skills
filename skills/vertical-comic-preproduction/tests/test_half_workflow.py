@@ -1,4 +1,5 @@
 """Half-window scheduling, correction boundaries and full image evidence in temporary fixtures."""
+import _historical_fixture
 import copy
 import json
 from pathlib import Path
@@ -8,9 +9,9 @@ import unittest
 from unittest.mock import patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'scripts'))
 import test_staged_workflow as staged
-from half_workflow import build_plan
-from batch_round import MODE, snapshot, template, decision, report_errors
-from staged_workflow import evaluate
+from historical_engines.half_workflow import build_plan
+from historical_engines.batch_round import MODE, snapshot, template, decision, report_errors
+from _historical_fixture import evaluate
 from codex_reference_contract import digest, validate_panel
 from usage_config import runtime_limits
 SCRIPTS=Path(__file__).resolve().parents[1]/'scripts'
@@ -35,7 +36,7 @@ class HalfTests(unittest.TestCase):
 
     def route(self,state,check='status',pid=None):
         # Routing fixtures isolate scheduling; the full-gate suite below uses actual QA.
-        with patch('batch_workflow.completed_errors',return_value=[]),patch('batch_workflow.input_errors',return_value=[]),patch('batch_round.attempt_errors',return_value=[]):
+        with patch('historical_engines.batch_workflow.completed_errors',return_value=[]),patch('historical_engines.batch_workflow.input_errors',return_value=[]),patch('historical_engines.batch_round.attempt_errors',return_value=[]):
             return evaluate(state,self.root,check,pid)
 
     def record(self,state,index,status='VISUAL_PASS',round_id=1):
@@ -213,7 +214,7 @@ class ActualHalfGateTests(unittest.TestCase):
 
 
     def test_actual_half_contact_sheet_uses_selected_current_outputs_and_no_overwrite(self):
-        from batch_round import write_contact_sheet
+        from historical_engines.batch_round import write_contact_sheet
         self.returned();dest=self.root/'half-review.jpg'
         result=write_contact_sheet(self.root,self.plan['batches'][0],{'P001':self.state['panels'][0]},dest)
         self.assertEqual(result['status'],'UNREVIEWED_CONTACT_SHEET_CREATED')

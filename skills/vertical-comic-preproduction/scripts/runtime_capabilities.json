@@ -107,7 +107,7 @@
   },
   "receiver_host": {
     "policy": "receiver_host_v1",
-    "runtime_isolation": "per_frozen_process",
+    "runtime_isolation": "pinned_current_executor",
     "return_persistence": "observed_image_return_v1",
     "legacy_auto_migration": false,
     "raw_return_replay": "optional_observed_fixture_only"
@@ -135,7 +135,7 @@
       "repair_planning": 480,
       "pack_compression": 30
     },
-    "repair_min_remaining_seconds": 1800,
+    "repair_min_remaining_seconds": 900,
     "compile_fallback_max_panels": 5,
     "pause_charged": false,
     "first_round_continues_after_three_hours": true,
@@ -147,8 +147,19 @@
     "policy": "confirmed_no_image_recovery_v1",
     "quality_round_unchanged": true,
     "unknown_requires_resolution": true,
-    "legacy_adapter": "frozen_no_image_adapter_v1",
     "same_input_retries_before_diagnosis": 2,
-    "image_calls": 0
+    "image_calls": 0,
+    "entry": "workflow_session recover-no-image"
+  },
+  "runtime_import": "unified_runtime_import_v1",
+  "production_executor": "whole_episode_light_v1",
+  "prepared_dispatch": {
+    "policy": "prepared_dispatch_v1",
+    "prepare": "prepare-inputs",
+    "writer": "claim-and-register",
+    "callback": "onPrepareInvoke",
+    "persistent_owner": true,
+    "source_package_mutation": false,
+    "ordinary_full_preflight": false
   }
 }

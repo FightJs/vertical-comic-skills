@@ -6,7 +6,7 @@ from pathlib import Path
 from codex_reference_contract import checked_file
 from staged_workflow import POLICY, DONE, read, approval_errors
 from rule_memory import binding_errors
-from batch_round import settings, TERMINAL
+from production_evidence import settings, TERMINAL
 from scoped_inputs import EPISODE_MODE as MODE, EPISODE_POLICY as OPT, STATE_DISPATCH, build_plan, half_view, approval_for, blocked_panels, validate_shots, global_hold, full_preparation
 
 
@@ -17,7 +17,7 @@ def evaluate_episode(state, root, check='status', requested=None):
         return _evaluate_episode(state, root, check, requested)
 
 
-def _evaluate_episode(state, root, check='status', requested=None):
+def _evaluate_episode(state, root, check='status', requested=None, *, prepared_sink=None, workers=4):
     """reservation_batch reuses status gates and checks only enough unreserved inputs.
 
     It grants no dispatch authority: receipts, final compile and submission checks
@@ -26,7 +26,7 @@ def _evaluate_episode(state, root, check='status', requested=None):
     from codex_reference_contract import _READ_VIEW
     view = _READ_VIEW.get()
     if view is not None: view.authorize_check(check, requested)
-    from batch_workflow import completed_errors, input_errors, batch_review_errors, cross_episode_errors
+    from production_evidence import completed_errors, input_errors, batch_review_errors, cross_episode_errors
     started = time.perf_counter()
     root=resolve_path(Path(root)); original=state
     def result(action, errors=(), batch=None, eligible=(), round_id=1, blocked_ids=()):
@@ -129,7 +129,9 @@ def _evaluate_episode(state, root, check='status', requested=None):
             hard_barrier_ids={pid for pid,_ in barriers if not parallel_ordinary or
                 shot_by_id[pid].get('requires_state_review') or shot_by_id[pid].get('calibration_anchor') or
                 shot_by_id[pid].get('state_review_policy','user_required')=='user_required'}
+            needed_predecessors={d for p in panels for d in p.get('generation_dependencies',[])} | hard_barrier_ids
             for r in current:
+                if check=='prepare_batch' and r['panel_id'] not in needed_predecessors:continue
                 if r['panel_id'] in blocked:continue
                 if r.get('status') in DONE:
                     if r.get('round_id') not in (1,2) or not r.get('attempt_id'):return result('ROUND_HOLD',['合格图缺准确尝试/轮次'],batch)
@@ -168,9 +170,9 @@ def _evaluate_episode(state, root, check='status', requested=None):
                 for p in panels:
                     if p['panel_id'] not in blocked and set(p.get('generation_dependencies',[])).intersection(blocked):blocked.add(p['panel_id']);changed=True
             if (state.get('runtime',{}).get('dispatch_policy')=='episode_slot_lease_v1'
-                    and 'parallel_context' not in state and check not in {'candidate_batch','input_audit_batch'}):
+                    and 'parallel_context' not in state and check not in {'candidate_batch','input_audit_batch','prepare_batch'}):
                 return result('WAIT_CAPACITY_ASSIGNMENT',['租约模式尚未绑定真实调度上下文'],batch)
-            if 'parallel_context' in state:
+            if 'parallel_context' in state and check != 'prepare_batch':
                 from parallel_dispatch import context_errors
                 errors=context_errors(state['parallel_context'],root,book,episode)
                 if errors:return result('PARALLEL_HOLD',errors,batch)
@@ -220,6 +222,12 @@ def _evaluate_episode(state, root, check='status', requested=None):
             eligible = [r['panel_id'] for r in current if r['panel_id'] not in blocked and r.get('status') in {'PENDING', 'REPAIR_AUTHORIZED'}
                         and all(d in checked_ids for d in shot_by_id[r['panel_id']]['generation_dependencies'])
                         and (r.get('status') == 'PENDING' and r.get('round_id', 1) == 1 or r.get('status') == 'REPAIR_AUTHORIZED' and r.get('round_id') == 2 and not systemic)]
+            from stage_deadlines import repair_schedule
+            schedule=repair_schedule(original,root) if any(by_id[p].get('round_id')==2 for p in eligible) else None
+            if schedule:
+                eligible=[p for p in eligible if by_id[p].get('round_id')!=2 or
+                          (schedule['repair_budget_available'] and
+                           (not schedule['missing'] or p in schedule['required_dependency_repairs']))]
             active = any(r.get('status') == 'IN_FLIGHT' for r in current)
             round_id = 1
             if reserving:
@@ -284,8 +292,8 @@ def _evaluate_episode(state, root, check='status', requested=None):
                     def validate_inputs():
                         with review_context(state,root,check=='candidate_batch'):
                             issues=input_errors(state,root,record,shot_by_id[pid],basis,by_id,
-                                                candidate=check=='candidate_batch' or reserving,dispatch_audit=check=='input_audit_batch',
-                                                preparation_only=check in {'candidate_batch','input_audit_batch'})
+                                                candidate=check in {'candidate_batch','prepare_batch'} or reserving,dispatch_audit=check=='input_audit_batch',
+                                                preparation_only=check in {'candidate_batch','input_audit_batch','prepare_batch'})
                         if check!='candidate_batch' and not reserving:
                             from production_runtime import package_review_errors
                             issues.extend(package_review_errors(original,root,batch,record))
@@ -310,10 +318,13 @@ def _evaluate_episode(state, root, check='status', requested=None):
                     return result('INPUT_HOLD' if errors else 'READY_FOR_EPISODE_PANEL', errors, batch, eligible, local_round)
                 except (OSError, ValueError, TypeError, KeyError, AttributeError, IndexError) as exc:
                     return result('INPUT_EVIDENCE_HOLD', [str(exc)], batch, round_id=round_id)
-            if check in {'generate_batch', 'candidate_batch', 'input_audit_batch'} or reserving:
+            if check in {'generate_batch', 'candidate_batch', 'input_audit_batch', 'prepare_batch'} or reserving:
                 selection = eligible if requested is None or reserving else requested
                 if not isinstance(selection, list) or any(not isinstance(p, str) for p in selection) or len(selection) != len(set(selection)):
                     return result('SOURCE_EPISODE_HOLD', ['批量格号须为不重复清单'], batch)
+                if check == 'prepare_batch':
+                    from prepared_job_store import parallel_checks
+                    return parallel_checks(selection, eligible, original, state, root, batch, shot_by_id, basis, by_id, prepared_sink, workers)
                 from audit_progress import mark
                 inputs_started = time.perf_counter()
                 reports=[]; ready=[]; ready_observed={}

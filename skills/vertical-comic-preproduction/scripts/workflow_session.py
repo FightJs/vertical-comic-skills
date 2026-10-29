@@ -8,7 +8,8 @@ from validation_pool import ValidationPool,session
 from runtime_pipeline import POLICY,record,budget
 
 class WorkflowSession:
-    def __init__(self):self.pool=ValidationPool()
+    def __init__(self, active_context=None):
+        self.pool=ValidationPool();self.active_context=active_context;self.last_forecast=0
 
     def execute(self,request):
         if not isinstance(request,dict):raise ValueError('request must be an object')
@@ -17,7 +18,7 @@ class WorkflowSession:
         from stage_deadlines import checkpoint, enabled as speed_enabled
         initial = read_json(path)
         speed = speed_enabled(initial)
-        schedule=require_step(path,action,optional=request.get('optional',False) and not speed) if action not in {'commit','context-rebind-status'} else None
+        schedule=require_step(path,action,optional=request.get('optional',False) and not speed) if action not in {'commit','save-return','context-rebind-status'} else None
         if speed and (request.get('optional') or action == 'pilot-check'):
             from runtime_clock import execution_context
             context=execution_context(path)
@@ -30,7 +31,25 @@ class WorkflowSession:
         started=time.monotonic()
         # Final delivery always reruns the full existing gate in a fresh pool.
         with (strict_reads() if action=='final-check' else nullcontext()), session(None if action=='final-check' else self.pool), budget(path,enabled=bool(schedule) or action in {'compile','receiver-audit','preparation-review'}):
-            if action=='stage-check':
+            if action=='prepare-inputs':
+                from prepared_job_store import store
+                result=store(path).prepare(request.get('panels'),request.get('workers',4))
+            elif action=='claim-and-register':
+                from generation_host import check_write_scope
+                from runtime_pipeline import claim_and_register
+                check_write_scope(path,root)
+                result=claim_and_register(path,request['prepared_reference'])
+            elif action=='ready-inputs':
+                from prepared_job_store import store
+                current=store(path)
+                with current.lock:
+                    pending={r['panel_id']:r['attempt_id'] for r in initial['panels'] if r['status'] in {'PENDING','REPAIR_AUTHORIZED'}}
+                    result={'jobs':[current.ref(current.entries[k]) for p,k in current.ready.items() if pending.get(p)==current.entries[k]['attempt_id']],
+                            'preparing':current.preparing,'image_calls':0,'dispatch_authorized':False}
+            elif action=='runtime-forecast':
+                from stage_deadlines import forecast
+                result=forecast(request.get('states',[str(path)]),schedule or {})
+            elif action=='stage-check':
                 result={'status':'STAGE_BUDGET','stage_budget':checkpoint(path,request['phase'],request.get('panel_id'),state=initial),'image_calls':0,'dispatch_authorized':False}
             elif action=='context-rebind-plan':
                 from context_rebind import plan
@@ -48,6 +67,10 @@ class WorkflowSession:
                 else:
                     from no_image_recovery import recover
                     result=recover(path,request['expected_state'],request['recovery'])
+            elif action=='save-return':
+                from generation_host import save_return
+                result=save_return(path,request['job'],request['raw'],request['call_locator'],
+                    request['result_locator'],request.get('selected_index'),_context=self.active_context)
             elif action=='submit':
                 from production_runtime import submit
                 result=submit(path,request['job'])
@@ -83,17 +106,29 @@ class WorkflowSession:
         context=execution_context(path)
         if context and context.get('clock_required'):
             result['runtime_schedule']=status(context['clock_directory'])
+            if action in {'reserve','save-return'} and time.monotonic()-self.last_forecast>=30:
+                self.last_forecast=time.monotonic()
+                try:
+                    from stage_deadlines import forecast
+                    state_paths=[path]
+                    parallel=initial.get('parallel_context')
+                    if parallel:
+                        control=read_json(Path(parallel['control_file']))
+                        state_paths=[Path(j['root'])/j.get('state_file','00_输入审计/生产流程.json') for j in control['jobs']]
+                    result['completion_forecast']=forecast(state_paths,result['runtime_schedule'])
+                except (OSError,ValueError,KeyError,TypeError) as exc:
+                    result['forecast_unavailable']=str(exc)
         elapsed=time.monotonic()-started
         result['workflow_timing']={'action':action,'elapsed_seconds':elapsed,
                                    'validation_pool':dict(self.pool.statistics)}
         if action not in {'context-rebind-plan','context-rebind-status'} and request.get('record_timing',True) and read_json(path).get('runtime_pipeline_policy')==POLICY:
-            try:result['workflow_metric']=record(path,action,{'operation':elapsed},panel_ids=request.get('panels',[]))
+            try:result['workflow_metric']=record(path,action,{'operation':elapsed,**({'local_queue':max(0,started-request['_enqueued_monotonic'])} if '_enqueued_monotonic' in request else {})},panel_ids=request.get('panels',[]),operation_id=request.get('request_id'),parent_operation_id=None)
             except OSError as exc:result['timing_record_error']=str(exc)
         return result
 
 def pilot(state,root,request):
     """Inspect actual completed evidence; synthetic API tests cannot certify it."""
-    from batch_round import attempt_errors
+    from production_evidence import attempt_errors
     from production_decisions import selected
     rows={r['panel_id']:r for r in state['panels']};ids=request.get('panels')
     if not isinstance(ids,list) or not ids or any(p not in rows for p in ids):raise ValueError('pilot requires exact complex panel IDs')

@@ -10,6 +10,8 @@ EXCLUDED={'__pycache__','.git','.DS_Store'}
 def digest(p):return hashlib.sha256(p.read_bytes()).hexdigest()
 
 def export(skills_root,memory_root):
+    from sync_skills import check_production_routes
+    check_production_routes(skills_root)
     tracked=[]
     with tempfile.TemporaryDirectory(prefix='.export-',dir=ROOT) as tmp:
         stage=Path(tmp)

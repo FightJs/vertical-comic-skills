@@ -1,4 +1,5 @@
 """Portable rule routing and real gate integration in isolated synthetic workspaces."""
+import _historical_fixture
 import copy
 import json
 from pathlib import Path
@@ -11,8 +12,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 from codex_reference_contract import digest
 from rule_memory import LOADING_POLICY, loading_selection, select, load_selected, application_errors, binding_errors, review_template, source_index, routing_session, trigger_review, trigger_review_errors, inspection_plan
 from usage_config import read_config, memory_source, runtime_limits
-from batch_workflow import build_plan
-from staged_workflow import evaluate, qa_errors
+from historical_engines.batch_workflow import build_plan
+from staged_workflow import qa_errors
+from _historical_fixture import evaluate
 import test_staged_workflow as staged
 
 SCRIPTS = Path(__file__).resolve().parents[1] / 'scripts'
@@ -400,10 +402,10 @@ class ConfigTests(unittest.TestCase):
 
     def test_init_binds_sources_without_approving_or_overwriting(self):
         output=self.root/'out'
-        command=[sys.executable, '-X', 'utf8',str(SCRIPTS/'init_preproduction.py'),'--config',str(self.path),'--output',str(output),'--book','UNIT','--episode','E001','--batch-size','3']
+        command=[sys.executable, '-X', 'utf8',str(SCRIPTS/'init_preproduction.py'),'--config',str(self.path),'--output',str(output),'--book','UNIT','--episode','E001']
         result=subprocess.run(command,capture_output=True); self.assertEqual(result.returncode,0,result.stderr)
         state_path=output/'00_输入审计/生产流程.json'; state=json.loads(state_path.read_text(encoding='utf-8-sig'))
-        self.assertEqual(state['batch_size'],3); self.assertEqual(state['gates'],{})
+        self.assertEqual(state['execution_mode'],'episode_async_v1');self.assertNotIn('batch_size',state); self.assertEqual(state['gates'],{})
         for path in ['01_镜头改编_CANDIDATE/镜头改编表.json','04_B提示词包_CANDIDATE/全话提示词索引.json']:
             self.assertEqual(json.loads((output/path).read_text(encoding='utf-8-sig'))['memory_source'],state['memory_source'])
         before=state_path.read_bytes(); subprocess.run(command,check=True,capture_output=True); self.assertEqual(state_path.read_bytes(),before)

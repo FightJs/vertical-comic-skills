@@ -10,7 +10,7 @@ POLICY = 'confirmed_no_image_recovery_v1'
 OUTCOMES = {'NOT_INVOKED', 'REJECTED_NO_OUTPUT', 'FAILED_NO_OUTPUT', 'RESOLVED_NO_OUTPUT'}
 CLEAR = ('output','qa_report','call_evidence','failure_diagnosis','ready_at','submitted_at',
          'returned_at','save_started_at','saved_at','qa_completed_at','qa_recorded_at',
-         'timing_observations','quality_review','qa_revisions')
+         'timing_observations','quality_review','qa_revisions','prepared_registration_id')
 
 def put(root, folder, value):
     raw=(json.dumps(value,ensure_ascii=False,indent=2)+'\n').encode('utf-8')

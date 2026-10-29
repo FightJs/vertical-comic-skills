@@ -106,7 +106,7 @@ class ImmutableInputsTests(unittest.TestCase):
         self.assertFalse((self.f.root/'must-not-write').exists())
 
     def test_mode_change_cannot_reuse_the_snapshot_as_formal_permission(self):
-        from staged_workflow import evaluate
+        from _historical_fixture import evaluate
         ref = self.capture()
         with self.assertRaisesRegex(ValueError, 'mode/options changed'):
             with immutable.session(ref): evaluate(self.f.state, self.f.root, 'generate_batch', ['P001'])
@@ -130,7 +130,7 @@ class ImmutableInputsTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'TOOLCHAIN_CHANGED'): immutable.replay(ref)
 
     def test_external_publication_mutation_after_preflight_discards_replay(self):
-        from staged_workflow import evaluate
+        from _historical_fixture import evaluate
         ref = self.capture(); view = immutable.ReadView(ref)
         target = view.files[str(self.f.state_path)]
         ctx = multiprocessing.get_context('spawn'); go = ctx.Event(); done = ctx.Event()

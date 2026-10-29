@@ -24,4 +24,4 @@
 
 ## 旧包恢复
 
-索引policy=rehearsed_zip_handoff_v1的包仍按包内H001/H002与原冻结规则恢复，不自动改为整话窗口、不重签批准、不重置次数。旧half_episode_async_v1或batch5_v1任务使用原冻结入口。只有用户明确要求迁移时才在包外建立新候选并核对受影响批准；不得仅改policy或删halves冒充新版。
+旧包数据经[统一导入入口](execution-compatibility.md)保留原证据与原时钟，后续使用固定当前执行器。未支持的格式在接包阶段明确诊断，不执行旧代码或现场复制补丁。

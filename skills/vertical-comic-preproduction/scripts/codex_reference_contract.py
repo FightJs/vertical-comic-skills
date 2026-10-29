@@ -170,7 +170,8 @@ def read_bytes(path):
         return physical_file(path).read_bytes()
     digest(Path(path))
     try:
-        data = physical_file(path).read_bytes()
+        data = _FILE_SESSION.get()['bytes'].get(str(resolve_path(path)))
+        if data is None: data = physical_file(path).read_bytes()
         digest(Path(path))  # Recheck the same file stamp after this physical read.
     except OSError:
         _changed(f'{path}; file read failed after validation')
@@ -181,14 +182,7 @@ def read_bytes(path):
 def read_text(path, encoding=None, errors=None):
     if _valid() is None:
         return physical_file(path).read_text(encoding=encoding, errors=errors)
-    digest(Path(path))
-    try:
-        value = physical_file(path).read_text(encoding=encoding, errors=errors)
-        digest(Path(path))
-        _FILE_SESSION.get()['content_read_bytes'] += physical_file(path).stat().st_size
-    except OSError:
-        _changed(f'{path}; text read failed after validation')
-    return value
+    return read_bytes(path).decode(encoding or 'utf-8', errors or 'strict').replace('\r\n', '\n').replace('\r', '\n')
 
 
 @contextmanager
@@ -199,7 +193,7 @@ def file_session():
         _valid()
         yield active
         return
-    memo = {"files": {}, "json": {}, "hash_reads": 0, "hash_hits": 0,"validations":{},"validation_runs":0,"validation_hits":0,
+    memo = {"files": {}, "json": {}, "bytes": {}, "hash_reads": 0, "hash_hits": 0,"validations":{},"validation_runs":0,"validation_hits":0,
             "readonly_json": {}, "derived": {}, "dependency_stack": [], "audit_statistics": {}, "paths": {},
             "validation_dependencies": {}, "hash_bytes": 0, "json_parses": 0, "json_hits": 0,
             "policy": READ_POLICY, "observations": {}, "invalidated": None,
@@ -269,14 +263,21 @@ def digest(path: Path) -> str:
         memo["hash_hits"] += 1
         return saved[1]
     try:
-        data = physical_file(path).read_bytes()
-        value = hashlib.sha256(data).hexdigest()
+        from validation_pool import _POOL
+        pool = _POOL.get()
+        if pool is not None and _READ_VIEW.get() is None:
+            acquired, value, data = pool.file_bytes(physical_file(path))
+            if acquired != stamp: _changed(path.name)
+        else:
+            data = physical_file(path).read_bytes()
+            value = hashlib.sha256(data).hexdigest()
         after = physical_file(path).stat()
     except OSError:
         _changed(f'{logical}; file changed during hashing')
     if stamp != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns):
         _changed(path.name)
     memo["files"][str(path)] = (stamp, value)
+    memo["bytes"][str(path)] = data
     memo["hash_reads"] += 1
     memo["hash_bytes"] += len(data)
     return value

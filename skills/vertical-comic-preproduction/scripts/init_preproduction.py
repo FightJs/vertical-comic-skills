@@ -40,10 +40,10 @@ def main() -> int:
     parser.add_argument("--memory-root", help="通用规则记忆库绝对路径")
     parser.add_argument("--memory-loading-policy", choices=("stage_baseline_loading_v1",), help="无配置的新库须显式绑定读取合同；旧库省略")
     parser.add_argument("--batch-size", type=int, choices=range(1, 6), default=None)
-    parser.add_argument("--execution-mode", choices=("episode_async_v1", "half_episode_async_v1", "batch5_v1", "sequential_v1"), default=None, help="新任务默认整话异步；旧任务不自动迁移")
-    parser.add_argument("--preparation-policy", choices=("episode_preparation_v1", "half_scoped_v1"), help="新整话模式使用全话准备一次；half_scoped_v1仅供旧半话兼容")
+    parser.add_argument("--execution-mode", choices=("episode_async_v1",), default=None, help="仅创建整话异步轻审核运行")
+    parser.add_argument("--preparation-policy", choices=("episode_preparation_v1",), help="全话准备一次")
     parser.add_argument("--speed-policy", choices=("bounded_stage_fallback_v1",), help="新轻审核运行的环节限时降级")
-    parser.add_argument("--image-review-profile", choices=("full", "light_story_review_v1"), default="full", help="低层兼容入口默认原审核；新任务短启动默认轻审核")
+    parser.add_argument("--image-review-profile", choices=("light_story_review_v1",), default="light_story_review_v1", help="统一每图一次快速观察")
     parser.add_argument("--backend", choices=("codex_builtin_imagegen",), default=None, help="预选Codex入口；能力证据仍需实际核实")
     args = parser.parse_args()
 
@@ -82,33 +82,21 @@ def main() -> int:
         memory_source = frozen_runtime['memory_source']
     if config and config.get('runtime',{}).get('snapshot_policy')=='batch_snapshot_v1' and not snapshot_ref:
         parser.error('本配置要求--runtime-snapshot；先为本批创建一次快照，所有话共用')
-    mode = args.execution_mode or (config["generation"].get("execution_mode", "batch5_v1") if config else "episode_async_v1")
+    mode = args.execution_mode or (config["generation"].get("execution_mode", "episode_async_v1") if config else "episode_async_v1")
+    if mode!='episode_async_v1':parser.error('RETIRED_EXECUTION_MODE: import historical data; new production is whole-episode only')
     if snapshot_ref and mode!='episode_async_v1':parser.error('运行快照只用于新整话RV，旧RV不得静默迁移')
-    if mode in {"episode_async_v1", "half_episode_async_v1"}:
-        if args.batch_size is not None: parser.error("整话/半话模式不设置固定batch-size")
-        extra = {"batch_strategy": "full_episode" if mode=="episode_async_v1" else "half_episode", "review_policy": config.get("review", {}) if config else {"systemic_failure_count_gt": 5, "max_auto_correction_rounds": 1}}
-        from batch_round import settings as validate_review
-        validate_review(extra)
-    else:
-        batch_size = args.batch_size or (config["generation"].get("batch_size", 5) if config else 5)
-        extra = {"batch_size": batch_size}
-    optimization=(config.get("optimization",{}).get("policy") if config else ("scoped_episode_review_v1" if mode=="episode_async_v1" else "scoped_half_review_v1")) if mode in {"episode_async_v1","half_episode_async_v1"} else None
-    if optimization:
-        preparation=args.preparation_policy or (config.get('preparation',{}).get('policy','half_scoped_v1') if config else 'episode_preparation_v1')
-        if mode=='episode_async_v1' and preparation!='episode_preparation_v1':parser.error('整话生产须全话准备一次')
-        if args.preparation_policy and config and args.preparation_policy!=config.get('preparation',{}).get('policy','half_scoped_v1'):
-            parser.error('preparation-policy与使用配置冲突')
-        extra.update(optimization_policy=optimization)
-        if config and config.get('optimization',{}).get('state_dispatch_policy'):
-            extra['state_dispatch_policy']=config['optimization']['state_dispatch_policy']
-        if preparation=='episode_preparation_v1':
-            extra.update(preparation_policy=preparation,semantic_audit=None)
-            from panel_readiness import POLICY as READINESS
-            readiness=config.get('readiness',{}).get('policy') if config else READINESS
-            if readiness:extra.update(readiness_policy=readiness)
-        else:
-            extra.update(half_inputs={},half_gates={})
-    execution=config.get('execution',{}).get('contract') if config else ('comic_execution_v2' if optimization else None)
+    if args.batch_size is not None:parser.error('RETIRED_BATCH_SIZE: whole-episode production has no batch-size')
+    extra = {"batch_strategy":"full_episode", "review_policy":(config or {}).get("review") or
+             {"systemic_failure_count_gt":5,"max_auto_correction_rounds":1}}
+    from production_evidence import settings as validate_review
+    validate_review(extra)
+    optimization="scoped_episode_review_v1"
+    preparation=args.preparation_policy or 'episode_preparation_v1'
+    extra.update(optimization_policy=optimization,preparation_policy=preparation,semantic_audit=None,
+                 readiness_policy='panel_readiness_v1')
+    if config and config.get('optimization',{}).get('state_dispatch_policy'):
+        extra['state_dispatch_policy']=config['optimization']['state_dispatch_policy']
+    execution=(config or {}).get('execution',{}).get('contract','comic_execution_v2')
     from frame_ratio_plan import POLICY as RATIO_POLICY
     ratio_policy=config.get('framing',{}).get('policy') if config else RATIO_POLICY
     if ratio_policy:extra.update(frame_ratio_policy=ratio_policy,frame_ratio_plan=None,requested_framing={'policy':ratio_policy})
@@ -117,7 +105,7 @@ def main() -> int:
         extra.update(execution_contract=execution,toolchain=toolchain(frozen_runtime['scripts'] if frozen_runtime else None),continuity_sources=[],episode_order=config['production']['episodes'] if config else [args.episode])
         if snapshot_ref:extra['runtime_snapshot']=snapshot_ref
         from production_runtime import DEFAULTS, EPISODE_DEFAULTS, settings as runtime_settings
-        default_runtime=EPISODE_DEFAULTS if mode=='episode_async_v1' else DEFAULTS
+        default_runtime=EPISODE_DEFAULTS
         runtime = dict(config.get('runtime', default_runtime)) if config else dict(default_runtime)
         extra.update(runtime=runtime_settings(runtime), generation_packages={})
     if mode == "episode_async_v1":
@@ -231,8 +219,8 @@ def main() -> int:
         "input_priority_policy": "physical_scene_priority_v1",
         **extra,
         "execution_mode": mode,
-        **({"batch_plan": None, "batch_reviews": {}} if mode in {"batch5_v1", "half_episode_async_v1", "episode_async_v1"} else {}),
-        **({"round_reviews": {}, "calibration_reviews": {}} if mode == "half_episode_async_v1" else {}),
+        "batch_plan": None, "batch_reviews": {},
+
         **({"repair_authorizations": {}, "episode_failure_diagnosis": {}} if mode == "episode_async_v1" else {}),
         "source_script": None, "source_snapshot": None, "visual_basis": None,
         "shot_manifest": None, "gates": {}, "production_authorization": None,

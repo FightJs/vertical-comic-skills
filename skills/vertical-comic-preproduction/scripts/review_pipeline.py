@@ -141,7 +141,7 @@ def save(state_path,expected_state,proposal):
             if not isinstance(diagnosis,dict):raise ValueError('QA_FIELD: failure_diagnosis requires observed layer and evidence')
             row['failure_diagnosis']={**diagnosis,'reviewer':proposal['reviewer']}
         else:row.pop('failure_diagnosis',None)
-        from batch_round import attempt_errors
+        from production_evidence import attempt_errors
         errors=attempt_errors(new,root,row)
         if errors:raise ValueError('QA_VALIDATION: '+';'.join(errors))
         pending=[]

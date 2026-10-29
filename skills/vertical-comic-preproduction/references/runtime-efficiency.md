@@ -8,9 +8,9 @@
 
 新运行优先按[第一批前期提速](preparation-efficiency.md)执行最小充分设计、代表格接线、单次B/包展示及问题分级处理。可选润饰不产生HOLD；真实缺口在现有委托内修复，局部问题只影响真实依赖，其他工作继续。正式输入与接包要求仍按原合同。
 
-新运行统一按[第一批生产决定](production-decisions.md)衔接审核、返修与交付：真实FAIL不改写，处理动作与交付结论分别记录；旧冻结合同不迁移。下文审核方法、源稿/批准/证据要求仍适用。
+新运行统一按[第一批生产决定](production-decisions.md)衔接审核、返修与交付：真实FAIL不改写，处理动作与交付结论分别记录；历史证据原样保留，后续生产经统一导入固定当前执行器。下文审核方法、源稿/批准/证据要求仍适用。
 
-当前新任务使用incremental_runtime_v2和[整话异步](episode-async.md)，没有固定半话C。旧incremental_runtime_v1恢复才读[旧半话运行](runtime-half-legacy.md)。
+旧包数据经[统一导入入口](execution-compatibility.md)保留原证据与原时钟，后续使用固定当前执行器。未支持的格式在接包阶段明确诊断，不执行旧代码或现场复制补丁。
 
 开批与恢复使用[批次运行](batch-runtime.md)；提问与批准使用[合并审查](grouped-review.md)。不另建同功能框架，不在生产中更新规则库或为每个单格开发专用检查器。
 
@@ -65,8 +65,8 @@ production_runtime.py编译现有逐格包，负责完整预检、审查队列�
 | 类型 | 范围与实现 |
 |---|---|
 | 全局条件 | `staged_workflow.py`核验任务身份，`execution_contract.py`核验合同、工具版本和全话画幅计划，`scoped_episode_workflow.py`检查取消、全局HOLD、完整源序、共享准备报告、未知状态及全话轮次/历史。`parallel_dispatch.py`和`slot_leases.py`核验调度与容量。这些检查覆盖被排除或尚未深检的后格。 |
-| 候选格条件 | 准备报告逐格归类设计缺口、批准筛选和源序/返修资格完成后，`batch_workflow.input_errors()`检查准确包、prompt、单格授权及轮次绑定；满足空闲槽数即停止后续候选深检。后格独立包问题不阻止前面的合格格。 |
-| 真实依赖条件 | `panel_readiness.py`完整传播设计/实图依赖和局部缺口；`scoped_episode_workflow.py`保留状态停点、已验收前格检查；`batch_workflow.py`绑定实际依赖图片；`continuity_context.py`核验所声明的完整前格上下文及必要相邻格。排除领取不等于前格已验收，不按领取数量截断上下文或依赖。 |
+| 候选格条件 | 准备报告逐格归类设计缺口、批准筛选和源序/返修资格完成后，`production_evidence.input_errors()`检查准确包、prompt、单格授权及轮次绑定；满足空闲槽数即停止后续候选深检。后格独立包问题不阻止前面的合格格。 |
+| 真实依赖条件 | `panel_readiness.py`完整传播设计/实图依赖和局部缺口；`scoped_episode_workflow.py`保留状态停点、已验收前格检查；`production_evidence.py`绑定实际依赖图片；`continuity_context.py`核验所声明的完整前格上下文及必要相邻格。排除领取不等于前格已验收，不按领取数量截断上下文或依赖。 |
 
 整话的`production_risks`格式错误属于本格设计缺口，在`panel_readiness.py`归类并传播至实际设计/实图依赖；独立的前格继续核验原批准后领取。缺少逐格准备合同的旧路径保留原风险门禁。共享报告错书话、缺格乱序、全局合同失效及第三轮/伪装历史仍阻止全部新增领取。返修沿用全话源序，回执绑定本格当前round/attempt；首轮失败证据与返修授权来源仍全量核验，共因诊断沿用原返修作用范围。局部范围修正不重新授予批准、不放宽输入门禁。
 
@@ -90,7 +90,7 @@ production_runtime.py编译现有逐格包，负责完整预检、审查队列�
 
 `dispatch_cli_probe.py --managed`通过真实managed CLI运行隔离夹具；稳定request_id幂等、回执唯一性、原批准输入和账本绑定继续单独检查。对照探针的普通模式，不能把合成小夹具锁缩短比例外推为实际整批速度。显式准入开销不计入每次领取；核验及观测包装的开销计入。
 
-第一批1A–1D按本节的完整CLI探针与观测口径验证；第二批按dispatch-consistency.md及managed探针验证。两批收益分开报告，未随本版本提供的历史基准报告不作为已发布证据，本地结果不替代三平台CI或正式Release。活动RV仍使用原冻结代码，不热更新。
+第一批1A–1D按本节的完整CLI探针与观测口径验证；第二批按dispatch-consistency.md及managed探针验证。两批收益分开报告，未随本版本提供的历史基准报告不作为已发布证据，本地结果不替代三平台CI或正式Release。正在执行的任务不热换代码；需要恢复时先对账并经过统一导入。
 
 
 总控任务记录、真实等待、收尾检查与中断恢复统一见[任务协调与恢复](task-recovery.md)。新运行最终交付使用task_coordination.py finish-check，不能以进度摘要、子任务口头完成或等待超时结束轮次。

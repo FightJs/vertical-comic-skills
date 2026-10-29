@@ -1,13 +1,15 @@
 """Independent synthetic lifecycle; no production files or real image calls."""
+import _historical_fixture
 import sys, tempfile, shutil, json, copy, subprocess, unittest
 from pathlib import Path
 BASE=Path(__file__).resolve().parents[1]
 sys.path[:0]=[str(BASE/'scripts'),str(BASE/'tests')]
 import test_staged_workflow as staged_fixtures
-from staged_workflow import evaluate,qa_errors
+from historical_engines.staged_workflow import qa_errors
+from _historical_fixture import evaluate
 from scoped_inputs import POLICY,build_plan,half_view
-from batch_round import template
-from batch_workflow import cross_episode_errors
+from historical_engines.batch_round import template
+from historical_engines.batch_workflow import cross_episode_errors
 from codex_reference_contract import digest,validate_panel
 from PIL import Image
 SCRIPT=BASE/'scripts'

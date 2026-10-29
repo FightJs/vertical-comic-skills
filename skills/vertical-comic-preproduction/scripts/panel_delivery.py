@@ -21,10 +21,10 @@ def build(state, root):
     light = light_enabled(state)
     from execution_contract import state_errors
     from task_context import state_errors as task_errors
-    from batch_workflow import completed_errors
+    from production_evidence import completed_errors
     from scoped_inputs import approval_for
     if state.get('cancelled'): raise ValueError('用户取消；不得自动继续导出')
-    from batch_round import settings
+    from production_evidence import settings
     settings(state)
     if not enabled(state):
         raise ValueError('旧冻结运行保持原交付合同')
@@ -37,7 +37,7 @@ def build(state, root):
     if ([r.get('panel_id') for r in records] != order or
             source.get('source_sha256') != state['source_script']['sha256']):
         raise ValueError('交接索引须完整保留真实源格序及源版本')
-    from batch_round import attempt_errors
+    from production_evidence import attempt_errors
     from episode_repair import repair_errors
     for row in records:
         if type(row.get('round_id')) is not int or row['round_id'] not in (1, 2):
@@ -147,7 +147,7 @@ def build(state, root):
                 incomplete.append('整话连续性FAIL尚未定位到本图问题或标明不受影响')
             if review_ref: refs.append(review_ref)
             if state.get('parallel_context'):
-                from batch_workflow import cross_episode_errors
+                from production_evidence import cross_episode_errors
                 if cross_episode_errors(state['parallel_context'], first_batch=True):
                     incomplete.append('必要跨话比较尚未闭合')
         result.update(attempt_id=attempt['attempt_id'], image=attempt['output'],

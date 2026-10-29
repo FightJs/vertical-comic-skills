@@ -1,4 +1,5 @@
 """Decision/delivery behavior using isolated actual files; no image-service calls."""
+import _historical_fixture
 import copy
 import json
 import sys
@@ -85,7 +86,7 @@ class FirstBatchTests(unittest.TestCase):
         return h,s,row,item,d
 
     def second_attempt(self,h,s,row,item,call_failed=True):
-        from batch_round import snapshot
+        from historical_engines.batch_round import snapshot
         from codex_reference_contract import read_json,checked_file
         from production_runtime import authorize_episode_repair
         d=decision(row,item,[issue(2)],'local_edit')
@@ -243,7 +244,7 @@ class FirstBatchTests(unittest.TestCase):
         self.assertEqual(production_questions(s,h.root,pending)['action'],'KEEP_PENDING')
 
     def test_local_user_decision_does_not_block_independent_real_gate(self):
-        from staged_workflow import evaluate
+        from _historical_fixture import evaluate
         h,s,r,it,d=self.fixture()
         d['issues'][0]['category']=2
         d.update(action='needs_user',question_kind='tradeoff',recommendation='保留主体，手部待人工决定')

@@ -28,7 +28,13 @@
     }
     return H.map(v=>(v>>>0).toString(16).padStart(8,'0')).join('');
   }
+  for (const key of ['acquireInvocation', 'releaseInvocation', 'onInvocationRequested'])
+    if (options[key] !== undefined && typeof options[key] !== 'function') throw new Error(key+' must be a function');
+  if (Boolean(options.acquireInvocation) !== Boolean(options.releaseInvocation)) throw new Error('Invocation acquire/release must be paired');
   const preparedMode = options.protocol === 'prepared_dispatch_v1';
+  const capacityPollMs=options.capacityPollMs ?? 1000;
+  if (!Number.isInteger(capacityPollMs) || capacityPollMs<100 || capacityPollMs>30000)
+    throw new Error('capacity poll must be 100..30000ms');
   if (preparedMode && typeof options.onPrepareInvoke !== 'function') throw new Error('onPrepareInvoke required');
   // Keep the exact checked input across the asynchronous registration boundary.
   const freeze = value => {
@@ -130,6 +136,16 @@
       reviewSignals.push(signal);
     }
   }
+  // Interleave episodes without changing the caller's result order or job identity.
+  const order = [];
+  const groups = new Map();
+  jobs.forEach((job,index) => {
+    const key=JSON.stringify([job.book_id,job.episode_id,job.job_id]);
+    if (!groups.has(key)) groups.set(key,[]);
+    groups.get(key).push(index);
+  });
+  while ([...groups.values()].some(q=>q.length))
+    for (const queue of groups.values()) if (queue.length) order.push(queue.shift());
   const results = Array(jobs.length);
   let cursor = 0, stop = false, serviceErrors = 0, persistence = Promise.resolve();
   // A timer observes counters only. It never races/cancels invoke, releases a
@@ -164,29 +180,63 @@
     const work=(saveLanes.get(key) ?? Promise.resolve()).then(action);
     saveLanes.set(key,work.catch(()=>{})); return work;
   }
+  const pendingRegistrations=new Set();
+  const maxPendingRegistrations=options.maxPendingRegistrations ?? 8;
+  if (!Number.isInteger(maxPendingRegistrations) || maxPendingRegistrations<1) throw new Error('positive maxPendingRegistrations required');
   let pulling=Promise.resolve(), ended=false;
   async function nextJob() {
     const work=pulling.then(async()=>{
       if (stop) return null;
-      if (cursor < jobs.length) { const index=cursor++; return {index,job:jobs[index]}; }
+      if (cursor < order.length) { const index=order[cursor++]; return {index,job:jobs[index]}; }
       if (!preparedMode || !options.nextPrepared || ended) return null;
       const value=await options.nextPrepared();
       if (value == null) { ended=true; return null; }
       const job=freeze(JSON.parse(JSON.stringify(value))), index=jobs.length;
-      jobs.push(job);cursor++;return {index,job};
+      jobs.push(job);return {index,job};
     }); pulling=work.catch(()=>{});return work;
   }
   async function worker() {
     while (!stop) {
+      while (pendingRegistrations.size>=maxPendingRegistrations) await Promise.race(pendingRegistrations);
       const next=await nextJob(); if (!next) break;
       const index=next.index; let job=next.job;
       let item = {job_id: job.job_id, kind: job.kind ?? 'panel', panel_id: job.panel_id, asset_id: job.asset_id, attempt_id: job.attempt_id, batch_id: job.batch_id, round_id: job.round_id, ...(job.ready_at ? {ready_at:job.ready_at} : {})};
+      let channel;
+      try {
+      async function releaseChannel() {
+        if (channel === undefined) return;
+        const lease=channel; channel=undefined;
+        await options.releaseInvocation(lease, job, item);
+      }
       {
         try {
+          // Backpressure BEFORE durable registration. This lease is a local
+          // transport lane, not evidence of remote rendering capacity.
+          if (options.acquireInvocation) {
+            channel=await options.acquireInvocation(job,()=>stop);
+            if (channel == null) {channel=undefined;item.status='CHANNEL_UNAVAILABLE';results[index]=item;continue;}
+          }
           let ack;
           if (preparedMode) {
             const expected = job;
-            const prepared = await options.onPrepareInvoke(expected);
+            let prepared = await options.onPrepareInvoke(expected);
+            if(prepared?.status==='REPAIR_DEFERRED'){
+              item.status='REPAIR_DEFERRED';results[index]=item;await releaseChannel();continue;
+            }
+            while (prepared?.status === 'CAPACITY_FULL' && !prepared?.ack && !stop) {
+              // Retain this exact unregistered reference, not a new attempt.
+              // Capacity waiting is not a service failure or image retry.
+              item.status='CAPACITY_WAIT';results[index]=item;await releaseChannel();
+              await new Promise(resolve=>setTimeout(resolve,capacityPollMs));
+              if (stop) break;
+              if (options.acquireInvocation) {
+                channel=await options.acquireInvocation(job,()=>stop);
+                if (channel==null) {channel=undefined;throw new Error('CAPACITY_CHANNEL_UNAVAILABLE');}
+              }
+              if (stop) break;
+              prepared=await options.onPrepareInvoke(expected);
+            }
+            if (stop && prepared?.status==='CAPACITY_FULL') {await releaseChannel();continue;}
             job = freeze(JSON.parse(JSON.stringify(prepared?.job ?? null)));
             ack = prepared?.ack;
             if (!job || job.candidate_only || job.input_audit_only || job.dispatch_authorized !== true ||
@@ -222,11 +272,25 @@
           seenRegistrations.add(ack.registration_id);
           item.registration_id = ack.registration_id;
         } catch (err) {
-          stop = true; item.status = 'NOT_DISPATCHED'; item.outcome_hint = 'CHECK_SUBMISSION_REGISTRATION';
+          // Only known pre-registration, panel-scoped failures may leave
+          // independent jobs running. Corrupt receipts and unknown errors stop.
+          const scoped = preparedMode && options.continueIndependent === true &&
+            /^(PREPARED_INPUT_CHANGED:|PREPARED_PACKAGE_CHANGED|PREPARED_ATTEMPT_CHANGED|PREPARED_DEPENDENCY_CHANGED:|PANEL_DISPATCH_HELD)/.test(String(err?.message ?? err));
+          if (!scoped) stop = true;
+          await releaseChannel();
+          item.status = 'NOT_DISPATCHED'; item.outcome_hint = 'CHECK_SUBMISSION_REGISTRATION';
           item.submission_error = errorData(err); results[index] = item; continue;
         }
       }
-      item.submitted_at = new Date().toISOString();
+      item.registered_at = new Date().toISOString();
+      item.submitted_at = item.registered_at; // Legacy field; not native start evidence.
+      try {
+        if (options.onInvocationRequested) await options.onInvocationRequested(job, item);
+      } catch (err) {
+        stop=true;item.status='NOT_DISPATCHED';item.outcome_hint='REGISTERED_NOT_INVOKED';
+        item.submission_error=errorData(err);results[index]=item;await releaseChannel();continue;
+      }
+      item.invocation_requested_at = new Date().toISOString();
       inFlight++; submittedCount++;
       const longRequestTimers = [];
       if (options.onLongRequest) {
@@ -242,7 +306,7 @@
         }
       }
       try {
-        item.result = await invoke(job); item.transport_status = 'FULFILLED'; item.status = 'FULFILLED';
+        item.result = await invoke(job, channel, item); item.transport_status = 'FULFILLED'; item.status = 'FULFILLED';
         item.outcome_hint = item.result === undefined ? 'NO_RESULT_CAPTURED' : 'INSPECT_REAL_OUTPUT';
         if (item.result?.isError === true) {
           item.status = 'REJECTED';
@@ -252,17 +316,35 @@
       catch (err) { item.transport_status = 'REJECTED'; item.status = 'REJECTED'; classify(item, err); }
       inFlight--; returned++;
       for (const timer of longRequestTimers) clearTimeout(timer);
-      if (item.service_error) { serviceErrors++; if (serviceErrors >= serviceLimit) { stop = true; item.dispatch_stop_reason = 'SERVICE_ERROR_CIRCUIT'; } }
-      else if (item.status === 'FULFILLED' && item.result !== undefined) serviceErrors = 0;
       item.returned_at = new Date().toISOString();
       results[index] = item;
       // Single-writer persistence, without serializing the image calls themselves.
-      const save = persistFor(job, () => { item.save_started_at = new Date().toISOString(); return onResult(job, item); });
+      const capture = () => { item.save_started_at = new Date().toISOString(); return onResult(job, item); };
+      const save = preparedMode && options.concurrentCapture ? capture() : persistFor(job,capture);
       persistence = save.catch(() => {});
       try {
         await save;
+        // Only a durable, formally settled network failure is isolated per panel.
+        // Unknown transport outcomes still trip the shared service circuit.
+        const settledNetwork = preparedMode && item.confirmed_no_output === true &&
+          /network error|error sending request|econnreset|econnrefused|enotfound/i.test(item.reason || '');
+        if (item.service_error && !settledNetwork) {
+          serviceErrors++;
+          if (serviceErrors >= serviceLimit) { stop = true; item.dispatch_stop_reason = 'SERVICE_ERROR_CIRCUIT'; }
+        } else if (settledNetwork || (item.status === 'FULFILLED' && item.result !== undefined)) serviceErrors = 0;
         item.saved_at = new Date().toISOString();
         persisted++;
+        if (item.registration_pending) {
+          // The durable receipt is the boundary: free the image channel while
+          // the owner serializes registration. A single panel error stays local.
+          await releaseChannel();
+          const registration=Promise.resolve(item.registration_pending).then(()=>{
+            item.registered_return_at=new Date().toISOString();
+            if (item.status==='FULFILLED' && item.output_saved) notifyReview(job,item);
+          }).catch(err=>{item.registration_error=errorData(err);item.outcome_hint='REPLAY_CAPTURED_RETURN';});
+          pendingRegistrations.add(registration);
+          registration.finally(()=>pendingRegistrations.delete(registration));
+        }
         if (options.onPersisted) {
           // Persist final save timing in the same single-writer lane. This hook
           // records metadata only; no retry and no visual verdict is implied.
@@ -291,17 +373,25 @@
             item.input_head_refresh_error_detail = errorData(err);
           }
         }
-        if (item.status === 'FULFILLED' && item.result !== undefined && item.output_saved !== false) {
+        if (!item.registration_pending && item.status === 'FULFILLED' && item.result !== undefined && item.output_saved !== false) {
           // Signal persisted outputs now, without holding an image-call slot during review.
           notifyReview(job, item);
         }
       }
       catch (err) { stop = true; item.persistence_error = String(err); item.persistence_error_detail = errorData(err); }
+      finally {
+        try { await releaseChannel(); }
+        catch (err) {stop=true;item.channel_release_error=errorData(err);}
+      }
+      } finally {
+        if (options.onJobSettled) await options.onJobSettled(job,item,{stopped:stop});
+      }
     }
   }
   const workers = await Promise.allSettled(Array.from({length: (preparedMode && options.nextPrepared ? limit : Math.min(limit, jobs.length))}, () => worker()));
   const workerErrors = workers.filter(x => x.status === 'rejected').map(x => errorData(x.reason));
   await persistence;
+  await Promise.allSettled([...pendingRegistrations]);
   flushReview();
   await Promise.allSettled(reviewSignals);
   if (progressTimer !== undefined) clearTimeout(progressTimer);

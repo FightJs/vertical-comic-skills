@@ -1,6 +1,9 @@
 # 合并审查与准确授权
 
-**新任务四小时交包优先**：执行[限时交付合同](runtime-clock.md)。下文整包演练、全部审核/最终D通过才交付、等待所有任务收敛等要求仅保留为旧协议或明确要求完整认证的路径；新任务默认复用已审输入、逐格编译，以全部源格完整且四小时内交包作为唯一成功条件。恢复快照不算完成，不把未审或未完成改成PASS。
+新速度优先前期采用 `exception_preparation_v2`：普通格完成创作后直接技术核验与输入采用，不执行下文旧策略的逐格观察、B/完整prompt独立复审。具体风险一次处理，用户明确保留的批准点仍按范围执行。入口及记录见[前期提速](preparation-efficiency.md#新任务异常审查普通格不设独立审核工序)。旧冻结证据保持原含义。
+
+
+**新任务四小时交包优先**：执行[限时交付合同](runtime-clock.md)。下文整包演练、全部审核/最终D通过才交付、等待所有任务收敛等要求仅保留为旧协议或明确要求完整认证的路径；新任务默认复用已审输入、逐格编译，以全部源格完整交包为完成条件，争取四小时内交齐，七小时有效运行硬停。恢复快照不算完成，不把未审或未完成改成PASS。
 
 新运行的主表、增量派生、共用规则/图集复用与少冻结执行见[第二批草稿提速](draft-authoring.md)。派生文件不授予批准或生产权限。
 
@@ -104,3 +107,5 @@ review_policy.py对同一已保存proposal可用--selection、--authority、--re
 technical_operations须在委托operations内且保留具体constraints。additional_repair须逐格绑定已明确获准的additional_attempt_ids，proposal/proof的attempt_ids保留准确次数与新编号；记录本身不创建attempt、不重置自动次数，也不绕过原追加执行门禁。旧版已冻结流程不因新proof格式自动升级。
 
 最终B/包合并提交前须有[最终输入逐格审查](final-input-semantics.md)。执行者的REVIEWED是审查证据，不是用户APPROVED。差异明确区分画面变更、引用同步和正常实图补齐；仅真正变化与保留亲审范围请求决定，未变化依据复用适用原批准。
+
+网络错误确认无图的有限重试与缺格交付，统一按[网络重试封顶](submission-runtime.md#网络错误最多重试四次)执行。仅经验证的NETWORK_FAILED或CONTENT_REFUSED可计入已处置源格；真实图片数和QA数不补齐，普通缺图/UNKNOWN仍阻止完整交付。

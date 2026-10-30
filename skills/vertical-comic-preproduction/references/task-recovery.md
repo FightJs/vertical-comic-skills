@@ -24,7 +24,9 @@ python scripts/task_coordination.py finish-check --directory <协调目录> --re
 
 `resume`只读取，返回各任务、阻塞与下一步。恢复时必须先查询宿主现态，再登记observe；不能因为记录显示RUNNING就假定旧会话还活着，不能因为工具找不到就重发。确认旧写入者停止前不换owner。图像请求另按原生产账本处理UNKNOWN、占槽及预算，协调状态不取消远端请求。
 
-`finish-check`先核对全部已登记任务：必要任务须ACCEPTED；非必要任务也必须ACCEPTED或有证据确认STOPPED。随后调用原production_progress.complete实际验证ZIP及准确源范围，绑定ZIP哈希后返回READY_TO_DELIVER。失败则继续处理；READY_TO_DELIVER只表示可交付，不表示用户已收到。最终答复附真实ZIP。任一新事件清除旧收尾记录。新运行不能直接调用显示complete绕过协调检查，旧无协调目录运行保留原兼容路径。
+新minimal_panel_delivery_v1由lean_delivery.py自动完成：仅阻止明确未解决的阻塞项，复用本地交付验收回执，不追加任务接受证据或内容终审。
+
+旧合同的`finish-check`先核对全部已登记任务：必要任务须ACCEPTED；非必要任务也必须ACCEPTED或有证据确认STOPPED。随后调用原production_progress.complete实际验证ZIP及准确源范围，绑定ZIP哈希后返回READY_TO_DELIVER。失败则继续处理；READY_TO_DELIVER只表示可交付，不表示用户已收到。最终答复附真实ZIP。任一新事件清除旧收尾记录。新运行不能直接调用显示complete绕过协调检查，旧无协调目录运行保留原兼容路径。
 
 该检查无法发现未登记的agent，也不能从Python层阻止模型发送最终答复；总控必须登记完整任务清单并遵守收尾顺序。它不是生产写入锁，不保护未遵循协议的外部写入者。最终验收期间停止新增工作；必要的新工作登记后重做收尾。
 

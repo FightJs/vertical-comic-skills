@@ -69,7 +69,7 @@ Codex 没有独立负向词参数：将本格必要避免事项合并进最终 `
 
 ### 按叙事选择背景
 
-新narrative_background_v1按[背景模式](background-treatment.md)选择clear_limited、scene_flat、scene_softened或scene_outline；特殊获批景深沿用approved_depth_of_field。近景优先采用实景柔化，保留可辨识的场景大轮廓，先保证必显剧情与物理关系，不设配额。旧策略保留原clear_limited执行。
+新scene_background_required_v2按[背景模式](background-treatment.md)选择clear_limited、scene_softened或scene_outline，禁止scene_flat；特殊获批景深沿用approved_depth_of_field。近景优先采用实景柔化，保留可辨识的场景大轮廓，先保证必显剧情与物理关系，不设配额。旧策略保留原clear_limited执行。
 
 实际用visual_evidence.framing_execution_block编译，已在visual_execution_block中不重复追加。指定场景底色/光向、必要锚点、具体省略项与重点清晰对象；宽景参考不要求完整迁移全套家具和灯具。平涂不是散景或低清，空间事实不被省略。具体字段、反例及验收见共享模式文档。
 

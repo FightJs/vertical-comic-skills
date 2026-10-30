@@ -256,6 +256,11 @@ def observe_runtime(directory, state_path, action, result, *, expected_state=Non
 
 def refresh(directory, *, activity=None, next_action=None, wait_kind='NONE', stage=None, blockers=None):
     directory = Path(directory); task = read(directory/'task.json'); records = Records(); episodes = []
+    from delivery_contract import for_display
+    from lean_delivery import enabled,progress_snapshot
+    requirements,_=for_display(directory,task)
+    if requirements and enabled(requirements):
+        return progress_snapshot(directory,task,requirements,activity=activity,next_action=next_action,wait_kind=wait_kind)
     from codex_reference_contract import file_session
     with file_session():
         for sp in task['states']:
@@ -310,6 +315,16 @@ def refresh(directory, *, activity=None, next_action=None, wait_kind='NONE', sta
             if total:
                 snapshot['percent'] = math.floor(sum(task['weights'][k]*snapshot['stage_units'][k]/total for k in units))
                 snapshot['stage'] = next((k for k in units if snapshot['stage_units'][k] < total), 'delivery')
+            if delivered.get('content_refused_panel_ids'):
+                snapshot.update(percent=100,stage='delivery',completion_basis='AVAILABLE_IMAGES_WITH_AUTHORIZED_FAILURE_GAPS',
+                    content_refused_panel_ids=delivered['content_refused_panel_ids'],
+                    activity='已有图片与内容审核拒绝缺格说明已交付；并非全部图生成成功',next='查看缺格和原始错误')
+            if delivered.get('network_missing_panel_ids') and not delivered.get('content_refused_panel_ids'):
+                snapshot.update(percent=100,stage='delivery',
+                    completion_basis='AVAILABLE_IMAGES_WITH_AUTHORIZED_NETWORK_GAPS',
+                    network_missing_panel_ids=delivered['network_missing_panel_ids'],
+                    activity='已有图片与网络失败缺格清单已交付；并非全部图生成成功',
+                    next='查看成品包中的缺格及原始错误说明')
             snapshot['files'][delivered['zip']] = delivered['stat']
     deadline_path=directory/'deadline-delivered.json'
     if deadline_path.is_file():
@@ -317,6 +332,14 @@ def refresh(directory, *, activity=None, next_action=None, wait_kind='NONE', sta
         if delivered['states']=={p:fingerprint(read(p)) for p in task['states']} and all(stat(p)==v for p,v in delivered['dependencies'].items()):
             snapshot.update(percent=100,stage='delivery',completion_basis='FULL_SOURCE_SCOPE_WITH_RECORDED_QA',
                 activity='完整结果包已按时发布，原QA问题保留',next='交付已核实的完整ZIP')
+            if delivered.get('content_refused_panel_ids'):
+                snapshot.update(percent=100,stage='delivery',completion_basis='AVAILABLE_IMAGES_WITH_AUTHORIZED_FAILURE_GAPS',
+                    content_refused_panel_ids=delivered['content_refused_panel_ids'],
+                    activity='已有图片与内容审核拒绝缺格说明已交付；并非全部图生成成功',next='查看缺格和原始错误')
+            if delivered.get('network_missing_panel_ids') and not delivered.get('content_refused_panel_ids'):
+                snapshot.update(completion_basis='AVAILABLE_IMAGES_WITH_AUTHORIZED_NETWORK_GAPS',
+                    network_missing_panel_ids=delivered['network_missing_panel_ids'],
+                    activity='已有图片及网络错误缺格说明已交付；并非全部图生成成功',next='查看缺格清单')
             snapshot['files'].update(delivered['dependencies'])
         snapshot['files'][str(deadline_path)]=stat(deadline_path)
     meaningful = {k: snapshot[k] for k in ('stage_units','total','blockers')}
@@ -450,12 +473,16 @@ def finish_deadline(directory,receipt,report):
     from delivery_contract import reference
     paths=[str(Path(receipt).resolve()),report['archive']['path'],*task['states']]
     atomic_json(directory/'deadline-delivered.json',{'policy':'deadline_delivery_v1',
+        'network_missing_panel_ids':report.get('network_missing_panel_ids',[]),
+        'content_refused_panel_ids':report.get('content_refused_panel_ids',[]),
         'delivery_report':reference(receipt),'states':{p:fingerprint(read(p)) for p in task['states']},
         'dependencies':{p:stat(p) for p in paths}})
     return refresh(directory)
 
 
 def complete_validated(directory,archive,task,requirements,identity,delivery_report):
+    from lean_delivery import enabled,finish
+    if enabled(requirements):return finish(directory,archive,task,requirements,identity,delivery_report)
     from delivery_contract import assert_completion,reference,checked,state_bindings,CONTRACT
     if not delivery_report:raise ValueError('DELIVERY_RECEIPT_HOLD:新任务必须提供完整交付验收记录')
     report=assert_completion(requirements,delivery_report,archive)
@@ -469,7 +496,9 @@ def complete_validated(directory,archive,task,requirements,identity,delivery_rep
     units={**baseline['stage_units'],'delivery':baseline['total'] or 0}
     if task['role']=='preparation':units['rehearsal']=baseline['total'] or 0
     total=baseline['total']
-    if not total or math.floor(sum(task['weights'][k]*units[k]/total for k in units))!=100:
+    network_gaps = report.get('content_validation',{}).get('network_missing_panel_ids',[])
+    content_gaps=report.get('content_validation',{}).get('content_refused_panel_ids',[])
+    if not total or (not (network_gaps or content_gaps) and math.floor(sum(task['weights'][k]*units[k]/total for k in units))!=100):
         raise ValueError('DELIVERY_CONTENT_HOLD:前序阶段未闭合，不能写完成记录')
     paths=[str(Path(delivery_report).resolve()),identity['path'],
            str(Path(identity['path']).parent/CONTRACT)]
@@ -480,6 +509,7 @@ def complete_validated(directory,archive,task,requirements,identity,delivery_rep
     if any(baseline['files'][p] is None for p in paths):raise ValueError('DELIVERY_CHANGED_HOLD:完成前交付依赖缺失')
     atomic_json(directory/'delivered.json',{'policy':requirements['policy'],'zip':str(archive),'stat':stat(archive),
         'delivery_report':reference(delivery_report),'artifacts':report['artifacts'],
+        'network_missing_panel_ids':network_gaps,'content_refused_panel_ids':content_gaps,
         'dependencies':baseline['files'],'states':{p:fingerprint(read(p)) for p in task['states']}})
     result=refresh(directory,activity='内容与实际发送ZIP容量均已验收',next_action='交付验收记录中的实际发送文件')
     if result['percent']!=100:

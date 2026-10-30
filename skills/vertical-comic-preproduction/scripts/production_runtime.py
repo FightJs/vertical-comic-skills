@@ -37,7 +37,7 @@ EPISODE_DEFAULTS = {**DEFAULTS, "policy": "incremental_runtime_v2",
 EPISODE_DEFAULTS.pop("half_review_dispatch")
 
 
-def prepare_jobs(state_path, panel_ids=None, *, workers=4):
+def prepare_jobs(state_path, panel_ids=None, *, workers='all'):
     from prepared_job_store import store
     return store(state_path).prepare(panel_ids,workers)
 
@@ -125,6 +125,8 @@ def _compile_jobs(state, root, panel_ids=None, *, candidate=False, input_audit=F
             packet = read_json(path)
             panel = packet["panels"][0]
             errors, submission = validate_panel(panel, path.parent)
+            from visual_evidence import production_background_errors
+            errors.extend(production_background_errors(panel,(submission or {}).get("arguments",{}).get("prompt")))
             if errors or submission is None:
                 raise ValueError(f"{pid}: " + ";".join(errors))
             arguments = submission["arguments"]
@@ -314,6 +316,11 @@ def package_signature(packet, package_root):
     if submission is None:
         raise ValueError("缺少可核对的实际输入")
     if packet.get('portability_policy') not in (None,'approved_relative_inputs_v1'):raise ValueError('未知参考路径批准合同')
+    return package_signature_from_submission(packet, package_root, submission)
+
+
+def package_signature_from_submission(packet, package_root, submission):
+    panel = packet['panels'][0]
     portable=packet.get('portability_policy')=='approved_relative_inputs_v1'
     return {**({'portability_policy':'approved_relative_inputs_v1','reference_path_basis':'package_root'} if portable else {}),**({"visual_evidence_policy":panel["visual_evidence_policy"],
                 "visual_evidence":panel.get("visual_evidence"),
@@ -343,6 +350,19 @@ def package_review_errors(state, root, batch, record):
             path = checked_file(Path(root), record["package_manifest"])
             issues = final_input_errors(state, root, shot, read_json(path), path.parent)
             if issues: return issues
+        path = checked_file(Path(root), record["package_manifest"])
+        return package_approval_errors(state, root, batch, record, package_signature(read_json(path), path.parent))
+    except (OSError, ValueError, TypeError, KeyError, StopIteration) as exc:
+        return [f"生图包批准核对失败:{exc}"]
+
+
+def package_approval_errors(state, root, batch, record, signature):
+    """Authority-only check for an already verified exact input signature."""
+    if state.get("runtime", {}).get("policy") not in {POLICY, "incremental_runtime_v2"} or record.get("round_id") != 1:
+        return []
+    from scoped_inputs import approval_for, half_view, full_preparation
+    from panel_readiness import enabled as scoped_preparation
+    try:
         view = half_view(state, batch["batch_id"])
         whole=full_preparation(state)
         source=read_json(checked_file(Path(root),state['source_snapshot'])) if whole else None
@@ -357,7 +377,7 @@ def package_review_errors(state, root, batch, record):
             elif bundle.get('batch_id') != batch['batch_id']:continue
             row = next((r for r in bundle.get("inputs", []) if r["panel_id"] == record["panel_id"]), None)
             path = checked_file(Path(root), record["package_manifest"])
-            if row != package_signature(read_json(path), path.parent) and not dependency_plan_matches(
+            if row != signature and not dependency_plan_matches(
                     bundle, state, root, batch, record, read_json(path), path.parent):
                 continue
             errors = approval_for(view, root, "generation_package",
@@ -367,6 +387,7 @@ def package_review_errors(state, root, batch, record):
         return ["缺少覆盖本格实际prompt/参考/版本的生图包用户批准"]
     except (OSError, ValueError, TypeError, KeyError, StopIteration) as exc:
         return [f"生图包批准核对失败:{exc}"]
+
 
 
 def dependency_plan_matches(bundle, state, root, batch, record, packet, package_root):
@@ -662,6 +683,8 @@ def _commit_updates(state_path, expected_sha256, updates, *, resolution_ref=None
             packet_path = checked_file(root,record['package_manifest'])
             packet = read_json(packet_path)
             errors, plan = validate_panel(packet['panels'][0],packet_path.parent)
+            from visual_evidence import production_background_errors
+            errors.extend(production_background_errors(packet['panels'][0],(plan or {}).get('arguments',{}).get('prompt')))
             if errors or plan is None: raise ValueError('SUBMISSION_HOLD: '+ ';'.join(errors))
             actual = panel_job(state,root,record,packet,plan['arguments'])
             validate_job(submission_job,actual)
@@ -869,7 +892,7 @@ def _authorize_episode_repair(state_path, expected_sha256, authorization_ref):
         if repair_input_issues:raise ValueError(';'.join(repair_input_issues))
         new=copy.deepcopy(state);target=next(r for r in new['panels'] if r['panel_id']==pid)
         old=copy.deepcopy(target)
-        for key in ('output','qa_report','call_evidence','failure_diagnosis','ready_at','submitted_at','returned_at','save_started_at','saved_at','qa_completed_at','qa_recorded_at','timing_observations','quality_review','qa_revisions','prepared_registration_id'):
+        for key in ('output','qa_report','call_evidence','failure_diagnosis','ready_at','submitted_at','returned_at','save_started_at','saved_at','qa_completed_at','qa_recorded_at','registered_at','invocation_requested_at','native_started_at','native_completed_at','invocation_events','timing_observations','quality_review','qa_revisions','prepared_registration_id'):
             target.pop(key,None)
         target.update(status='REPAIR_AUTHORIZED',round_id=2,attempt_id=attempt,
                       package_manifest=packet_ref,shot_subset=subset_ref,attempt_history=[old])

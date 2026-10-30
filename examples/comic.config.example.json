@@ -64,9 +64,9 @@
     "policy": "visual_evidence_v1"
   },
   "background": {
-    "policy": "narrative_background_v1",
+    "policy": "scene_background_required_v2",
     "selection": "content_driven",
-    "closeup_preference": "scene_flat"
+    "closeup_preference": "scene_softened"
   },
   "execution_quality": {
     "policy": "execution_quality_v1"

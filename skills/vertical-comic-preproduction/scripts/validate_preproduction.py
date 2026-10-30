@@ -237,6 +237,8 @@ class Gate:
             for key in required:
                 if panel.get(key) in (None, ""):
                     self.error(f"{label}:缺少{key}")
+            from visual_evidence import production_background_errors
+            self.errors.extend(f"{label}:{message}" for message in production_background_errors(panel))
             self.check_script_lock(panel, label)
             self.check_input_priority(panel, label, priority_required)
             self.check_framing(panel, label, framing_required)
@@ -374,6 +376,8 @@ class Gate:
             for key in ("panel_id", "script_shot_id", "station_id", "camera_view_id", "camera_view_signature", "visible_region", "view_check", "prompt", "negative_prompt", "script_lock_check", "locked_script", "visual_analysis"):
                 if panel.get(key) in (None, ""):
                     self.error(f"{label}:缺少{key}")
+            from visual_evidence import production_background_errors
+            self.errors.extend(f"{label}:{message}" for message in production_background_errors(panel))
             self.check_script_lock(panel, label)
             self.check_input_priority(panel, label, priority_required, prompt=True)
             self.check_framing(panel, label, framing_required)

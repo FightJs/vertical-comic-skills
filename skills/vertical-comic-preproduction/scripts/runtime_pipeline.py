@@ -146,6 +146,9 @@ def claim_and_register(state_path, prepared_reference):
     from slot_leases import ACTIVE,POLICY as LEASE
     path=Path(state_path).resolve();started=time.monotonic()
     initial=read_json(path);value=store(path).get(prepared_reference,initial)
+    from visual_evidence import production_background_errors
+    background_issues=production_background_errors(value['packet']['panels'][0],value['arguments'].get('prompt'))
+    if background_issues:raise ValueError(';'.join(background_issues))
     from authority_updates import authority_context
     from staged_workflow import approval_errors
     authorization=initial.get('production_authorization')
@@ -157,15 +160,20 @@ def claim_and_register(state_path, prepared_reference):
             issues.append('Panel outside production scope')
         if issues:raise ValueError('PRODUCTION_AUTHORITY_HOLD:'+str(issues))
     require_dispatch(path)
+    if value['round_id']==2:
+        from stage_deadlines import repair_schedule
+        schedule=repair_schedule(initial,path.parent.parent)
+        if schedule and (not schedule['repair_budget_available'] or schedule['missing'] and value['panel_id'] not in schedule['required_dependency_repairs']):
+            return {'status':'REPAIR_DEFERRED','image_calls':0,'dispatch_authorized':False}
     waiting=time.monotonic()
     with state_write_lock(path,force_shared=True):
         locked=time.monotonic();state=read_json(path)
         if state.get('parallel_context')!=initial.get('parallel_context'):raise ValueError('OWNER_CHANGED')
-        if state_basis(state)!=value['state_basis']:raise ValueError('PREPARED_INPUT_OR_AUTHORITY_CHANGED')
+        if state_basis(state)!=value.get('_current_guard',value)['state_basis']:raise ValueError('PREPARED_INPUT_OR_AUTHORITY_CHANGED')
         if state.get('cancelled'):raise ValueError('DISPATCH_HELD')
         from scoped_inputs import blocked_panels,generation_holds
         order=[r['panel_id'] for r in state['panels']]
-        blocked,_=blocked_panels(generation_holds(state),order,{'batch_id':'EPISODE','panel_ids':order},value['scheduling_rows'])
+        blocked,_=blocked_panels(generation_holds(state),order,{'batch_id':'EPISODE','panel_ids':order},value.get('_current_guard',value)['scheduling_rows'])
         if value['panel_id'] in blocked:raise ValueError('PANEL_DISPATCH_HELD')
         row=next(r for r in state['panels'] if r['panel_id']==value['panel_id'])
         if any(row.get(k)!=value[k] for k in ('attempt_id','round_id')):raise ValueError('PREPARED_ATTEMPT_CHANGED')
@@ -201,7 +209,7 @@ def claim_and_register(state_path, prepared_reference):
             if owner.get('active_batch_id')!='EPISODE' or not lease.get('lease_id'):raise ValueError('LEASE_MISSING')
             active=[p for p in state.get('dispatch_ledger',[]) if p['status'] in ACTIVE]
             if any(p.get('lease_id')!=lease['lease_id'] for p in active):raise ValueError('ACTIVE_OWNER_CHANGED')
-            if len(active)>=lease.get('slots',0):return {'status':'CAPACITY_FULL','image_calls':0,'dispatch_authorized':False}
+            if len(active)>=min(lease.get('slots',0),lease.get('dispatch_target',lease.get('slots',0))):return {'status':'CAPACITY_FULL','image_calls':0,'dispatch_authorized':False}
             receipt={**{k:context[k] for k in ('job_id','worker_id','epoch')},'lease_id':lease['lease_id'],
                      'permit_id':uuid.uuid4().hex,'batch_id':'EPISODE','round_id':row['round_id'],'attempt_id':row['attempt_id']}
         elif state.get('runtime',{}).get('dispatch_policy')==LEASE:raise ValueError('WAIT_CAPACITY_ASSIGNMENT')
@@ -218,6 +226,8 @@ def claim_and_register(state_path, prepared_reference):
         new=copy.deepcopy(state);current=next(r for r in new['panels'] if r['panel_id']==row['panel_id'])
         current['status']='IN_FLIGHT';current['submitted_at']=datetime.now(timezone.utc).isoformat()
         current['prepared_registration_id']=key
+        current['registered_at']=current['submitted_at']
+        if value.get('ready_at'):current['ready_at']=value['ready_at']
         if receipt:new.setdefault('dispatch_ledger',[]).append({**receipt,'panel_id':row['panel_id'],'status':'IN_FLIGHT'})
         new.setdefault('submission_registrations',{})[key]=entry
         atomic_json(path,new)
@@ -226,3 +236,64 @@ def claim_and_register(state_path, prepared_reference):
     result['timing']={'operation':time.monotonic()-started,'lock_wait':locked-waiting,'lock_hold':time.monotonic()-locked}
     record(path,'claim-and-register',result['timing'],panel_ids=[row['panel_id']],operation_id=key)
     return result
+
+
+def record_invocation_event(state_path, job, event):
+    """Persist observed execution separately from registration; never grants invoke."""
+    from generation_host import checked_job
+    from execution_timing import checked_invocation_event
+    path=Path(state_path).resolve()
+    with state_write_lock(path,force_shared=True):
+        state=read_json(path);root=path.parent.parent
+        row,_,_,_=checked_job(state,root,job)
+        value=checked_invocation_event(event)
+        field={'REQUESTED':'invocation_requested_at','STARTED':'native_started_at','RETURNED':'native_completed_at'}[value['kind']]
+        previous=row.get('invocation_events',{}).get(value['kind'])
+        if previous is not None:
+            if previous!=value:raise ValueError('INVOCATION_EVENT_CONFLICT')
+            return {'status':'INVOCATION_EVENT_RECORDED','invoke_allowed':False,'image_calls':0,'reused':True}
+        row.setdefault('invocation_events',{})[value['kind']]=value
+        row[field]=value['at']
+        atomic_json(path,state)
+    return {'status':'INVOCATION_EVENT_RECORDED','invoke_allowed':False,'image_calls':0,'reused':False}
+
+
+def settle_captured_return(state_path, job, capture_ref, receipt):
+    """Release only the exact registered service permit, never mark QA or output complete."""
+    from submission_contract import registration, job_binding, fingerprint
+    from codex_reference_contract import checked_file
+    from slot_leases import POLICY as LEASE
+    path=Path(state_path).resolve();root=path.parent.parent
+    checked_file(root,capture_ref)
+    if receipt.get('policy')!='observed_image_return_v1' or not receipt.get('outputs'):
+        raise ValueError('CAPTURE_RECEIPT_INVALID')
+    output=receipt['outputs'][receipt['selected_index']]['sha256']
+    key,_=registration(job)
+    with state_write_lock(path,force_shared=True):
+        state=read_json(path);entry=state.get('submission_registrations',{}).get(key)
+        if not entry or entry.get('job_digest')!=fingerprint(job_binding(job)):
+            raise ValueError('RETURN_REGISTRATION_MISMATCH')
+        row=next(r for r in state['panels'] if r['panel_id']==job['panel_id'])
+        if any(row.get(k)!=job.get(k) for k in ('attempt_id','round_id')):
+            raise ValueError('RETURN_ATTEMPT_CHANGED: original bytes preserved')
+        if any(state.get(k)!=job.get(k) for k in ('book_id','episode_id')):
+            raise ValueError('RETURN_SCOPE_CHANGED')
+        if row.get('status') not in {'IN_FLIGHT','GENERATED','VISUAL_PASS','VISUAL_FAIL'}:
+            raise ValueError('RETURN_RECONCILIATION_REQUIRED')
+        if state.get('runtime',{}).get('dispatch_policy')!=LEASE:
+            return {'status':'NO_SERVICE_LEASE','image_calls':0}
+        entries=[e for e in state.get('dispatch_ledger',[]) if e.get('panel_id')==job['panel_id']
+                 and e.get('attempt_id')==job['attempt_id'] and e.get('round_id')==job['round_id']
+                 and e.get('status')!='RELEASED']
+        if len(entries)!=1:raise ValueError('CAPTURE_LEASE_NOT_UNIQUE')
+        item=entries[0];permit=(job.get('dispatch_receipt') or {}).get('permit_id')
+        if not permit or item.get('permit_id')!=permit:raise ValueError('CAPTURE_LEASE_MISMATCH')
+        if item.get('status')=='COMPLETED':
+            if item.get('output_sha256')!=output:raise ValueError('CAPTURE_LEASE_CONFLICT')
+            return {'status':'SERVICE_SLOT_ALREADY_SETTLED','image_calls':0}
+        if item.get('status') not in {'IN_FLIGHT','RESULT_UNKNOWN'}:raise ValueError('CAPTURE_LEASE_STATUS_INVALID')
+        item.setdefault('events',[]).append({'from':item['status'],'to':'COMPLETED','at':datetime.now(timezone.utc).isoformat(),
+            'evidence_status':'RETURN_CAPTURED','capture':capture_ref})
+        item.update(status='COMPLETED',output_sha256=output,capture_receipt=capture_ref)
+        atomic_json(path,state)
+    return {'status':'SERVICE_SLOT_SETTLED','image_calls':0}

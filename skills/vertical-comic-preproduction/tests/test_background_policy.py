@@ -15,7 +15,7 @@ from test_visual_evidence import fixture, reviewed as original_reviewed
 BASE = Path(__file__).resolve().parents[1]
 
 
-def background_fixture(mode='scene_flat'):
+def background_fixture(mode='scene_softened'):
     basis, panel = fixture()
     basis['background_policy'] = panel['background_policy'] = BACKGROUND_POLICY
     basis['scene_background_profiles'] = {'hall-night': {
@@ -71,7 +71,7 @@ def actual_background_packet(test):
 
 class BackgroundPolicyTests(unittest.TestCase):
     def test_all_four_modes_and_legacy_depth_keep_original_invariants(self):
-        for mode in ('clear_limited','scene_flat','scene_softened','scene_outline','approved_depth_of_field'):
+        for mode in ('clear_limited','scene_softened','scene_outline','approved_depth_of_field'):
             with self.subTest(mode=mode):
                 b,p=background_fixture()
                 p['framing']['background_treatment']=mode
@@ -219,12 +219,12 @@ class BackgroundPolicyTests(unittest.TestCase):
         gate.check_shots({'panels':[p]})
         self.assertTrue(any('BACKGROUND_HOLD' in e for e in gate.errors))
 
-    def test_softened_default_and_explicit_legacy_preference_are_accepted(self):
+    def test_softened_default_is_accepted_and_flat_preference_rejected(self):
         config=json.loads((BASE/'assets/templates/默认使用配置.json').read_text(encoding='utf-8'))
         self.assertEqual(config['background']['closeup_preference'], 'scene_softened')
         self.assertEqual(background_config_errors(config['background']), [])
         legacy=dict(config['background'], closeup_preference='scene_flat')
-        self.assertEqual(background_config_errors(legacy), [])
+        self.assertTrue(background_config_errors(legacy))
         self.assertTrue(background_config_errors(dict(legacy, closeup_preference='unknown')))
         self.assertTrue(background_config_errors(dict(legacy, extra=True)))
 
@@ -250,7 +250,7 @@ class BackgroundPolicyTests(unittest.TestCase):
             self.assertEqual(state['gates'],{})
             self.assertEqual(state['panels'],[])
 
-    def test_config_free_new_run_opts_in_but_old_config_does_not(self):
+    def test_new_runs_require_scene_even_when_old_config_omits_background(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp)
             subprocess.run([sys.executable, '-X', 'utf8','-B',str(BASE/'scripts/init_preproduction.py'),'--book','SYNTHETIC','--episode','E000','--output',str(root/'fresh')],check=True,capture_output=True)
@@ -261,6 +261,7 @@ class BackgroundPolicyTests(unittest.TestCase):
             cp=root/'old-config.json';cp.write_text(json.dumps(config), encoding='utf-8', newline='\n')
             self.assertNotIn('background',read_config(cp))
             subprocess.run([sys.executable, '-X', 'utf8','-B',str(BASE/'scripts/init_preproduction.py'),'--config',str(cp),'--book','SYNTHETIC','--episode','E021','--output',str(root/'legacy')],check=True,capture_output=True)
-            self.assertNotIn('background_policy',json.loads((root/'legacy/00_输入审计/生产流程.json').read_text(encoding='utf-8-sig')))
+            self.assertEqual(json.loads((root/'legacy/00_输入审计/生产流程.json').read_text(encoding='utf-8-sig'))['background_policy'],BACKGROUND_POLICY)
+            self.assertNotIn('background',json.loads(cp.read_text()))
 
 if __name__=='__main__':unittest.main()

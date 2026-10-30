@@ -27,7 +27,7 @@ cancelled authority_policy authority_revision approval_revocations preparation_a
 parallel_context runtime_pipeline_policy source_input_policy local_execution_context
 execution_context runtime_execution_context source_adapter_policy context_rebind_history
 runtime_import half_gates half_inputs calibration_reviews active_input_scope'''.split())
-PROGRESS=frozenset('panels dispatch_ledger runtime_history delivery_materials qa_revision_history reservation_requests submission_registrations runtime_operations unknown_resolutions delivery_review delivery_review_history'.split())
+PROGRESS=frozenset('panels dispatch_ledger runtime_history delivery_materials qa_revision_history reservation_requests submission_registrations runtime_operations unknown_resolutions no_image_recoveries delivery_review delivery_review_history'.split())
 
 class SourceView(ReadOnlyDict):
     def _check(self,key):
@@ -80,7 +80,11 @@ def read(path):
         return c.read_json_readonly(Path(path))
     projected={k:freeze(data[k]) for k in sorted(FIELDS) if k in data}
     value=SourceView(projected)
-    fingerprint=hashlib.sha256(content_key(projected).encode('utf-8')).hexdigest()
+    # Imported QA verifies source order, never live statuses or newly added QA.
+    order=tuple(r.get('panel_id') for r in data.get('panels',[]))
+    object.__setattr__(value,'panel_order',order)
+    basis=[projected,order] if data.get('runtime_import') else projected
+    fingerprint=hashlib.sha256(content_key(basis).encode('utf-8')).hexdigest()
     c._observe('source_inputs',logical,fingerprint,(POLICY,))
     if old is not None:memo['source_progress_refreshes']=memo.get('source_progress_refreshes',0)+1
     records[token]={'target':name,'stamp':stamp,'value':value}

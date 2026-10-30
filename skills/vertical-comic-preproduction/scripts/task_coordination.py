@@ -165,15 +165,24 @@ def finish(directory, expected_revision, archive, *, delivery_report=None):
             from runtime_clock import event,release
             event(directory,'finish','full-deadline-delivery-finished');release(directory)
             return value['finish']
-        blockers = pending(value)
+        from delivery_contract import for_display
+        from lean_delivery import enabled
+        requirements,_=for_display(value['display'])
+        minimal=bool(requirements and enabled(requirements))
+        blockers = ([{'work_id':k,'reason':'OPEN_WORK_ITEM'} for k,v in value.get('work_items',{}).items() if v['blocks_delivery'] and v['status']!='RESOLVED'] if minimal else pending(value))
         if blockers: return {'status': 'CONTINUE_REQUIRED', 'blockers': blockers}
         # Real delivery validator remains authoritative; no caller-supplied PASS.
         from production_progress import complete
-        before = reference(archive)
+        if minimal:
+            if delivery_report is None:raise ValueError('LEAN_DELIVERY_RECEIPT_REQUIRED')
+            from delivery_contract import validate_receipt
+            receipt=validate_receipt(requirements,delivery_report)
+            before=next(a for a in receipt['artifacts'] if a['path']==str(Path(archive).resolve()))
+        else:before = reference(archive)
         kwargs={'_coordination_checked':True}
         if delivery_report is not None:kwargs['delivery_report']=delivery_report
         result = complete(value['display'], archive, **kwargs)
-        verify(before)
+        if not minimal:verify(before)
         if result['percent'] != 100: raise ValueError('交付尚未完成')
         value['revision'] += 1
         value['finish'] = {'status': 'READY_TO_DELIVER', 'archive': before,

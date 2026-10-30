@@ -389,6 +389,15 @@ def composition_errors(panel: dict[str, Any]) -> list[str]:
 
 
 def validate_panel(panel: dict[str, Any], root: Path, *, enforce_input_budget: bool = True) -> tuple[list[str], dict[str, Any] | None]:
+    """Reuse the exact compiled input within a verified read transaction."""
+    from audit_cache import derived,content_key
+    key=content_key([str(resolve_path(root)),panel,enforce_input_budget])
+    result=derived('compiled_panel',key,lambda:_validate_panel(panel,root,enforce_input_budget=enforce_input_budget),
+                   accept=lambda value:not value[0] and value[1] is not None)
+    return copy.deepcopy(result)
+
+
+def _validate_panel(panel: dict[str, Any], root: Path, *, enforce_input_budget: bool = True):
     """Verify package files and review-record consistency, not visual truth."""
     root = resolve_path(root)
     errors = composition_errors(panel)

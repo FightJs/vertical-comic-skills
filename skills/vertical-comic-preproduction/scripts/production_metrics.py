@@ -22,7 +22,7 @@ def union_seconds(windows):
 
 def _build(state_paths,*,native_events=None,verify_images=False,capacity=None):
     attempts={};panels={};warnings=[];sources=[];episodes=set();duplicates=0;diagnostics=Counter();windows=[];qa_windows=[];verified=set();declared=set();reads=[];conflicts=set()
-    timings={k:[] for k in ('ready_to_submit','submit_to_return','return_to_save','save_to_qa','save_to_qa_registration')}
+    timings={k:[] for k in ('ready_to_submit','submit_to_return','return_to_save','save_to_qa','save_to_qa_registration','ready_to_registration','registration_to_invocation','invocation_to_native_start','native_call_span','native_complete_to_save')}
     edit_reviews=[]
     production_actions=Counter();delivery_outcomes=Counter();issue_classes=Counter();decision_errors=[]
     def referenced(root,ref):
@@ -86,8 +86,12 @@ def _build(state_paths,*,native_events=None,verify_images=False,capacity=None):
                     pass
                 qa=instant(row.get('qa_completed_at'));saved=instant(row.get('saved_at'))
                 if qa is not None and saved is not None and qa>=saved:qa_windows.append(qa-saved)
-                stamps={'ready':instant(row.get('ready_at')),'submit':start,'return':end,'save':saved,'qa':qa,'qa_registered':instant(row.get('qa_recorded_at'))}
-                for phase,a,b in [('ready_to_submit','ready','submit'),('submit_to_return','submit','return'),('return_to_save','return','save'),('save_to_qa','save','qa'),('save_to_qa_registration','save','qa_registered')]:
+                stamps={'ready':instant(row.get('ready_at')),'submit':start,'return':end,'save':saved,'qa':qa,'qa_registered':instant(row.get('qa_recorded_at')),
+                        **{k:instant(row.get(k+'_at')) for k in ('registered','invocation_requested','native_started','native_completed')}}
+                for phase,a,b in [('ready_to_submit','ready','submit'),('submit_to_return','submit','return'),('return_to_save','return','save'),('save_to_qa','save','qa'),('save_to_qa_registration','save','qa_registered'),
+                    ('ready_to_registration','ready','registered'),('registration_to_invocation','registered','invocation_requested'),
+                    ('invocation_to_native_start','invocation_requested','native_started'),('native_call_span','native_started','native_completed'),
+                    ('native_complete_to_save','native_completed','save')]:
                     if stamps[a] is not None and stamps[b] is not None and stamps[b]>=stamps[a]:timings[phase].append((stamps[a],stamps[b]))
                 qpath=referenced(root,row.get('qa_report'))
                 if qpath and digest(qpath)==row['qa_report'].get('sha256'):
@@ -136,8 +140,8 @@ def _build(state_paths,*,native_events=None,verify_images=False,capacity=None):
         'diagnostic_mentions_not_disjoint_error_counts':dict(diagnostics),'native_terminal_events':terminal,
         'timing':{'complete_request_windows':len(windows),'request_window_seconds_sum_not_wall_time':sum(e-s for s,e in windows) if windows else None,'observed_span_capacity_utilisation':utilisation,'save_to_qa_seconds_sum_not_active_review_time':sum(qa_windows) if qa_windows else None,
                   'phase_windows':{k:{'samples':len(v),'sum_seconds_not_wall_time':sum(e-s for s,e in v) if v else None,'union_seconds':union_seconds(v) if v else None} for k,v in timings.items()},
-                  'timestamp_coverage':{key:sum(instant(row.get(key)) is not None for row in attempts.values()) for key in ('ready_at','submitted_at','returned_at','saved_at','qa_completed_at','qa_recorded_at')},
-                  'note':'各阶段并集分别报告，不相加冒充互斥总耗时；ready_at是实际观察就绪，qa_recorded_at是通过校验的QA登记时间，不冒充人工审图结束或主动工作时长；缺失保持未知。'},
+                  'timestamp_coverage':{key:sum(instant(row.get(key)) is not None for row in attempts.values()) for key in ('ready_at','submitted_at','returned_at','saved_at','qa_completed_at','qa_recorded_at','registered_at','invocation_requested_at','native_started_at','native_completed_at')},
+                  'note':'原生调用跨度包含宿主/传输/服务等待，不等于纯绘图时间；登记不等于原生开始。各阶段并集分别报告，不相加冒充互斥总耗时；ready_at是实际观察就绪，qa_recorded_at是通过校验的QA登记时间，不冒充人工审图结束或主动工作时长；缺失保持未知。'},
         'edit_regression':{'complete_structured_comparisons':len(edit_reviews),'regressed':sum(edit_reviews),'rate':sum(edit_reviews)/len(edit_reviews) if edit_reviews else None,'population':'有图像hash绑定QA且清晰度与保留区域均有明确结论的编辑结果'},
         'unavailable':['服务计费请求总量及原生事件与attempt的完整对应','用户最终批准数量（不能由VISUAL_PASS推导）','准备/人工/总控握手/依赖等待的互斥区间','局部编辑新增错误率（缺少前后错误分类时不推断）'],
         'first_batch_decisions':{'recorded_actions':dict(production_actions),

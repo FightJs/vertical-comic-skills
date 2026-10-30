@@ -19,6 +19,10 @@ def put(path, data):
         except FileExistsError:
             if path.is_symlink() or path.read_bytes()!=data:raise ValueError('RETURN_EVIDENCE_CONFLICT: '+str(path))
     finally:Path(tmp).unlink(missing_ok=True)
+    # Flush the published directory entry as well as the file contents.
+    fd=os.open(path.parent,os.O_RDONLY)
+    try:os.fsync(fd)
+    finally:os.close(fd)
 
 
 def hint_paths(text):
@@ -44,7 +48,11 @@ def persist(raw_path, destination, *, selected_index=None):
     raw=Path(raw_path).read_bytes();dest=Path(destination).resolve()
     put(dest/'raw-return.json',raw)
     obj=json.loads(raw.decode('utf-8-sig'))
-    blobs=[];local=[]
+    blobs=[];local=[];parsed={}
+    def inspect(data):
+        key=sha(data)
+        if key not in parsed:parsed[key]=_image(data)
+        return key,parsed[key]
     def walk(value):
         if isinstance(value,dict):
             for k,v in value.items():
@@ -53,7 +61,7 @@ def persist(raw_path, destination, *, selected_index=None):
                     head,body=v.split(',',1)
                     if head not in ('data:image/png;base64','data:image/jpeg;base64','data:image/webp;base64'):
                         raise ValueError('UNSUPPORTED_IMAGE_DATA_URL')
-                    data=base64.b64decode(body,validate=True);ext,_=_image(data)
+                    data=base64.b64decode(body,validate=True);_,(ext,_)=inspect(data)
                     if ext!={'data:image/png;base64':'.png','data:image/jpeg;base64':'.jpg','data:image/webp;base64':'.webp'}[head]:
                         raise ValueError('RETURN_MIME_MISMATCH')
                     blobs.append((data,'data_url'))
@@ -73,15 +81,15 @@ def persist(raw_path, destination, *, selected_index=None):
     for name in dict.fromkeys(local):
         path=Path(name)
         if path.is_absolute() and path.is_file():
-            data=path.read_bytes();_image(data);local_blobs.append((data,'local_path:'+str(path.resolve())))
+            data=path.read_bytes();local_blobs.append((data,'local_path:'+str(path.resolve())))
     # Both representations of a single image must agree, including all middle bytes.
-    if len(blobs)==1 and len(local_blobs)==1 and sha(blobs[0][0])!=sha(local_blobs[0][0]):
+    if len(blobs)==1 and len(local_blobs)==1 and inspect(blobs[0][0])[0]!=inspect(local_blobs[0][0])[0]:
         raise ValueError('RETURN_IMAGE_BYTES_MISMATCH: raw result retained; do not resend')
     unique={}
     for data,source in blobs+local_blobs:
-        key=sha(data)
+        key,(ext,size)=inspect(data)
         if key not in unique:
-            ext,size=_image(data);name='image-'+key+ext;put(dest/name,data)
+            name='image-'+key+ext;put(dest/name,data)
             unique[key]={'path':name,'sha256':key,'bytes':len(data),'size':size,'sources':[]}
         if source not in unique[key]['sources']:unique[key]['sources'].append(source)
     outputs=list(unique.values())

@@ -148,6 +148,22 @@ class LeaseTests(unittest.TestCase):
     def state(self):return json.loads(self.h.state_path.read_text(encoding='utf-8-sig'))
     def control(self):return json.loads(self.h.control_path.read_text(encoding='utf-8-sig'))
 
+    def test_resize_retains_live_unknown_identity_and_drains_target(self):
+        from slot_leases import resize
+        receipt=self.reserve()['reserved'][0]['receipt'];state=self.state()
+        state['dispatch_ledger'][0]['status']='RESULT_UNKNOWN'
+        self.h.state_path.write_text(json.dumps(state))
+        before=self.h.state_path.read_bytes()
+        grown=resize(self.h.state_path,2,expected_owner=state['parallel_context'])
+        self.assertEqual(grown['lease_id'],receipt['lease_id']);self.assertEqual(grown['slots'],2)
+        drained=resize(self.h.state_path,0)
+        self.assertEqual(drained['slots'],1);self.assertEqual(drained['target'],0)
+        self.assertEqual(before,self.h.state_path.read_bytes())
+        self.assertEqual(effective_control(self.control(),self.state(),state['parallel_context'])['permits'][0]['status'],'RESULT_UNKNOWN')
+        with self.assertRaisesRegex(ValueError,'OWNER_CHANGED'):resize(self.h.state_path,2,expected_owner={})
+        with self.assertRaisesRegex(ValueError,'CONTROL_CHANGED'):resize(self.h.state_path,2,expected_control='old')
+        self.assertEqual(resize(self.h.state_path,999)['target'],2)
+
     def test_local_reservation_never_writes_control_and_respects_slot(self):
         original=self.h.control_path.read_bytes();r=self.reserve();state=self.state()
         self.assertEqual(len(r['reserved']),1);self.assertEqual(self.h.control_path.read_bytes(),original)

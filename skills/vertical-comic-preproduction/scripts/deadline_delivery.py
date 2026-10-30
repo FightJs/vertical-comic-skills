@@ -148,6 +148,16 @@ def _export(identity,value,clock,output):
                         item['outcome']='INCOMPLETE';item['incomplete_reasons'].append('当前尝试未闭合；采用旧图不清除在途或待审记录')
                     if value['role']=='preparation':
                         item['incomplete_reasons'].append('前期材料交接；可执行性见原审查记录，未补造批准')
+                    if value['role']=='production' and not attempt and row.get('content_refusal_delivery'):
+                        from no_image_recovery import content_refusal,content_missing_summary
+                        exception=content_refusal(state,root,row)
+                        item.update(outcome='CONTENT_REFUSED',content_refusal=exception,
+                            incomplete_reasons=[content_missing_summary(exception)])
+                    if value['role']=='production' and not attempt and row.get('network_retry_exhausted'):
+                        from no_image_recovery import network_exhaustion, network_missing_summary
+                        exception=network_exhaustion(state,root,row)
+                        item.update(outcome='NETWORK_FAILED',network_failure=exception,
+                            incomplete_reasons=[network_missing_summary(exception)])
                     item['label']=LABELS[item['outcome']];rows.append(item)
                 index={'episode_id':eid,'book_id':scope[0],'panel_ids':order,'panels':rows,
                     'source_order_verified':source_verified,'image_review_profile':state.get('image_review_profile','full'),'counts':dict(Counter(r['outcome'] for r in rows))}
@@ -167,14 +177,17 @@ def _export(identity,value,clock,output):
                 'counts':dict(Counter(r['outcome'] for r in all_rows)),
                 'source_panel_count':len(all_rows),'image_count':sum(bool(r.get('delivered_image')) for r in all_rows),
                 'source_scope_complete':all(i['source_order_verified'] for i in indexes),
+                'images_complete':all(bool(r.get('delivered_image')) for r in all_rows),
+                'network_missing_panel_ids':[i['episode_id']+'-'+r['panel_id'] for i in indexes for r in i['panels'] if r['outcome']=='NETWORK_FAILED'],
+                'content_refused_panel_ids':[i['episode_id']+'-'+r['panel_id'] for i in indexes for r in i['panels'] if r['outcome']=='CONTENT_REFUSED'],
                 'missing_references':missing,'state_snapshots':snapshots,
-                'complete_scope':value['role']=='production' and bool(all_rows) and all(i['source_order_verified'] for i in indexes) and all(r.get('delivered_image') and r['outcome']!='INCOMPLETE' for r in all_rows),
+                'complete_scope':value['role']=='production' and bool(all_rows) and all(i['source_order_verified'] for i in indexes) and all((r.get('delivered_image') and r['outcome']!='INCOMPLETE') or r['outcome'] in {'NETWORK_FAILED','CONTENT_REFUSED'} for r in all_rows),
                 'all_usable':bool(all_rows) and all(r['outcome'] in {'DELIVERABLE','MANUAL_RETOUCH'} for r in all_rows),
                 'preparation_executable':False if value['role']=='preparation' else None,
                 'visual_qa_changed':False,'production_state_changed':False,'image_calls':0,
                 'deadline_due_wall':clock.get('delivery_due_wall'),'snapshot_started_wall':time.time()}
             obj('交付索引.json',summary)
-            data('请先读.txt',('只有完整范围且按时发布才算任务完成；缺项包仅为恢复材料，不是最终结果包。全部源格的去向见各话交付索引。\n'
+            data('请先读.txt',('全部源格须有明确去向且按时发布；经授权、达到网络重试上限的缺格可附说明交付，不代表全部图齐全。其他缺项包仅为恢复材料。详见各话交付索引。\n'
                 '原审核FAIL、未知请求、未审核和缺图保持原样；候选不表示可用。\n'
                 '前期材料若未完成正式发布，不是可直接生图的正式包。原地址及便携依据文件见依据路径映射.json。\n'
                 '未重复整话/跨话深验；按原审核记录使用，不据此生成新的批准。\n').encode('utf-8'))
@@ -182,6 +195,7 @@ def _export(identity,value,clock,output):
         # Writer already computes CRC. No second full-image read or deep QA at publication.
         with zipfile.ZipFile(path) as z:
             if len(z.infolist())!=len(members):raise ValueError('ZIP成员清单不完整')
+        # Metadata only; gap evidence was verified while constructing the index.
         if not summary['complete_scope']:
             archive=output/(('前期恢复材料_' if value['role']=='preparation' else '未完成恢复材料_')+token+'.zip')
         path.rename(archive)
@@ -215,16 +229,32 @@ def complete(identity, receipt, archive):
         summary=json.loads(z.read('交付索引.json'))
         if any(report.get(k)!=v for k,v in summary.items()) or not summary.get('complete_scope'):
             raise ValueError('FULL_RESULT_REQUIRED: 交付摘要与包内实际范围不符')
-        count=0
+        count=0;gaps=0
         for _,eid in value['scope']:
             index=json.loads(z.read(eid+'/交付索引.json'))
             if [r['panel_id'] for r in index['panels']]!=index['panel_ids']:
                 raise ValueError('FULL_RESULT_REQUIRED: 缺源格')
+            sp=next(p for p,s in zip(value['states'],value['scope']) if s[1]==eid)
+            state=read(sp);root=Path(sp).parent.parent
             for row in index['panels']:
+                if row['outcome']=='CONTENT_REFUSED':
+                    from no_image_recovery import content_refusal
+                    current=next(r for r in state['panels'] if r['panel_id']==row['panel_id'])
+                    exception=content_refusal(state,root,current)
+                    if not exception or row.get('content_refusal')!=exception or row.get('delivered_image'):
+                        raise ValueError('CONTENT_REFUSAL_NOT_PROVEN')
+                    count+=1;gaps+=1;continue
+                if row['outcome']=='NETWORK_FAILED':
+                    from no_image_recovery import network_exhaustion
+                    current=next(r for r in state['panels'] if r['panel_id']==row['panel_id'])
+                    exception=network_exhaustion(state,root,current)
+                    if not exception or row.get('network_failure')!=exception or row.get('delivered_image'):
+                        raise ValueError('NETWORK_EXHAUSTION_NOT_PROVEN')
+                    count+=1;gaps+=1;continue
                 if row['outcome']=='INCOMPLETE' or eid+'/'+row.get('delivered_image',{}).get('path','') not in z.namelist():
                     raise ValueError('FULL_RESULT_REQUIRED: 缺图或未审')
                 count+=1
-        if count!=report['source_panel_count'] or count!=report['image_count']:
+        if count!=report['source_panel_count'] or count-gaps!=report['image_count']:
             raise ValueError('FULL_RESULT_REQUIRED: 数量不符')
     return report
 

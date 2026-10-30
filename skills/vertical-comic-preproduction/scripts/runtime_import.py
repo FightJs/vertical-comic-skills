@@ -82,6 +82,8 @@ def apply_import(state_path, plan):
     if manifest.exists() and read(manifest)!=evidence:raise ValueError('IMPORT_RECEIPT_CONFLICT')
     if not manifest.exists():atomic_json(manifest,evidence)
     new[FIELD]=ref(manifest,root)
+    from lean_delivery import import_materials
+    import_materials(new,root)
     with state_write_lock(path):
         if sha(path)!=plan['state_sha256']:raise ValueError('IMPORT_SOURCE_CHANGED')
         atomic_json(path,new)
@@ -91,11 +93,13 @@ def apply_import(state_path, plan):
 def verify_binding(state,root):
     from codex_reference_contract import checked_file,read_json
     evidence=read_json(checked_file(root,state[FIELD]))
+    from source_input_contract import SourceView
+    order=list(state.panel_order) if isinstance(state,SourceView) else [r['panel_id'] for r in state['panels']]
     if (evidence.get('policy')!=POLICY or evidence['book_id']!=state['book_id'] or
         evidence['episode_id']!=state['episode_id'] or evidence['executor_toolchain']!=state.get('toolchain') or
         evidence['source_runtime_snapshot']!=state.get('runtime_snapshot') or
         evidence['clock_reference']!=state.get('runtime_execution_context') or
-        evidence['source_panel_ids']!=[r['panel_id'] for r in state['panels']]):raise ValueError('IMPORT_BINDING_CHANGED')
+        evidence['source_panel_ids']!=order):raise ValueError('IMPORT_BINDING_CHANGED')
     original=read_json(checked_file(root,evidence['source_state']))
     return evidence,original
 

@@ -85,6 +85,27 @@ class RecoveryTests(unittest.TestCase):
         f.request['evidence']=f.write('resolved.json',proof)
         self.assertEqual(recover(f.state_path,before,f.request)['status'],'NO_IMAGE_RETRY_READY')
 
+    def test_terminal_request_builder_preserves_restrictions_and_identity(self):
+        from no_image_recovery import prepare_request
+        f=self.fixture();state=read_json(f.state_path)
+        state['panels'][0]['prepared_registration_id']='synthetic-registration'
+        atomic_json(f.state_path,state)
+        terminal=read_json(checked_file(f.root,f.request['evidence']))
+        terminal['registration_id']='synthetic-registration'
+        terminal_ref=f.write('terminal.json',terminal)
+        request=prepare_request(f.state_path,'P001',terminal_ref,f.request['authorization'])
+        again=prepare_request(f.state_path,'P001',terminal_ref,f.request['authorization'])
+        self.assertEqual(request,again)
+        self.assertEqual(request['original_attempt_id'],state['panels'][0]['attempt_id'])
+        terminal['rejection_kind']='content_policy'
+        terminal_ref=f.write('restricted-terminal.json',terminal)
+        with self.assertRaisesRegex(ValueError,'CONTENT_RESTRICTION'):
+            prepare_request(f.state_path,'P001',terminal_ref,f.request['authorization'])
+        terminal.pop('rejection_kind');terminal['no_image_confirmed']=False
+        terminal_ref=f.write('unknown-terminal.json',terminal)
+        with self.assertRaisesRegex(ValueError,'NO_IMAGE_NOT_PROVEN'):
+            prepare_request(f.state_path,'P001',terminal_ref,f.request['authorization'])
+
     def test_output_or_changed_authority_never_retries(self):
         f=self.fixture();state=read_json(f.state_path);state['panels'][0]['output']={'path':'existing.png','sha256':'x'};atomic_json(f.state_path,state)
         with self.assertRaisesRegex(ValueError,'ONLY_CONFIRMED_NO_IMAGE'):recover(f.state_path,digest(f.state_path),f.request)

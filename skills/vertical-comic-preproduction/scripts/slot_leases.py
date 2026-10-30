@@ -72,6 +72,9 @@ def advance(state, pid, status, output=None):
     expected={'IN_FLIGHT':{'RESERVED'},'GENERATED':{'IN_FLIGHT','RESULT_UNKNOWN'},
               'RESULT_UNKNOWN':{'IN_FLIGHT'},'CALL_FAILED':{'IN_FLIGHT','RESULT_UNKNOWN'}}
     if status not in expected:return
+    if status=='GENERATED' and item.get('status')=='COMPLETED' and item.get('capture_receipt'):
+        if not output or item.get('output_sha256')!=output.get('sha256'):raise ValueError('LEASE_HOLD: 已保全图与登记输出不一致')
+        return
     if item.get('status') not in expected[status]:raise ValueError('LEASE_HOLD: 调度状态转换无效')
     target={'GENERATED':'COMPLETED','CALL_FAILED':'COMPLETED'}.get(status,status)
     item.setdefault('events',[]).append({'from':item['status'],'to':target,
@@ -180,6 +183,41 @@ def allocate(control_path, expected_sha256, allocations, *, old_writers_stopped=
             else:job.pop('slot_lease',None)
         _atomic_json(path,new)
     return {'status':'LEASES_ASSIGNED','control_sha256':digest(path),'image_calls':0}
+
+
+def resize(state_path, target, *, expected_owner=None, expected_control=None):
+    """Resize a current owner's scheduling target without replacing its lease.
+
+    Existing service/job ceilings remain authority. A lower target drains new
+    dispatch; IN_FLIGHT and RESULT_UNKNOWN retain their original slots/identity.
+    """
+    if type(target) is not int or target<0:raise ValueError('LEASE_TARGET_INVALID')
+    path=Path(state_path).resolve()
+    with state_write_lock(path,force_shared=True):
+        state=read_json(path);context=state.get('parallel_context')
+        if not context:return {'status':'LOCAL_CAPACITY','target':target}
+        if expected_owner is not None and context!=expected_owner:raise ValueError('OWNER_CHANGED')
+        control_path=Path(context['control_file']).resolve();control=read_json(control_path)
+        if expected_control is not None and digest(control_path)!=expected_control:raise ValueError('CONTROL_CHANGED')
+        effective_control(control,state,context)
+        if not enabled(control) or control.get('epoch')!=context.get('epoch'):raise ValueError('OWNER_CHANGED')
+        owner=next(j for j in control['jobs'] if j['job_id']==context['job_id'])
+        lease=owner.get('slot_lease')
+        if (not lease or owner.get('worker_id')!=context['worker_id'] or lease.get('worker_id')!=context['worker_id']
+            or owner.get('status') not in {'ASSIGNED','RUNNING'} or owner.get('active_batch_id')!='EPISODE'
+            or control.get('holds') or control.get('cancelled') or control.get('dispatch_pause') or owner.get('dispatch_pause')):
+            raise ValueError('LEASE_RESIZE_OWNER_OR_AUTHORITY_HELD')
+        active=sum(r.get('status') in ACTIVE for r in state.get('dispatch_ledger',[]))
+        others=sum(j.get('slot_lease',{}).get('slots',0) for j in control['jobs'] if j['job_id']!=owner['job_id'])
+        ceiling=min(owner['max_inflight'],control['max_inflight']-others)
+        desired=min(target,ceiling)
+        slots=max(1,active,desired)
+        if slots>ceiling:raise ValueError('ACTIVE_CAPACITY_CONFLICT')
+        if lease.get('dispatch_target',lease['slots'])!=desired or lease['slots']!=slots:
+            lease.update(slots=slots,dispatch_target=desired)
+            atomic_json(control_path,control)
+        return {'status':'LEASE_RESIZED','lease_id':lease['lease_id'],'target':desired,'slots':slots,'active':active,
+                'limiting_reason':'SERVICE_OR_JOB_CAPACITY' if desired<target else 'MACHINE_TARGET','image_calls':0}
 
 
 def release_unsubmitted(state_path, expected_sha256, panel_ids):

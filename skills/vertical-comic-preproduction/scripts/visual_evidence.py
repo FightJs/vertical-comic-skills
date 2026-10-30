@@ -9,12 +9,15 @@ import argparse
 import copy
 import hashlib
 import json
+import re
 from pathlib import Path
 
 POLICY = 'visual_evidence_v1'
 KINDS = {'space', 'presence', 'contact', 'hand', 'accessory', 'clarity'}
 VISIBILITY = {'visible', 'occluded', 'out_of_frame', 'off_scene', 'omitted_by_design'}
-BACKGROUND_POLICY = 'narrative_background_v1'
+LEGACY_BACKGROUND_POLICY = 'narrative_background_v1'
+BACKGROUND_POLICY = 'scene_background_required_v2'
+BACKGROUND_POLICIES = {LEGACY_BACKGROUND_POLICY, BACKGROUND_POLICY}
 SIMPLIFIED_BACKGROUNDS = {'scene_flat', 'scene_softened', 'scene_outline'}
 BACKGROUND_TREATMENTS = {'clear_limited', 'approved_depth_of_field'} | SIMPLIFIED_BACKGROUNDS
 BODY_CROP_LABELS = {'upper_thigh_up': '大腿上段以上', 'knees_up': '膝部以上', 'waist_up': '腰以上', 'chest_up': '胸以上',
@@ -74,7 +77,7 @@ def feasibility_errors(panel, check):
 
 def background_binding_errors(state, *documents):
     policy = state.get('background_policy')
-    if policy not in (None, BACKGROUND_POLICY):
+    if policy not in (None, *BACKGROUND_POLICIES):
         return ['BACKGROUND_HOLD:未知背景策略']
     errors = []
     if policy and state.get('visual_evidence_policy') != POLICY:
@@ -88,11 +91,38 @@ def background_binding_errors(state, *documents):
 def background_config_errors(value):
     if (not isinstance(value, dict)
             or set(value) != {'policy', 'selection', 'closeup_preference'}
-            or value.get('policy') != BACKGROUND_POLICY
+            or value.get('policy') not in BACKGROUND_POLICIES
             or value.get('selection') != 'content_driven'
-            or value.get('closeup_preference') not in {'scene_softened', 'scene_flat'}):
-        return ['背景配置须为narrative_background_v1/content_driven，近景偏好scene_softened（兼容旧scene_flat）']
+            or value.get('closeup_preference') != 'scene_softened'):
+        return ['背景配置须选择content_driven/scene_softened；新制作禁止scene_flat严重留白']
     return []
+
+
+def production_background_errors(panel, prompt=None):
+    """Cheap declaration gate for NEW work, never a pixel or history validator."""
+    errors = []
+    framing = panel.get('framing') or {}
+    if framing.get('background_treatment') == 'scene_flat':
+        errors.append('SCENE_BACKGROUND_REQUIRED: scene_flat停止新制作；按本机位改为保留场景结构的实景柔化，仅修订受影响格')
+    values = [prompt if prompt is not None else panel.get('prompt', ''),
+              framing.get('background_treatment_basis', '')]
+    plan = framing.get('background_plan') or {}
+    values += [r.get('expected', '') for r in plan.get('omit', []) if isinstance(r, dict)]
+    patterns = (
+        r'人物身后完整使用同色实色底|没有需要绘出的环境实体或结构线|不重建房间透视或任何未保留的物件轮廓',
+        r'(?:背景|人物身后).{0,12}(?:纯白底|全白|纯色底|纯色背景|同色平涂底|均匀实色|完全留白|全部留白|完全空白|无结构渐变)',
+        r'(?:省略|删除|清空)(?:全部|所有|整个)(?:背景|场景)|(?:完全|全部)(?:不绘制|不画|不绘出)(?:背景|场景)',
+        r'(?:背景|人物身后)(?:为|是|采用|使用|保持|呈现|完全|全部|：|:|\s){0,5}(?:纯白|纯白色|纯色|全白|空白|白底)(?:背景|底色|底)?$',
+        r'(?:blank|plain white|solid[ -]colou?r) background',
+    )
+    for value in values:
+        if not isinstance(value, str): continue
+        for clause in re.split(r'[。；;\n，,]', value):
+            if re.search(r'禁止|不得|不要|不能|避免|不允许|不应|不抹成|不可|不采用|不使用|不等于|not |never |no ', clause, re.I):
+                continue
+            if any(re.search(pattern, clause, re.I) for pattern in patterns):
+                errors.append('SCENE_BACKGROUND_REQUIRED: 输入仍要求清空场景：' + clause.strip()[:180])
+    return list(dict.fromkeys(errors))
 
 
 def background_plan_errors(panel, context=None):
@@ -103,6 +133,8 @@ def background_plan_errors(panel, context=None):
         return ['BACKGROUND_HOLD:新背景模式/计划须声明背景策略'] if (
             mode in SIMPLIFIED_BACKGROUNDS or 'background_plan' in framing) else []
     errors = background_binding_errors(panel)
+    if policy == BACKGROUND_POLICY:
+        errors.extend(production_background_errors(panel))
     if mode not in BACKGROUND_TREATMENTS:
         errors.append('BACKGROUND_HOLD:缺合法背景模式')
     plan = framing.get('background_plan')
@@ -181,6 +213,8 @@ def background_execution_lines(panel, context=None):
         permitted = '；'.join(r['expected'] for r in plan['retain'])
         lines.insert(1, '最终背景绘制范围：' + (permitted if permitted else '没有需要绘出的环境实体或结构线，人物身后完整使用同色实色底') + '。')
         lines.append('场景参考中未列为保留项的镜框、镜面反射、灯带、窗框和柜体均不出现在最终留白区域；原物理环境仍存在但本格不绘出。人物和必要动作物件继续完整绘制。')
+    if panel.get('background_policy') == BACKGROUND_POLICY:
+        lines.append('背景必须保留本机位可见、可辨识地点的场景结构；只简化纹理和非必要装饰，不做纯色底、白底或无结构渐变。不得扩大取景或添加画外家具。')
     return lines
 
 
@@ -222,7 +256,7 @@ def framing_execution_block(panel, context=None):
         f"视觉重点：{framing['focus']}；身体裁切：{BODY_CROP_LABELS[framing['body_crop']]}。",
         '必显信息：' + '；'.join(framing['required_visible']) + '。',
         f"本机位可见区域：{panel['visible_region']}。"]
-    if panel.get('background_policy') == BACKGROUND_POLICY:
+    if panel.get('background_policy') in BACKGROUND_POLICIES:
         lines.extend(background_execution_lines(panel, context))
         if framing['background_treatment'] == 'approved_depth_of_field':
             lines.append(framing['background_treatment_basis'])
@@ -277,7 +311,7 @@ def basis_errors(basis):
                 errors.append(f'{sid}:关系两端须为不同已登记实体')
             if not text(row.get('expected')) or row.get('reference_sha256') not in refs:
                 errors.append(f'{sid}:关系缺具体判据或批准参考来源')
-    if basis.get('background_policy') == BACKGROUND_POLICY:
+    if basis.get('background_policy') in BACKGROUND_POLICIES:
         profiles = basis.get('scene_background_profiles')
         if not isinstance(profiles, dict):
             errors.append('BACKGROUND_HOLD:基准scene_background_profiles须为对象')
@@ -303,7 +337,7 @@ def context_for(basis, panel):
     if layout and layout.get('scene_id', space) != panel.get('scene_id'):
         raise ValueError('布局不属于本格场景；酒店不同房间须绑定真实子空间')
     result = {'layout': copy.deepcopy(layout), 'details': copy.deepcopy(details)}
-    if panel.get('background_policy') == BACKGROUND_POLICY:
+    if panel.get('background_policy') in BACKGROUND_POLICIES:
         pid = panel['framing']['background_plan']['profile_id']
         result['background_profile'] = copy.deepcopy(basis['scene_background_profiles'][pid])
     from input_quality import context_for as quality_context
@@ -350,7 +384,7 @@ def panel_errors(panel, context=None, *, prompt=False):
         if row['status'] == 'omitted_by_design':
             plan = (panel.get('framing') or {}).get('background_plan') or {}
             omitted = {r.get('id') for r in plan.get('omit', []) if isinstance(r, dict)}
-            if panel.get('background_policy') != BACKGROUND_POLICY or entity not in omitted or entity in blocking:
+            if panel.get('background_policy') not in BACKGROUND_POLICIES or entity not in omitted or entity in blocking:
                 errors.append(f'{entity}:只有批准省略的环境实体可标omitted_by_design，人物不得消失')
         if entity in blocking and isinstance(blocking[entity], dict):
             departed = blocking[entity].get('presence') == 'off_scene'
@@ -509,7 +543,7 @@ def packet_errors(state, shot, panel, basis):
             view = context.get('scene_view')
             if view and not detail_carried(view, panel.get('reference_images', [])):
                 errors.append('INPUT_QUALITY_HOLD:本机位场景视图/选区未随实际调用携带')
-        if panel.get('background_policy') == BACKGROUND_POLICY:
+        if panel.get('background_policy') in BACKGROUND_POLICIES:
             profile = context['background_profile']
             if not detail_carried(profile, panel.get('reference_images', [])):
                 errors.append('BACKGROUND_HOLD:场景色调与空间参考未随实际调用携带')
@@ -569,14 +603,14 @@ def review_template(panel):
     result = {**appearance_review_template(panel),'policy': POLICY, 'expectations_sha256': fingerprint(ev),
             'context_sha256': fingerprint(panel.get('visual_evidence_context')),
             **({'background_sha256': fingerprint({'policy': panel['background_policy'], 'framing': panel['framing']})}
-               if panel.get('background_policy') == BACKGROUND_POLICY else {}),
+               if panel.get('background_policy') in BACKGROUND_POLICIES else {}),
             'full_image_review': {'status': 'UNREVIEWED', 'evidence': ''},
             **({'background_observation': {
                 'mode': panel['framing']['background_treatment'], 'image_sha256': None,
                 'observed': '', 'sharpness_observed': '',
                 'retained': {r['id']: '' for r in panel['framing']['background_plan']['retain']},
                 'omitted': {r['id']: '' for r in panel['framing']['background_plan']['omit']}}}
-               if panel.get('background_policy') == BACKGROUND_POLICY else {}),
+               if panel.get('background_policy') in BACKGROUND_POLICIES else {}),
             'observations': [{**copy.deepcopy(c), 'status': 'UNREVIEWED', 'reviewer': '',
                               'observed': '', 'view': None} for c in ev['checks']],
             'continuity_comparisons': [], 'detail_visibility_observations': {},
@@ -614,7 +648,7 @@ def review_errors(panel, item, *, require_pass=True, image_size=None):
         return errors + ['缺实际原图尺寸，无法核对原尺寸区域']
     for key in ('policy', 'expectations_sha256', 'context_sha256', *(['background_sha256'] if panel.get('background_policy') else [])):
         if actual.get(key) != expected[key]: errors.append('质量审查判据或基准版本已改变')
-    if panel.get('background_policy') == BACKGROUND_POLICY:
+    if panel.get('background_policy') in BACKGROUND_POLICIES:
         observed = actual.get('background_observation')
         plan = panel['framing']['background_plan']
         if (not isinstance(observed, dict) or

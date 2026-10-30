@@ -217,3 +217,49 @@ class StageDeadlineTests(unittest.TestCase):
         self.assertLess(priority(state,{'status':'PENDING'},[],None),priority(state,{'status':'REPAIR_AUTHORIZED'},[],None))
 
 if __name__=='__main__':unittest.main()
+
+class FourHourForecastTests(unittest.TestCase):
+    def test_risk_uses_four_hour_target_not_seven_hour_headroom(self):
+        import tempfile
+        from stage_deadlines import forecast
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);path=root/'state.json'
+            state={'episode_id':'E001','panels':[{'panel_id':f'P{i:03d}'} for i in range(10)]}
+            path.write_text(json.dumps(state))
+            context={'run_id':'synthetic','clock_directory':str(root)}
+            with patch('runtime_clock.execution_context',return_value=context):
+                forecast([path],{'active_seconds':0,'remaining_seconds':25200,'target_remaining_seconds':14400})
+                for row in state['panels'][:5]:row['output']={'sha256':'synthetic'}
+                path.write_text(json.dumps(state))
+                result=forecast([path],{'active_seconds':10000,'remaining_seconds':15200,'target_remaining_seconds':4400})
+            self.assertEqual(result['status'],'AT_RISK')
+            self.assertFalse(result['hard_stop_at_risk'])
+            self.assertFalse(result['stop_first_round'])
+
+    def test_overdue_target_accelerates_even_before_five_returns(self):
+        import tempfile
+        from stage_deadlines import forecast
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);path=root/'state.json'
+            path.write_text(json.dumps({'episode_id':'E001','panels':[{'panel_id':'P001'}]}))
+            with patch('runtime_clock.execution_context',return_value={'run_id':'synthetic','clock_directory':str(root)}):
+                result=forecast([path],{'active_seconds':14401,'remaining_seconds':10799,'target_remaining_seconds':0})
+            self.assertEqual(result['status'],'AT_RISK')
+            self.assertIn('prioritize_missing',result['actions'])
+            self.assertFalse(result['stop_first_round'])
+
+class SevereBlankFallbackTests(unittest.TestCase):
+    def test_expired_budget_saves_failure_without_adopting_blank_image(self):
+        h,path,row,proposal=StageDeadlineTests.fixture(self)
+        checkpoint(path,'repair','P001');self.now=481
+        proposal['verdict']='FAIL';proposal.pop('decision',None)
+        proposal['light_observations']={'single_observation':'SYNTHETIC identity visible; background is completely blank',
+            'issues':[{'location':'background','problem':'blank solid field without scene geometry',
+                'target':'visible scene contours','story_critical':True,'story_impact':'scene_background_missing'}]}
+        from review_pipeline import save
+        save(path,digest(path),proposal)
+        state=read_json(path);record=state['panels'][0]
+        self.assertEqual(record['status'],'VISUAL_FAIL')
+        self.assertFalse(record.get('adoption'))
+        qa=read_json(h.root/record['qa_report']['path'])
+        self.assertEqual(qa['panels'][0]['light_review']['status'],'FAIL')

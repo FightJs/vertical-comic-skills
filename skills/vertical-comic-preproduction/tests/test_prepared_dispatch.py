@@ -48,6 +48,47 @@ class PreparedDispatchTests(unittest.TestCase):
         self.assertEqual(saved['visual_review'],'UNREVIEWED')
         self.assertEqual(self.f.host('save-return',*args)['status'],'RETURN_ALREADY_SAVED')
         self.assertTrue(self.claim(refs[1])['ack']['invoke_allowed'])
+    def test_capture_crash_replays_original_without_new_call(self):
+        out=self.claim(self.prepare(('P001',))['jobs'][0]);jp=self.f.write(self.f.root/'capture-job.json',out['job'])
+        b=io.BytesIO();Image.new('RGB',(90,160),'white').save(b,format='PNG')
+        raw=self.f.write(self.f.root/'capture-raw.json',{'image_url':'data:image/png;base64,'+base64.b64encode(b.getvalue()).decode()})
+        cap=self.f.host('capture-return','--job',jp,'--raw-result',raw,'--call-locator','synthetic://call','--result-locator','synthetic://return')
+        self.assertEqual(cap['status'],'RETURN_CAPTURED')
+        self.assertEqual(json.loads(self.f.state_path.read_text())['panels'][0]['status'],'IN_FLIGHT')
+        raw.unlink() # A process restart must use the durable original, not the temporary input.
+        replay=self.f.host('recover-returns')
+        self.assertEqual(replay['image_calls'],0)
+        self.assertEqual(replay['results'][0]['visual_review'],'UNREVIEWED')
+        self.assertEqual(json.loads(self.f.state_path.read_text())['panels'][0]['status'],'GENERATED')
+        self.assertEqual(self.f.host('recover-returns')['results'],[])
+
+    def test_proven_technical_retry_reuses_compilation(self):
+        from codex_reference_contract import digest
+        ref=self.prepare(('P001',))['jobs'][0];out=self.claim(ref)
+        state=json.loads(self.f.state_path.read_text());row=state['panels'][0]
+        def evidence(name,value):
+            file=self.f.write(self.f.root/name,value)
+            return {'path':name,'sha256':digest(file)}
+        raw=evidence('retry-evidence-raw.json',{'kind':'synthetic-not-invoked'})
+        terminal=evidence('retry-terminal.json',{'book_id':state['book_id'],'episode_id':state['episode_id'],
+            'panel_id':'P001','attempt_id':row['attempt_id'],'round_id':row['round_id'],
+            'no_image_confirmed':True,'outcome':'NOT_INVOKED','source_kind':'observed_executor_outcome',
+            'source_locator':'synthetic://not-invoked','evidence':'synthetic terminal','evidence_files':[raw],
+            'invocation_started':False})
+        authorization=evidence('retry-authorization.json',{'source_kind':'user_message','source_locator':'synthetic://user',
+            'quote':'synthetic retry','book_id':state['book_id'],'episode_ids':[state['episode_id']],
+            'panel_ids':['P001'],'operations':['no_image_retry']})
+        request=self.f.write(self.f.root/'retry-request.json',{'request_id':'retry-one','panel_id':'P001',
+            'original_attempt_id':row['attempt_id'],'evidence':terminal,'authorization':authorization})
+        result=self.f.host('recover-no-image','--recovery-request',request,'--expected-state-sha256',digest(self.f.state_path))
+        self.assertEqual(result['status'],'NO_IMAGE_RETRY_READY')
+        new=self.prepare(('P001',))
+        self.assertEqual(new['reused_panel_ids'],['P001'],new)
+        self.assertEqual(new['statistics']['prepared'],0)
+        self.assertEqual(new['jobs'][0]['prepared_input_id'],ref['prepared_input_id'])
+        self.assertNotEqual(new['jobs'][0]['attempt_id'],ref['attempt_id'])
+        self.assertTrue(self.claim(new['jobs'][0])['ack']['invoke_allowed'])
+
     def test_forged_job_cannot_save(self):
         out=self.claim(self.prepare(('P001',))['jobs'][0]);job=out['job'];job['arguments']['prompt']+='changed'
         jp=self.f.write(self.f.root/'job.json',job)
@@ -75,8 +116,17 @@ class PreparedDispatchTests(unittest.TestCase):
         allocate(control_path,digest(control_path),{'job':1})
         refs=self.prepare()['jobs'];one=self.claim(refs[0]);self.assertTrue(one['ack']['invoke_allowed'])
         self.assertEqual(self.claim(refs[1])['status'],'CAPACITY_FULL')
+        job=self.f.write(self.f.root/'lease-capture-job.json',one['job'])
+        stream=io.BytesIO();Image.new('RGB',(90,160),'white').save(stream,format='PNG')
+        raw=self.f.write(self.f.root/'lease-return.json',{'image_url':'data:image/png;base64,'+base64.b64encode(stream.getvalue()).decode()})
+        captured=self.f.host('capture-return','--job',job,'--raw-result',raw,'--call-locator','synthetic://call','--result-locator','synthetic://return')
+        self.assertEqual(captured['service_settlement']['status'],'SERVICE_SLOT_SETTLED')
+        state=json.loads(self.f.state_path.read_text());self.assertEqual(state['panels'][0]['status'],'IN_FLIGHT')
+        self.assertTrue(self.claim(refs[1])['ack']['invoke_allowed'])
+        capref=self.f.write(self.f.root/'lease-capture-ref.json',captured['capture'])
+        self.assertEqual(self.f.host('register-return','--capture',capref)['visual_review'],'UNREVIEWED')
         control=json.loads(control_path.read_text());control['jobs'][0]['worker_id']='another';atomic_json(control_path,control)
-        self.claim(refs[1],ok=False)
+        self.assertFalse(self.claim(refs[1])['ack']['invoke_allowed'])
 
     def test_new_claim_never_runs_full_preflight(self):
         # The subprocess instrumentation fails if the new dispatch re-enters any whole gate.
@@ -96,5 +146,58 @@ print(json.dumps(claim_and_register(path,json.loads(Path(sys.argv[3]).read_text(
 """
         result=subprocess.run([sys.executable,'-B','-c',code,str(script.parent),str(self.f.state_path),str(ref)],capture_output=True,text=True)
         self.assertEqual(result.returncode,0,result.stderr);self.assertTrue(json.loads(result.stdout)['ack']['invoke_allowed'])
+
+
+class InvocationAndCacheTests(unittest.TestCase):
+    setUp=PreparedDispatchTests.setUp
+    prepare=PreparedDispatchTests.prepare
+    claim=PreparedDispatchTests.claim
+    def test_invocation_events_are_bound_idempotent_and_not_native_start(self):
+        import subprocess
+        from datetime import datetime,timezone
+        ref=self.prepare(('P001',))['jobs'][0];claimed=self.claim(ref)
+        state=json.loads(self.f.state_path.read_text());row=state['panels'][0]
+        self.assertEqual(row['ready_at'],ref['ready_at']);self.assertNotIn('native_started_at',row)
+        script=Path(__file__).parents[1]/'scripts/generation_host.py'
+        event={'kind':'REQUESTED','at':datetime.now(timezone.utc).isoformat(),'source_kind':'observed_executor_outcome','source_locator':'synthetic://executor'}
+        code="""import sys,json
+from pathlib import Path
+sys.path.insert(0,sys.argv[1])
+import generation_host
+path,state,root,scripts,kind=generation_host.activate(sys.argv[2])
+from runtime_pipeline import record_invocation_event
+job=json.loads(sys.argv[3]);event=json.loads(sys.argv[4])
+a=record_invocation_event(path,job,event);b=record_invocation_event(path,job,event)
+print(json.dumps([a,b]))
+"""
+        r=subprocess.run([sys.executable,'-B','-c',code,str(script.parent),str(self.f.state_path),json.dumps(claimed['job']),json.dumps(event)],capture_output=True,text=True)
+        self.assertEqual(r.returncode,0,r.stderr)
+        a,b=json.loads(r.stdout);self.assertFalse(a['reused']);self.assertTrue(b['reused'])
+        row=json.loads(self.f.state_path.read_text())['panels'][0]
+        self.assertIn('invocation_requested_at',row);self.assertNotIn('native_started_at',row)
+    def test_authority_counter_only_reuses_jobs(self):
+        refs=self.prepare()['jobs'];state=json.loads(self.f.state_path.read_text())
+        state['authority_revision']=state.get('authority_revision',0)+1
+        self.f.write(self.f.state_path,state)
+        again=self.prepare()
+        self.assertEqual(refs,again['jobs']);self.assertEqual(again['reused_panel_ids'],['P001','P002'])
+
+    def test_jsonl_saves_original_observed_times_before_whole_episode_finishes(self):
+        import subprocess
+        from datetime import datetime,timezone,timedelta
+        ref=self.prepare(('P001',))['jobs'][0];claimed=self.claim(ref)
+        jp=self.f.write(self.f.root/'observed-job.json',claimed['job'])
+        b=io.BytesIO();Image.new('RGB',(90,160),'white').save(b,format='PNG')
+        raw=self.f.write(self.f.root/'observed-raw.json',{'image_url':'data:image/png;base64,'+base64.b64encode(b.getvalue()).decode()})
+        end=datetime.now(timezone.utc)-timedelta(seconds=2)
+        observed={'native_started_at':(end-timedelta(seconds=60)).isoformat(),'native_completed_at':end.isoformat(),'returned_at':(end+timedelta(seconds=1)).isoformat()}
+        request={'request_id':'save','action':'save-return','job':str(jp),'raw':str(raw),'call_locator':'synthetic://call','result_locator':'synthetic://result','observed':observed}
+        script=Path(__file__).parents[1]/'scripts/generation_host.py'
+        state=json.loads(self.f.state_path.read_text());state['runtime_pipeline_policy']='observed_incremental_pipeline_v1';self.f.write(self.f.state_path,state)
+        p=subprocess.run([sys.executable,'-B',str(script),'serve','--state',str(self.f.state_path)],input=json.dumps(request)+'\n',capture_output=True,text=True)
+        self.assertEqual(p.returncode,0,p.stderr)
+        result=json.loads(p.stdout)['result'];self.assertEqual(result.get('visual_review'),'UNREVIEWED',result)
+        row=json.loads(self.f.state_path.read_text())['panels'][0]
+        for field,value in observed.items():self.assertEqual(row[field],value)
 
 if __name__=='__main__':unittest.main()

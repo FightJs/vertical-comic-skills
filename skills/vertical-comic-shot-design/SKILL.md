@@ -5,7 +5,7 @@ description: Design approved-script-driven per-panel shots, crop and physical co
 
 # 条漫镜头与空间设计
 
-统一入口为整话轻审核：新任务与旧包导入后都固定当前执行器，旧包代码仅作证据。每话启动一个 `generation_host.py serve` 常驻进程；输入未变复用，局部修改只处理受影响格；返回立即保存并释放槽位。每图快速看一次，仅严重剧情问题最多返修一轮。暂停和等待用户不计时，多话共用四小时有效预算，三小时不停止首轮。完整约定见[统一执行与恢复](../vertical-comic-preproduction/references/execution-compatibility.md)与[轻审核流程](../vertical-comic-preproduction/references/light-review.md)。
+统一入口为整话轻审核：新任务与旧包导入后都固定当前执行器，旧包代码仅作证据。每话启动一个 `generation_host.py serve` 常驻进程；输入未变复用，局部修改只处理受影响格；返回立即保存并释放槽位。每图快速看一次，仅严重剧情问题或严重空背景最多返修一轮。暂停和等待用户不计时，多话共用四小时完成目标、七小时有效运行硬限，暂停不计时，四小时后继续必要生产。完整约定见[统一执行与恢复](../vertical-comic-preproduction/references/execution-compatibility.md)与[轻审核流程](../vertical-comic-preproduction/references/light-review.md)。
 
 普通格默认按[五项最小镜头模板](../vertical-comic-preproduction/assets/templates/普通格最小镜头模板.md)只填写人物、关键动作、景别、必要背景和参考；共同设置在主表shared维护一次。派生入口自动复用同主表上一轮记录，禁止为局部修改重做未变化整话。
 
@@ -29,7 +29,7 @@ description: Design approved-script-driven per-panel shots, crop and physical co
 
 全话B前完成[比例计划](../vertical-comic-preproduction/references/frame-ratio-plan.md)，保留六种比例和竖版>75%要求；按内容选择，不为变景别或交错牺牲接触、裁切和物理成立。背景按[背景模式](../vertical-comic-preproduction/references/background-treatment.md)保必要锚点和清晰主体，不要求每格全套家具。
 
-generation_dependencies只记录真实前图依赖，普通剧情先后不自动串行；requires_state_review、calibration_anchor及用户明确实图停点照范围保留。semantic_audit按真实规则命中及人体适用性核对，缺口仅阻塞受影响格。B与候选生图包按[合并审查](../vertical-comic-preproduction/references/grouped-review.md)一次展示、分别记录决定；技术PASS不授予生产批准。新增身份或真实改基准回A，批准变化只重审受影响部分。
+generation_dependencies只记录真实前图依赖，普通剧情先后不自动串行；requires_state_review、calibration_anchor及用户明确实图停点照范围保留。semantic_audit按真实规则命中及人体适用性核对，缺口仅阻塞受影响格。新exception_preparation_v2普通格不独立审核，完成设计后按前期finalize技术核验与采用；具体接触风险只处理一次。旧策略B与候选生图包按[合并审查](../vertical-comic-preproduction/references/grouped-review.md)一次展示、分别记录决定；技术PASS不授予生产批准。新增身份或真实改基准回A，批准变化只重审受影响部分。
 
 新运行按[最终输入语义审查](../vertical-comic-preproduction/references/final-input-semantics.md)执行：先审设计，再核对完整实际prompt、参考和判据；前期闭合后交接，接包只复查实际变化与新实图。审查沿用semantic_audit，不新增用户停点、不热改旧冻结包。
 

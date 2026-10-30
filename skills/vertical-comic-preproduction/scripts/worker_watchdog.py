@@ -82,7 +82,22 @@ def evaluate(snapshot, *, now=None, config=None):
     if not isinstance(emitted, list) or any(not isinstance(v, str) for v in emitted):
         raise ValueError("emitted须为已实际送达的事件ID清单")
     emitted = set(emitted)
-    alerts = []
+    alerts = dispatch_alerts(snapshot.get('pipeline_rows',[]),free_channels=snapshot.get('free_channels',0),
+                             paused=snapshot.get('paused',False),now=current,emitted=emitted)
+    lifecycle=snapshot.get('executor_lifecycle')
+    if lifecycle is not None:
+        if (not isinstance(lifecycle,dict) or lifecycle.get('state') not in {'ALIVE','TERMINATED','UNKNOWN'}
+                or not lifecycle.get('executor_id') or not lifecycle.get('source_locator')):
+            raise ValueError('EXECUTOR_LIFECYCLE_REQUIRES_HOST_RECEIPT')
+        if lifecycle['state']=='TERMINATED':
+            event_id='executor:'+str(lifecycle['executor_id'])+':terminated:'+str(lifecycle.get('event_id','terminal'))
+            if event_id not in emitted:
+                alerts.append({'event_id':event_id,'level':'T2','kind':'EXECUTOR_TERMINATED',
+                    'action':'RECONCILE_CAPTURED_RETURNS_AND_REMOTE_OUTCOMES',
+                    'source_locator':lifecycle['source_locator']})
+            return {'policy':POLICY,'state':'EXECUTOR_TERMINATED','alerts':alerts,
+                    'active_attempt_ids':[r.get('attempt_id') for r in requests if r.get('status') in {'IN_FLIGHT','RESULT_UNKNOWN'}],
+                    'recommendation':'RECONCILE_ONCE_DO_NOT_ASSUME_NO_IMAGE'}
     active_requests = []
     for request in requests:
         if not isinstance(request, dict) or not request.get("attempt_id") or not request.get("panel_id"):
@@ -131,6 +146,38 @@ def evaluate(snapshot, *, now=None, config=None):
             "alerts": alerts, "active_attempt_ids": active_requests,
             "recommendation": "CHECK_REAL_GATES_BEFORE_DISPATCH_OR_HANDOFF"}
 
+
+
+def dispatch_alerts(rows, *, free_channels=0, paused=False, now=None, emitted=()):
+    """Observed pipeline delays, separate from the active production budget.
+
+    This does not cancel calls, recover permits or infer an unknown outcome.
+    Excluded waiting seconds must come from the run's clock, never estimates.
+    """
+    if paused:return []
+    current=_time(now) if isinstance(now,str) else (now or datetime.now(timezone.utc))
+    result=[]
+    for row in rows:
+        if row.get('saved_at') or not row.get('attempt_id'):continue
+        if row.get('native_completed_at'):
+            field,threshold,kind,action='native_completed_at',30,'RETURN_NOT_SAVED','COLLECT_AND_SAVE_EXISTING_RETURN'
+        elif row.get('invocation_requested_at'):
+            field,threshold,kind,action='invocation_requested_at',300,'LONG_INVOCATION','CHECK_ACTUAL_STATUS_AND_COLLECT_RETURNS'
+        elif row.get('registered_at'):
+            field,threshold,kind,action='registered_at',60,'REGISTERED_NOT_OBSERVED','RECONCILE_INVOCATION_WITHOUT_RETRY'
+        elif row.get('ready_at') and free_channels>0:
+            field,threshold,kind,action='ready_at',60,'READY_NOT_DISPATCHED','DISPATCH_ELIGIBLE_PANEL_OR_RECORD_BLOCKER'
+        else:continue
+        excluded=row.get('excluded_wait_seconds',{}).get(field,0)
+        if not isinstance(excluded,(int,float)) or excluded<0:raise ValueError('Invalid excluded waiting interval')
+        age=(current-_time(row[field])).total_seconds()-excluded
+        level='T2' if kind=='LONG_INVOCATION' and age>=600 else 'T1'
+        if level=='T2':action='ISOLATE_SLOW_CHANNEL_CONTINUE_AVAILABLE_CHANNELS'
+        event_id=f"dispatch:{row.get('panel_id')}:{row['attempt_id']}:{kind}:{level}"
+        if age>=threshold and event_id not in emitted:
+            result.append({'event_id':event_id,'panel_id':row.get('panel_id'),'attempt_id':row['attempt_id'],
+                'kind':kind,'level':level,'age_seconds':int(age),'action':action,'retry_allowed':False})
+    return result
 
 def _write_atomic(path, value):
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -188,6 +235,8 @@ def check_ledger(ledger_path, episode_state, *, now=None, config=None, independe
                 "blocker_id": latest["blocker_id"], "wait_kind": latest["wait_kind"],
                 "local_episode_complete": latest["local_episode_complete"],
                 "requests": requests, "emitted": ledger.get("emitted", []),
+                "pipeline_rows":[r for r in episode_state.get("panels",[]) if r.get("invocation_events")],
+                "paused":latest["wait_kind"] in HUMAN_WAITS,
                 "independent_work_pending": independent_work_pending}
     result = evaluate(snapshot, now=now, config=config)
     current = _time(now) if isinstance(now, str) else (now or datetime.now(timezone.utc))

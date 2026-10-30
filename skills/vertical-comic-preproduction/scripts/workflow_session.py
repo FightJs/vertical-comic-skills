@@ -18,7 +18,7 @@ class WorkflowSession:
         from stage_deadlines import checkpoint, enabled as speed_enabled
         initial = read_json(path)
         speed = speed_enabled(initial)
-        schedule=require_step(path,action,optional=request.get('optional',False) and not speed) if action not in {'commit','save-return','context-rebind-status'} else None
+        schedule=require_step(path,action,optional=request.get('optional',False) and not speed) if action not in {'commit','save-return','capture-return','register-return','recover-returns','executor-lifecycle','invocation-event','context-rebind-status','capture-envelope','record-envelope','delivery-status','qa-save-batch','review-submit-batch','prepare-qa'} else None
         if speed and (request.get('optional') or action == 'pilot-check'):
             from runtime_clock import execution_context
             context=execution_context(path)
@@ -33,7 +33,7 @@ class WorkflowSession:
         with (strict_reads() if action=='final-check' else nullcontext()), session(None if action=='final-check' else self.pool), budget(path,enabled=bool(schedule) or action in {'compile','receiver-audit','preparation-review'}):
             if action=='prepare-inputs':
                 from prepared_job_store import store
-                result=store(path).prepare(request.get('panels'),request.get('workers',4))
+                result=store(path).prepare(request.get('panels'),request.get('workers','all'))
             elif action=='claim-and-register':
                 from generation_host import check_write_scope
                 from runtime_pipeline import claim_and_register
@@ -42,10 +42,31 @@ class WorkflowSession:
             elif action=='ready-inputs':
                 from prepared_job_store import store
                 current=store(path)
+                excluded=request.get('exclude_record_digests',[])
+                limit=request.get('limit')
+                if not isinstance(excluded,list) or any(not isinstance(k,str) for k in excluded):
+                    raise ValueError('READY_EXCLUSIONS_INVALID')
+                if limit is not None and (type(limit) is not int or limit<1):raise ValueError('READY_LIMIT_INVALID')
+                excluded=set(excluded)
+                selected=request.get('panels')
+                if selected is not None and (not isinstance(selected,list) or any(not isinstance(p,str) for p in selected)):
+                    raise ValueError('READY_PANEL_SELECTION_INVALID')
+                selected=None if selected is None else set(selected)
+                pending={r['panel_id']:r['attempt_id'] for r in initial['panels'] if r['status'] in {'PENDING','REPAIR_AUTHORIZED'}}
                 with current.lock:
-                    pending={r['panel_id']:r['attempt_id'] for r in initial['panels'] if r['status'] in {'PENDING','REPAIR_AUTHORIZED'}}
-                    result={'jobs':[current.ref(current.entries[k]) for p,k in current.ready.items() if pending.get(p)==current.entries[k]['attempt_id']],
-                            'preparing':current.preparing,'image_calls':0,'dispatch_authorized':False}
+                    revision=current.revision
+                    candidates=[current.ref(current.entries[k]) for p,k in current.ready.items() if k not in excluded and (selected is None or p in selected) and pending.get(p)==current.entries[k]['attempt_id']]
+                jobs=[];invalid=[]
+                for ref in candidates:
+                    try:current.get(ref,initial);jobs.append(ref)
+                    except (OSError,ValueError,KeyError,TypeError,StopIteration) as exc:
+                        invalid.append({'panel_id':ref['panel_id'],'reason':str(exc)})
+                    if limit is not None and len(jobs)>=limit:break
+                result={'jobs':jobs,'revision':revision,'invalidated':invalid,'preparing':current.preparing,
+                        'preparation_complete':current.preparation_started and not current.preparing and current.preparation_error is None,
+                        'preparation_error':current.preparation_error,
+                        'blocked_panels':[r for r in current.last_reports if r.get('status')!='PASS'],
+                        'image_calls':0,'dispatch_authorized':False}
             elif action=='runtime-forecast':
                 from stage_deadlines import forecast
                 result=forecast(request.get('states',[str(path)]),schedule or {})
@@ -60,17 +81,75 @@ class WorkflowSession:
             elif action=='context-rebind-status':
                 from context_rebind import status
                 result=status(path,request['plan_id'])
+            elif action=='executor-lifecycle':
+                from worker_watchdog import evaluate
+                result=evaluate(request['snapshot'])
+                if result['state']=='EXECUTOR_TERMINATED' and result['alerts']:
+                    from generation_host import recover_returns
+                    result['saved_return_reconciliation']=recover_returns(path,_context=self.active_context)
+                result['image_calls']=0;result['dispatch_authorized']=False
             elif action=='recover-no-image':
+                if request.get('terminal'):
+                    from no_image_recovery import prepare_request
+                    request={**request,'recovery':prepare_request(path,request['panel_id'],request['terminal'],
+                        request['authorization'],diagnosis=request.get('diagnosis'))}
                 if initial.get('dispatch_consistency'):
                     from managed_dispatch import call
                     result=call(path,action,expected_sha256=request['expected_state'],request=request['recovery'])
                 else:
                     from no_image_recovery import recover
                     result=recover(path,request['expected_state'],request['recovery'])
+            elif action=='invocation-event':
+                from runtime_pipeline import record_invocation_event
+                result=record_invocation_event(path,request['job'],request['event'])
+            elif action=='capture-envelope':
+                from generation_host import capture_envelope
+                result=capture_envelope(path,request['job'],request['packet'],request.get('item',{}),context=self.active_context)
+            elif action=='record-envelope':
+                from generation_host import record_envelope
+                result=record_envelope(path,request['job'],request.get('packet'),request['item'],request.get('authorization'))
+            elif action=='delivery-status':
+                from lean_delivery import MATERIAL,binding
+                pending=[r['panel_id'] for r in initial['panels'] if initial.get('delivery_materials',{}).get(r['panel_id'],{}).get('policy')!=MATERIAL or initial['delivery_materials'][r['panel_id']].get('binding')!=binding(r)]
+                result={'status':'CONTINUE_REQUIRED' if pending else 'MATERIALS_READY','pending_panel_ids':pending,
+                    'runnable':[{'panel_id':r['panel_id'],'attempt_id':r['attempt_id']} for r in initial['panels'] if r['status'] in {'PENDING','REPAIR_AUTHORIZED'}], 'image_calls':0}
+            elif action=='prepare-qa':
+                from generation_host import prepare_qa
+                result=prepare_qa(initial,root,request.get('panels'))
+            elif action in {'qa-save-batch','review-submit-batch'}:
+                from review_pipeline import save
+                results=[]
+                for observation in request['observations']:
+                    try:
+                        if action=='review-submit-batch':
+                            from codex_reference_contract import checked_file
+                            ticket=read_json(checked_file(root,observation['review_ticket']))
+                            current=read_json(path)
+                            row=next(r for r in current['panels'] if r['panel_id']==ticket['panel_id'])
+                            if (ticket.get('policy')!='observed_review_ticket_v1' or
+                                any(ticket.get(k)!=current[k] for k in ('book_id','episode_id')) or
+                                ticket['attempt_id']!=row['attempt_id'] or ticket['output']!=row.get('output')):
+                                raise ValueError('OBSERVED_IMAGE_CHANGED')
+                            fields={k:ticket[k] for k in ('panel_id','attempt_id','qa_template','base_qa')}
+                            patch=observation['observation']
+                            if set(patch)&set(fields):raise ValueError('REVIEW_IDENTITY_TOOL_OWNED')
+                            observation={**patch,**fields}
+                        results.append(save(path,digest(path),observation))
+                    except (ValueError,KeyError,TypeError,OSError) as exc:results.append({'status':'HOLD','panel_id':observation.get('panel_id'),'error':str(exc)})
+                result={'status':'OBSERVATIONS_RECORDED','results':results,'image_calls':0}
+            elif action in {'capture-return','capture-envelope'}:
+                from generation_host import capture_return
+                result=capture_return(path,request['job'],request['raw'],request['call_locator'],request['result_locator'],request.get('selected_index'),_context=self.active_context,observed=request.get('observed'))
+            elif action=='register-return':
+                from generation_host import register_return
+                result=register_return(path,request['capture'],_context=self.active_context)
+            elif action=='recover-returns':
+                from generation_host import recover_returns
+                result=recover_returns(path,_context=self.active_context)
             elif action=='save-return':
                 from generation_host import save_return
                 result=save_return(path,request['job'],request['raw'],request['call_locator'],
-                    request['result_locator'],request.get('selected_index'),_context=self.active_context)
+                    request['result_locator'],request.get('selected_index'),_context=self.active_context,observed=request.get('observed'))
             elif action=='submit':
                 from production_runtime import submit
                 result=submit(path,request['job'])
@@ -102,6 +181,9 @@ class WorkflowSession:
                         result=evaluate(state,root,'deliver')
                     elif action=='pilot-check':result=pilot(state,root,request)
                     else:raise ValueError('unsupported workflow action: '+str(action))
+        if action in {'capture-return','capture-envelope'}:
+            result['workflow_timing']={'action':action,'elapsed_seconds':time.monotonic()-started}
+            return result
         from runtime_clock import execution_context,status
         context=execution_context(path)
         if context and context.get('clock_required'):

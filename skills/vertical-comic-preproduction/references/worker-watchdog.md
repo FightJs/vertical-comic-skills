@@ -41,3 +41,12 @@ python <scripts>/production_runtime.py --state <本话/00_输入审计/生产流
 
 
 总控任务记录、真实等待、收尾检查与中断恢复统一见[任务协调与恢复](task-recovery.md)。新运行最终交付使用task_coordination.py finish-check，不能以进度摘要、子任务口头完成或等待超时结束轮次。
+
+## 派发与收图阻塞
+
+新固定调用入口使用 5/10 分钟请求观察阈值，历史 watchdog 配置保留。`dispatch_alerts` 按准确 attempt 区分：有空闲通道却就绪未派发超过 60 秒、登记后未观察到调用超过 60 秒、调用请求超过 5/10 分钟、原生完成后超过 30 秒未保存。分别返回派发/定位阻塞、查证调用、隔离慢通道继续独立工作、立即收取已有返回的动作。传入真实暂停状态；每项排除时间只来自运行时钟，不把服务等待排除出有效运行预算。事件 ID 用于处置去重。
+
+诊断只建议动作。固定调用入口直接连接可用的状态查询与已有返回收取；未知请求仍保持原 Promise、attempt 和许可。阈值不意味着取消成功、确认无图或允许重复调用。
+
+
+宿主实际回执可提供 `executor_lifecycle`（`state` 为 `ALIVE`、`TERMINATED` 或 `UNKNOWN`，含 `executor_id` 和 `source_locator`）。确认为终止时按事件 ID 去重，通过宿主 JSONL `executor-lifecycle` 传入 `snapshot`，按已确认事件 ID 去重并执行一次 `recover-returns`，同时对在途请求查证；找回图只登记原 attempt。启动替代执行器必须使用宿主实际提供的能力并取得启动回执；消息送达、找不到 cell 或超时都不证明执行已恢复或远端无图。

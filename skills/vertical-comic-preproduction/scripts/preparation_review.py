@@ -5,10 +5,10 @@ import json
 import uuid
 from pathlib import Path
 from codex_reference_contract import checked_file, digest, read_json, file_session
-from preparation_gate_policy import enabled, template, reviewed, FIELD, POLICY
+from preparation_gate_policy import enabled, template, reviewed, FIELD, POLICY, EXCEPTION
 
 
-def inputs_for(state, root, panel_ids=None, completion=False, dependency_plan=None):
+def inputs_for(state, root, panel_ids=None, completion=False, dependency_plan=None, *, collect_errors=None):
     from input_semantics import actual_input, planned_input, dependency_rows
     from panel_readiness import review_context
     if not enabled(state): raise ValueError('旧冻结运行不自动迁移轻门禁')
@@ -23,11 +23,15 @@ def inputs_for(state, root, panel_ids=None, completion=False, dependency_plan=No
     result = {}
     with review_context(state, root, not completion):
         for pid in selected:
-            if shots[pid].get('generation_dependencies') and not completion:
-                result[pid] = planned_input(state, root, shots[pid], plans[pid])
-            else:
-                path = checked_file(root, records[pid]['package_manifest'])
-                result[pid] = actual_input(state, root, shots[pid], read_json(path), path.parent)
+            try:
+                if shots[pid].get('generation_dependencies') and not completion:
+                    result[pid] = planned_input(state, root, shots[pid], plans[pid])
+                else:
+                    path = checked_file(root, records[pid]['package_manifest'])
+                    result[pid] = actual_input(state, root, shots[pid], read_json(path), path.parent)
+            except (OSError,ValueError,KeyError,TypeError,IndexError) as exc:
+                if collect_errors is None:raise
+                collect_errors[pid]=str(exc)
     return result
 
 
@@ -35,12 +39,18 @@ def prepare(state_path, panel_ids=None, completion=False, dependency_plan=None):
     path = Path(state_path).resolve(); root = path.parent.parent
     with file_session():
         state = read_json(path)
-        inputs = inputs_for(state, root, panel_ids, completion, dependency_plan)
-        return {'policy': POLICY, 'book_id': state['book_id'], 'episode_id': state['episode_id'],
-                'completion': completion, 'dependency_plan': dependency_plan, 'panels': [
-                    {'panel_id': pid, 'input_digest': template(value)['input_digest'],
-                     'inputs': value, 'observation': template(value)['observation']}
-                    for pid, value in inputs.items()], 'dispatch_authorized': False, 'image_calls': 0}
+        failures={}
+        inputs = inputs_for(state, root, panel_ids, completion, dependency_plan,
+                            collect_errors=failures if state.get(FIELD)==EXCEPTION else None)
+        panels=[]
+        for pid,value in inputs.items():
+            item=template(value)
+            panels.append({'panel_id':pid,'input_digest':item['input_digest'],'inputs':value,
+                           **({'observation':item['observation']} if 'observation' in item else {})})
+        return {'policy':state[FIELD],'book_id':state['book_id'],'episode_id':state['episode_id'],
+                'completion':completion,'dependency_plan':dependency_plan,'input_errors':failures,
+                'panels':panels,'dispatch_authorized':False,'image_calls':0}
+
 
 
 def save(state_path, observations, reviewer, *, authority_ref=None):
@@ -49,11 +59,12 @@ def save(state_path, observations, reviewer, *, authority_ref=None):
     from input_semantics import panel_errors, coverage
     from preparation_gate_policy import observation_errors
     path = Path(state_path).resolve(); root = path.parent.parent
-    if not isinstance(reviewer, str) or not reviewer.strip(): raise ValueError('须提供实际审核者')
+    if authority_ref is not None and (not isinstance(reviewer,str) or not reviewer.strip()):raise ValueError('登记输入采用须提供实际执行者')
     with file_session():
         state = read_json(path); original = copy.deepcopy(state)
         if not enabled(state): raise ValueError('旧冻结运行不自动迁移轻门禁')
-        if (observations.get('policy') != POLICY or observations.get('book_id') != state['book_id']
+        if state[FIELD]==POLICY and (not isinstance(reviewer,str) or not reviewer.strip()):raise ValueError('须提供实际审核者')
+        if (observations.get('policy') != state[FIELD] or observations.get('book_id') != state['book_id']
                 or observations.get('episode_id') != state['episode_id']
                 or type(observations.get('completion')) is not bool):
             raise ValueError('观察的策略/书话/阶段不一致')
@@ -73,9 +84,18 @@ def save(state_path, observations, reviewer, *, authority_ref=None):
         field = 'dependency_completion_review' if observations['completion'] else 'execution_review'
         for row in rows:
             pid = row['panel_id']
-            review = reviewed(inputs[pid], row.get('observation'), reviewer, row.get('input_digest'))
+            from preparation_gate_policy import design_errors, review_errors
+            previous=by_id[pid].get(field)
+            if state[FIELD]==EXCEPTION and row.get('observation') is None and previous and not review_errors(previous,inputs[pid]):
+                review=copy.deepcopy(previous)  # Preserve the actual observer, not the current operator.
+            else:
+                if state[FIELD]==EXCEPTION and row.get('observation') is None:
+                    old=by_id[pid]
+                    if old.get('execution_review') and design_errors(old,state,{}):
+                        raise ValueError('PREPARATION_HOLD:已有问题或风险结果不能自动覆盖')
+                review = reviewed(inputs[pid], row.get('observation'), reviewer, row.get('input_digest'))
             by_id[pid][field] = review
-        audit[FIELD] = POLICY
+        audit[FIELD] = state[FIELD]
         folder = root/'00_输入审计'/'preparation_reviews'/uuid.uuid4().hex
         folder.mkdir(parents=True, exist_ok=False)
         def store(name, value):
@@ -103,7 +123,7 @@ def save(state_path, observations, reviewer, *, authority_ref=None):
             from review_policy import proposal as make_proposal
             proposal = make_proposal(state['book_id'], state['episode_id'], proposal['items'], root)
             decisions = delegated_decisions(proposal, [i['item_id'] for i in proposal['items']],
-                authority_ref, reviewer, '同次快审观察：' + state['semantic_audit']['path'], root)
+                authority_ref, reviewer, ('技术就绪与输入采用；普通格未独立审核：' if state[FIELD]==EXCEPTION else '同次快审观察：') + state['semantic_audit']['path'], root)
             index = copy.deepcopy(read_json(checked_file(root, state['approval_index']))) if state.get('approval_index') else {'policy':'approval_index_v1','entries':[]}
             for decision in decisions:
                 ref = store(decision['phase'] + '-decision.json', decision)
@@ -120,6 +140,38 @@ def save(state_path, observations, reviewer, *, authority_ref=None):
             'decision_phases':[d['phase'] for d in decisions], 'dispatch_authorized':False,'image_calls':0}
 
 
+def finalize(state_path, panel_ids=None, *, authority_ref=None, reviewer=None, dependency_plan=None):
+    """One transaction: ordinary inputs need no observation form or second read."""
+    from validation_pool import ValidationPool, session
+    with session(ValidationPool()):
+        state=read_json(Path(state_path))
+        if state.get(FIELD)!=EXCEPTION:raise ValueError('仅新异常审查策略支持普通格直接完成')
+        observations=prepare(state_path,panel_ids,dependency_plan=dependency_plan)
+        from preparation_gate_policy import review_errors
+        audit=read_json(checked_file(Path(state_path).resolve().parent.parent,state['semantic_audit']))
+        old={p['panel_id']:p.get('execution_review') for p in audit['panels']}
+        reused=[];required=[]
+        for row in observations['panels']:
+            pid=row['panel_id'];prior=old.get(pid)
+            if prior and not review_errors(prior,row['inputs']):
+                reused.append(pid);row.pop('observation',None)
+            elif row['inputs'].get('preparation_requirements'):required.append(pid)
+        if len(reused)==len(observations['panels']) and reused and not authority_ref and not observations.get('input_errors'):
+            from input_semantics import coverage
+            result=coverage(state,Path(state_path).resolve().parent.parent,dependency_plan,panel_ids=reused)
+            if not result['errors']:
+                return {'status':'REUSED','panel_ids':reused,'semantic_audit':state['semantic_audit'],
+                        'review':result,'targeted_panel_ids':[],'targeted_observations':[],
+                        'blocked_panel_ids':[],'image_calls':0,'dispatch_authorized':False}
+        targets=[r for r in observations['panels'] if r['panel_id'] in required]
+        observations['panels']=[r for r in observations['panels'] if r['panel_id'] not in required]
+        result=save(state_path,observations,reviewer,authority_ref=authority_ref) if observations['panels'] else {'status':'HOLD','panel_ids':[],'image_calls':0}
+        failed=observations.get('input_errors',{})
+        return {**result,'status':'PARTIAL_READY' if result['panel_ids'] and (required or failed) else result['status'],
+                'targeted_panel_ids':required,'targeted_observations':targets,
+                'blocked_panel_ids':list(failed),'input_errors':failed}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--state', required=True)
@@ -127,12 +179,21 @@ def main():
     parser.add_argument('--completion', action='store_true')
     parser.add_argument('--dependency-plan', help='已有补齐方案，相对运行根')
     parser.add_argument('--output', help='新观察模板；保存时无需此参数')
+    parser.add_argument('--finalize', action='store_true', help='普通格技术就绪与范围内采用；不生成观察表')
     parser.add_argument('--observations', help='填写过的观察模板JSON')
     parser.add_argument('--reviewer')
     parser.add_argument('--authority', help='已有用户委托文件，须在运行根内；同时登记B/包决定')
     args = parser.parse_args()
     try:
-        if args.observations:
+        if args.finalize:
+            if args.observations or args.output or args.completion:raise ValueError('finalize不能与观察保存或依赖补齐混用')
+            root=Path(args.state).resolve().parent.parent
+            def ref(name):
+                p=(root/name).resolve();p.relative_to(root)
+                return {'path':p.relative_to(root).as_posix(),'sha256':digest(p)}
+            value=finalize(args.state,args.panels,authority_ref=ref(args.authority) if args.authority else None,
+                           reviewer=args.reviewer,dependency_plan=ref(args.dependency_plan) if args.dependency_plan else None)
+        elif args.observations:
             if args.panels or args.completion or args.output or args.dependency_plan: raise ValueError('保存范围与阶段来自观察模板')
             root = Path(args.state).resolve().parent.parent
             authority = None

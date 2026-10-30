@@ -21,3 +21,15 @@ def observe(state, row, event):
         if event == 'qa_registered':
             observations[key]['qa_report'] = row.get('qa_report')
         row[key] = stamp
+
+
+def checked_invocation_event(event):
+    """A local request is not a native start. Caller supplies real locators."""
+    if not isinstance(event,dict) or event.get('kind') not in {'REQUESTED','STARTED','RETURNED'}:
+        raise ValueError('INVOCATION_EVENT_INVALID')
+    expected='observed_executor_outcome' if event['kind']=='REQUESTED' else ('observed_tool_call' if event['kind']=='STARTED' else 'observed_tool_result')
+    if event.get('source_kind')!=expected or not isinstance(event.get('source_locator'),str) or not event['source_locator'].strip():
+        raise ValueError('INVOCATION_EVENT_SOURCE_REQUIRED')
+    value=datetime.fromisoformat(event['at'].replace('Z','+00:00'))
+    if value.tzinfo is None or value>datetime.now(timezone.utc):raise ValueError('INVOCATION_EVENT_TIME_INVALID')
+    return {k:event[k] for k in ('kind','at','source_kind','source_locator')}

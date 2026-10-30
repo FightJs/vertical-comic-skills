@@ -19,6 +19,8 @@ MAJOR = {'identity', 'core_costume', 'scene_identity', 'major_continuity',
          'action_target', 'extra_limb', 'limb_ownership', 'overall_structure', 'style'}
 OUTCOMES = ('DELIVERABLE', 'MANUAL_RETOUCH', 'MANUAL_PRIORITY', 'INCOMPLETE')
 LABELS = dict(zip(OUTCOMES, ('可交付', '可交付，人工后修', '待人工优先处理', '未完成')))
+LABELS['NETWORK_FAILED'] = '缺图：网络错误重试已达上限'
+LABELS['CONTENT_REFUSED'] = '缺图：图像服务内容审核拒绝'
 
 
 def text(v):
@@ -176,7 +178,8 @@ def load_decision(root, record, attempt_id):
     from light_review import at_root, FIELD, POLICY as LIGHT_POLICY
     if at_root(root) != (report.get(FIELD) == LIGHT_POLICY):
         from runtime_import import historical_record
-        current=read_json(Path(root)/'00_输入审计/生产流程.json')
+        from source_input_contract import read as source_inputs
+        current=source_inputs(Path(root)/'00_输入审计/生产流程.json')
         if historical_record(current,root,attempt) is None:
             raise ValueError('QA review profile differs from the frozen run')
     errors = decision_errors(decision, attempt, item)
@@ -190,6 +193,9 @@ def selected(root, record):
     if not text(adoption.get('reason')):
         raise ValueError('缺采用版本及选择理由')
     attempt, decision, item, ref = load_decision(root, record, adoption.get('attempt_id'))
+    from light_review import missing_scene_background
+    if missing_scene_background(item):
+        raise ValueError('SCENE_BACKGROUND_REQUIRED: 严重空背景保留为未解决问题，不能采用为合格成品')
     if adoption.get('decision') != ref:
         raise ValueError('采用版本与问题决定版本不一致')
     return attempt, decision, item, ref

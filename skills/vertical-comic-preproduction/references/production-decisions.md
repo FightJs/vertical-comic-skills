@@ -1,5 +1,7 @@
 # 第一批逐格生产决定与交接
 
+新生产使用minimal_panel_delivery_v1：每图真实观察、问题、处理决定及采用在review-submit-batch/qa-save一次落账；收尾仅走[图片＋CSV极简交付](delivery-contract.md)，不运行下文旧合同的delivery-review、完整deliver、整话/跨话复审或最终D。详细证据留工作目录，新ZIP仅原图和图片清单.csv。
+
 当前技能统一生产供人工继续加工的第一批独立逐格图片。不设置首批/精修模式，不承担第二、第三轮人工精修。新运行以production_policy=first_batch_production_v1绑定此版本；旧RV与已交付工具保持冻结，不补字段或重签哈希。
 
 ## 在原审核之后决定，不重做审核
@@ -56,7 +58,7 @@ python <冻结scripts>/production_runtime.py --state <本话状态> --action dec
 
 第三类、明确路线的第二类、授权内纠偏、已批准技术操作及修后轻微残留，不逐格提问。needs_user仅用于tradeoff/design_change/additional_budget/user_reserved，另写recommendation。使用production_runtime --action production-questions只筛选真实待决项，输出图、格号、一句话问题、推荐动作和内容绑定event_id；用--pending读取原合并审查的event_id/status待答记录去重，已有问题返回KEEP_PENDING。没有待决项返回NO_PRODUCTION_QUESTION，不新增审批阶段。原A/B、用户保留高风险和D不变；新分工没有默认半话确认，旧包仍按原冻结窗口。
 
-## 第一批交接
+## 旧合同的第一批交接（仅恢复兼容）
 
 完整成品交付覆盖本次全部指定话/格，最终ZIP不设容量门禁，并包含两份逐图问题CSV，不以少量图片阶段包结束任务。四种结果独立于审核：DELIVERABLE可交付；MANUAL_RETOUCH可交付人工后修；MANUAL_PRIORITY重大问题未解决、仅供加工；INCOMPLETE缺图、未知、未审、未完成处理或必要比较。重大问题不能自动标成可用，未核实疑点不让人工据此误改。
 
@@ -85,6 +87,6 @@ python <scripts>/panel_delivery.py --state <本话状态> --review <本话相对
 
 需要局部结构修复时按[坐标引导返修](coordinate-repair.md)选择coordinate_local_edit；在原issues写repair_scope，沿原观察说明适用性与输入疑点。整体空间错误另行处理，局部可修不降低原category。
 
-## 成品问题CSV
+## 旧合同的成品问题CSV（仅恢复兼容）
 
 直接复用上述采用版本索引，不重新判图。每话目录及最终ZIP根目录导出图片问题总览.csv（每格一行，含无遗留问题的格）和问题明细.csv（每个遗留问题一行，重大优先）。字段与编码见[交付合同](delivery-contract.md)。主表保留源序，采用旧图时使用旧图QA和遗留问题；已解决问题留历史，未核实项明确标为疑点，不把UNKNOWN或未完成标成无问题。CSV是索引的确定性派生，不增加用户批准节点或生图调用。

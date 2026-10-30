@@ -529,9 +529,11 @@ def rehearse(zip_path,package_root,run_root,run_index,report,*,timeout=900,budge
                 required=[p['panel_id'] for p in episode['panels'] if p['classification']!='REUSE']
                 if state.get('input_semantics_policy'):
                     semantic = bundle.get('final_input_semantics', {}) if combined else prepared.get('final_input_semantics', {})
-                    if (semantic.get('policy') != state['input_semantics_policy']
-                            or semantic.get('status') != 'PREPRODUCTION_INPUTS_REVIEWED'
-                            or semantic.get('reviewed_panel_ids') != episode['panel_ids']
+                    from preparation_gate_policy import FIELD as PREP_FIELD, EXCEPTION
+                    technical=state.get(PREP_FIELD)==EXCEPTION
+                    if (semantic.get(PREP_FIELD)!=state.get(PREP_FIELD) or semantic.get('policy') != state['input_semantics_policy']
+                            or semantic.get('status') != ('PREPRODUCTION_INPUTS_READY' if technical else 'PREPRODUCTION_INPUTS_REVIEWED')
+                            or semantic.get('technically_ready_panel_ids' if technical else 'reviewed_panel_ids') != episode['panel_ids']
                             or semantic.get('dispatch_authorized') is not False):
                         raise ValueError('全话最终输入语义审查未闭合或范围失配')
                     write(report/(eid+'_final_input_semantics.json'),semantic)

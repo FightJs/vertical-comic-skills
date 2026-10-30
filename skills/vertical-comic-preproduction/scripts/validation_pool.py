@@ -9,7 +9,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 
 _POOL=ContextVar('comic_validation_pool',default=None)
-NAMES={'runtime_snapshot','toolchain','submission_preflight','approval_scope_map','approval_proof','approval_validation','approval_coverage','approval_index',
+NAMES={'compiled_panel','runtime_snapshot','toolchain','submission_preflight','approval_scope_map','approval_proof','approval_validation','approval_coverage','approval_index',
        'collection_summary','collection_pair','continuity_context','final_semantic_input','qa_evidence'}
 PRIORITY={'runtime_snapshot':3,'toolchain':3,'submission_preflight':2,'approval_scope_map':3,'approval_proof':3,'approval_index':3,'collection_summary':3,'collection_pair':3,
           'continuity_context':2,'qa_evidence':2,'final_semantic_input':2}

@@ -17,7 +17,7 @@ FIELD = 'image_review_profile'
 CHECKS = ('identity', 'story_readability')
 REPAIR_FIELD = 'repair_threshold_policy'
 REPAIR_POLICY = 'essential_story_only_v1'
-ESSENTIAL_IMPACTS = {'main_character_misidentified', 'key_event_missing', 'story_reversed', 'story_unreadable'}
+ESSENTIAL_IMPACTS = {'main_character_misidentified', 'key_event_missing', 'story_reversed', 'story_unreadable', 'scene_background_missing'}
 
 
 def strict_repair(state):
@@ -25,6 +25,11 @@ def strict_repair(state):
     if value not in (None,REPAIR_POLICY):raise ValueError('Unknown repair threshold policy')
     if value and state.get(FIELD)!=POLICY:raise ValueError('Essential repair threshold requires light review')
     return value==REPAIR_POLICY
+
+
+def missing_scene_background(item):
+    return any(isinstance(i,dict) and i.get('story_impact')=='scene_background_missing'
+               for i in item.get('light_review',{}).get('issues',[]))
 
 
 def repair_eligible(issue, strict=False):
@@ -52,7 +57,7 @@ def template(record, state=None):
     item= {'panel_id': record['panel_id'], 'image_sha256': record['output']['sha256'],
             'light_review': {'policy': POLICY, 'status': 'UNREVIEWED', 'reviewer': '',
                 'checks': {key: {'status': 'UNREVIEWED', 'observed': ''} for key in CHECKS},
-                'issues': [], 'scope': '单次全图轻审核；未做六项细节及整话/跨话全面复审'}}
+                'issues': [], 'scope': '单次全图轻审核：人物、剧情及是否严重空背景；未做六项细节及整话/跨话全面复审'}}
     if strict:
         item['light_review'].update({REPAIR_FIELD:REPAIR_POLICY,'single_observation':''})
         item['light_review'].pop('checks')
@@ -86,6 +91,8 @@ def review_errors(item, *, require_pass=False):
         if not isinstance(issue, dict) or type(issue.get('story_critical')) is not bool or any(
                 not isinstance(issue.get(key), str) or not issue[key].strip() for key in ('location', 'problem', 'target')):
             errors.append('LIGHT_QA: each issue needs location/problem/target/story_critical')
+        if isinstance(issue,dict) and issue.get('story_impact')=='scene_background_missing' and issue.get('story_critical') is not True:
+            errors.append('LIGHT_QA: severe blank background is a delivery-blocking issue')
         if strict and isinstance(issue,dict) and issue.get('story_critical') and issue.get('story_impact') not in ESSENTIAL_IMPACTS|{'readable'}:
             errors.append('LIGHT_QA: critical issue needs actual story_impact')
     failed = isinstance(checks, dict) and any(isinstance(c, dict) and c.get('status') == 'FAIL' for c in checks.values())
@@ -102,7 +109,8 @@ def review_errors(item, *, require_pass=False):
 def evidence_errors(root, record, *, require_pass=False):
     """Keep content identity, decoding, actual return and request evidence checks."""
     state_path=Path(root)/'00_输入审计/生产流程.json'
-    state=read_json(state_path)
+    from source_input_contract import read as source_inputs
+    state=source_inputs(state_path)
     if state.get('runtime_import'):
         from runtime_import import historical_record
         old=historical_record(state,root,record)
@@ -218,6 +226,7 @@ def prepare_observations(item, proposal, record, *, allow_manual_critical=False)
             decision.update(action='defer_manual',reason='未达必要返修阈值：保留实际问题，采用现有图供人工后修')
             proposal['adopt']=True
     if strict and proposal.get('decision',{}).get('action')=='defer_manual':proposal['adopt']=True
+    if missing_scene_background(item):proposal['adopt']=False
     if proposal['verdict'] == 'FAIL':
         proposal.setdefault('failure_diagnosis', {'layer': 'generation_execution',
             'evidence': '; '.join(i['problem'] for i in observed['issues'])})

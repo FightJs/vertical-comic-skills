@@ -205,7 +205,7 @@ def _basis(state, root, shot):
     if state.get('runtime_import'):
         from runtime_import import verify_binding
         _,original=verify_binding(state,root)
-        if all(state.get(k)==original.get(k) for k in ('source_snapshot','visual_basis','shot_manifest','semantic_audit')):
+        if all(state.get(k)==original.get(k) for k in ('source_snapshot','visual_basis','shot_manifest')):
             toolchain=original.get('toolchain') or {}
     from preparation_gate_policy import enabled as light_preparation, FIELD
     return {**({FIELD: state[FIELD]} if light_preparation(state) else {}),
@@ -353,12 +353,14 @@ def preparation_basis(state, root, shot, panel, prompt):
     if signals:
         targets['all_execution_text_and_criteria'] = {'scoped_conflict_signals': signals,
             'instruction': '仅核对这些疑点与相关原输入；在本项evidence说明修正或不构成冲突的依据，不另开审查轮次。'}
-    return {'input_semantics_policy': PREPARED_POLICY, 'preparation_targets':copy.deepcopy(targets)}
+    from preparation_gate_policy import EXCEPTION, FIELD, requirements
+    extra={'preparation_requirements':requirements(shot)} if state.get(FIELD)==EXCEPTION else {}
+    return {**extra, 'input_semantics_policy': PREPARED_POLICY, 'preparation_targets':copy.deepcopy(targets)}
 
 
 def review_template(inputs):
-    from preparation_gate_policy import FIELD, POLICY as LIGHT, template
-    if inputs.get(FIELD) == LIGHT: return template(inputs)
+    from preparation_gate_policy import FIELD, POLICIES as LIGHT, template
+    if inputs.get(FIELD) in LIGHT: return template(inputs)
     policy = inputs.get('input_semantics_policy', POLICY)
     return {'policy': policy, 'status': 'UNREVIEWED', 'reviewer': '', 'evidence': '',
             'input_digest': fingerprint(inputs), 'checks': {
@@ -369,8 +371,8 @@ def review_template(inputs):
 
 
 def review_errors(review, inputs):
-    from preparation_gate_policy import FIELD, POLICY as LIGHT, review_errors as quick_errors
-    if inputs.get(FIELD) == LIGHT: return quick_errors(review, inputs)
+    from preparation_gate_policy import FIELD, POLICIES as LIGHT, review_errors as quick_errors
+    if inputs.get(FIELD) in LIGHT: return quick_errors(review, inputs)
     if not isinstance(review, dict):
         return ['INPUT_SEMANTICS_HOLD:缺最终输入逐格审查']
     policy = inputs.get('input_semantics_policy', POLICY)
@@ -486,6 +488,16 @@ def _coverage(state, root, dependency_plan=None, *, panel_ids=None):
     if light_preparation(state):
         audit = read_json(checked_file(root, state['semantic_audit']))
         extra = {FIELD: state[FIELD], 'warnings': {r['panel_id']: warnings(r) for r in audit['panels'] if r['panel_id'] in selected and warnings(r)}}
+    from preparation_gate_policy import EXCEPTION, requirements
+    if state.get(FIELD)==EXCEPTION:
+        ready=[p for p in selected if p not in errors]
+        return {**extra,'policy':state['input_semantics_policy'],
+                'status':'HOLD' if errors else 'SCOPED_INPUTS_READY' if panel_ids is not None else 'PREPRODUCTION_INPUTS_READY',
+                'scope':'selected' if panel_ids is not None else 'episode','panel_ids':selected,
+                'technically_ready_panel_ids':ready,
+                'reviewed_panel_ids':[p for p in ready if requirements(shots[p])],
+                'review_not_required_panel_ids':[p for p in ready if not requirements(shots[p])],
+                'pending_real_reference_review_ids':pending,'errors':errors,'dispatch_authorized':False,'image_calls':0}
     return {**extra, 'policy': state['input_semantics_policy'], 'status': 'HOLD' if errors else 'SCOPED_INPUTS_REVIEWED' if panel_ids is not None else 'PREPRODUCTION_INPUTS_REVIEWED',
             'scope':'selected' if panel_ids is not None else 'episode',
             'panel_ids': selected, 'reviewed_panel_ids': [p for p in selected if p not in errors],

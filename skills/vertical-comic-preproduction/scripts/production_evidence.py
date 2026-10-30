@@ -255,7 +255,8 @@ def input_errors(state, root, record, shot, basis, records, *, candidate=False, 
     authorization = state.get("production_authorization")
     if preparation_only and not (candidate or dispatch_audit):
         return ['PREPARATION_AUTHORITY_HOLD:前期授权只允许只读候选或接包审计']
-    if preparation_only and 'preparation_authorization' in state:
+    preparation_role = preparation_only and 'preparation_authorization' in state and not state.get('production_authorization')
+    if preparation_role:
         if state.get('parallel_context'):
             return ['PREPARATION_AUTHORITY_HOLD:前期授权不得用于线上调度上下文']
         from task_context import preparation_errors
@@ -268,7 +269,7 @@ def input_errors(state, root, record, shot, basis, records, *, candidate=False, 
             errors.append("当前格不在已授权生产范围")
     manifest_path = checked_file(root, record.get("package_manifest"))
     packet = read(manifest_path)
-    if preparation_only and 'preparation_authorization' in state and packet.get('dispatch_receipt'):
+    if preparation_role and packet.get('dispatch_receipt'):
         errors.append('PREPARATION_AUTHORITY_HOLD:前期授权不得用于已领取回执')
     from panel_readiness import binding_errors as readiness_binding
     errors.extend(readiness_binding(state,packet))

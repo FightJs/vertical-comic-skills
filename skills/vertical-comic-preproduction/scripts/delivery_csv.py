@@ -39,8 +39,18 @@ def render(indexes, *, episode_prefix=False):
             incomplete=row.get('incomplete_reasons',[])
             overview.append({**common,'交付结论':LABELS[row['outcome']],
                 '遗留问题数量':len(issues),'最高优先级':PRIORITY[min(categories)] if categories else '',
-                '问题摘要':'；'.join(('未核实：' if i['certainty']=='unverified' else '')+i['problem'] for i in issues) if issues else ('未完成：'+'；'.join(incomplete) if row['outcome']=='INCOMPLETE' else '未发现已确认遗留问题'),
+                '问题摘要':'；'.join(('未核实：' if i['certainty']=='unverified' else '')+i['problem'] for i in issues) if issues else ('未完成：'+'；'.join(incomplete) if row['outcome'] in {'INCOMPLETE','NETWORK_FAILED','CONTENT_REFUSED'} else '未发现已确认遗留问题'),
                 '处理建议':'；'.join(dict.fromkeys(i['handling'] for i in issues)) if issues else ('；'.join(incomplete) if incomplete else '按交付结论使用')})
+            if row['outcome']=='CONTENT_REFUSED':
+                details.append((1,{**common,'问题编号':pid+'-content-refused','问题类别':'内容审核拒绝缺图',
+                    '具体位置':'整格','当前问题':'；'.join(incomplete),'正确目标':'本格图片未生成',
+                    '优先级':'高','处理情况':'未继续重试；按授权保留缺格交付',
+                    '确认情况':'图像服务返回内容审核拒绝'}))
+            if row['outcome']=='NETWORK_FAILED':
+                details.append((1,{**common,'问题编号':pid+'-network-missing','问题类别':'调用失败缺图',
+                    '具体位置':'整格','当前问题':'；'.join(incomplete),'正确目标':'本格图片未生成',
+                    '优先级':'高','处理情况':'已停止自动重试；按授权保留缺格交付',
+                    '确认情况':'工具返回网络错误；服务端根因未证实'}))
             for issue in issues:
                 details.append((issue['category'],{**common,'问题编号':issue['id'],
                     '问题类别':CATEGORY[issue['category']],'具体位置':issue['location'],

@@ -15,19 +15,19 @@ class HardDeadlineTests(unittest.TestCase):
     def test_pause_excluded_from_active_budget(self):
         c.event(self.directory,'pause','p',at=stamp(100));c.event(self.directory,'resume','r',at=stamp(10000))
         value=c.status(self.directory,at=stamp(10020))
-        self.assertEqual(value['active_seconds'],120);self.assertEqual(value['remaining_seconds'],14280)
+        self.assertEqual(value['active_seconds'],120);self.assertEqual(value['remaining_seconds'],25080)
         self.assertEqual(value['schedule_stage'],'PRODUCE');self.assertTrue(value['optional_work_allowed'])
     def test_target_and_hard_boundary_exact(self):
-        for n,stage,allowed in [(8999,'PRODUCE',True),(9000,'CONVERGE',True),(10799,'CONVERGE',True),(10800,'TARGET_OVERRUN',True),(14399,'TARGET_OVERRUN',True),(14400,'HARD_STOP',False)]:
+        for n,stage,allowed in [(8999,'PRODUCE',True),(9000,'CONVERGE',True),(10799,'CONVERGE',True),(10800,'CONVERGE',True),(14399,'CONVERGE',True),(14400,'TARGET_OVERRUN',True),(25199,'TARGET_OVERRUN',True),(25200,'HARD_STOP',False)]:
             with self.subTest(n=n):
                 value=c.status(self.directory,at=stamp(n))
                 self.assertEqual(value['schedule_stage'],stage);self.assertEqual(value['new_calls_allowed'],allowed)
-    def test_three_hours_allows_generation_and_review_until_hard_stop(self):
-        with patch.object(c,'instant',return_value=stamp(10800)):
+    def test_four_hours_allows_generation_and_review_until_seven_hours(self):
+        with patch.object(c,'instant',return_value=stamp(14400)):
             self.assertTrue(c.require_dispatch(self.root)['new_calls_allowed'])
             self.assertEqual(c.require_step(self.root,'qa-save')['schedule_stage'],'TARGET_OVERRUN')
             self.assertTrue(c.require_step(self.root,'compile')['new_calls_allowed'])
-        with patch.object(c,'instant',return_value=stamp(14400)):
+        with patch.object(c,'instant',return_value=stamp(25200)):
             with self.assertRaisesRegex(ValueError,'LIMIT_REACHED'):c.require_step(self.root,'final-check')
     def test_optional_work_rejected_in_convergence(self):
         with patch.object(c,'instant',return_value=stamp(9000)):
@@ -35,12 +35,12 @@ class HardDeadlineTests(unittest.TestCase):
             self.assertIsNotNone(c.require_step(self.root,'compile'))
     def test_restart_never_resets_origin(self):
         c.initialize(self.directory,'production',at=stamp(12000),hard_deadline=True)
-        self.assertEqual(c.status(self.directory,at=stamp(12000))['remaining_seconds'],2400)
+        self.assertEqual(c.status(self.directory,at=stamp(12000))['remaining_seconds'],13200)
         with self.assertRaisesRegex(ValueError,'SCOPE_CONFLICT'):c.initialize(self.directory,'production',14399,hard_deadline=True)
-    def test_cannot_extend_above_four_hours(self):
-        with self.assertRaisesRegex(ValueError,'MAX_14400'):c.initialize(self.root/'other','production',18000,hard_deadline=True)
+    def test_cannot_extend_above_seven_hours(self):
+        with self.assertRaisesRegex(ValueError,'MAX_25200'):c.initialize(self.root/'other','production',25201,hard_deadline=True)
     def test_all_episodes_share_parent_deadline(self):
-        with patch.object(c,'instant',return_value=stamp(14400)):
+        with patch.object(c,'instant',return_value=stamp(25200)):
             for episode in ('E026','E030'):
                 with self.assertRaisesRegex(ValueError,'LIMIT_REACHED'):c.require_dispatch(self.root/episode/'00_输入审计/生产流程.json')
     def test_shorter_limit_is_respected(self):
@@ -52,12 +52,12 @@ class HardDeadlineTests(unittest.TestCase):
         c.event(d,'pause','p',at=stamp(100));c.event(d,'resume','r',at=stamp(10000))
         self.assertEqual(c.status(d,at=stamp(10020))['remaining_seconds'],14280)
     def test_context_prevents_origin_reset(self):
-        c.initialize_context(self.root,'production',14400,hard_deadline=True)
+        c.initialize_context(self.root,'production',25200,hard_deadline=True)
         p=self.directory/'runtime-clock.json';v=json.loads(p.read_text());v['created']=stamp(200);p.write_text(json.dumps(v))
         with patch.object(c,'instant',return_value=stamp(300)),self.assertRaisesRegex(ValueError,'ORIGIN_CHANGED'):
             c.require_dispatch(self.root)
     def test_lost_or_changed_clock_cannot_disable_new_context(self):
-        c.initialize_context(self.root,'production',14400,hard_deadline=True)
+        c.initialize_context(self.root,'production',25200,hard_deadline=True)
         (self.directory/'runtime-clock.json').unlink()
         with self.assertRaisesRegex(ValueError,'LEDGER_MISSING'):c.require_step(self.root)
     def test_pause_wait_user_and_resume_do_not_reset_prior_active_time(self):
@@ -65,20 +65,20 @@ class HardDeadlineTests(unittest.TestCase):
         c.event(self.directory,'resume','resume',at=stamp(86400))
         with patch.object(c,'instant',return_value=stamp(86401)):
             value=c.require_dispatch(self.root)
-            self.assertEqual(value['remaining_seconds'],3599)
+            self.assertEqual(value['remaining_seconds'],14399)
             self.assertTrue(value['new_calls_allowed'])
     def test_successful_finish_does_not_become_late_when_inspected_later(self):
         c.event(self.directory,'finish','done',at=stamp(10000))
         value=c.status(self.directory,at=stamp(20000))
-        self.assertEqual(value['wall_seconds'],10000);self.assertEqual(value['remaining_seconds'],4400)
+        self.assertEqual(value['wall_seconds'],10000);self.assertEqual(value['remaining_seconds'],15200)
     def test_policy_removal_cannot_reenable_steps(self):
-        c.initialize_context(self.root,'production',14400,hard_deadline=True)
+        c.initialize_context(self.root,'production',25200,hard_deadline=True)
         p=self.directory/'runtime-clock.json';v=json.loads(p.read_text());v.pop('deadline_policy');p.write_text(json.dumps(v))
         with self.assertRaisesRegex(ValueError,'SCOPE_MISMATCH'):c.require_step(self.root)
-    def test_public_entry_defaults_to_four_hours(self):
+    def test_public_entry_defaults_to_seven_hours(self):
         import inspect,comic_start
-        self.assertEqual(inspect.signature(comic_start.prepare).parameters['runtime_limit_seconds'].default,14400)
-        self.assertEqual(inspect.signature(comic_start.receive).parameters['runtime_limit_seconds'].default,14400)
+        self.assertEqual(inspect.signature(comic_start.prepare).parameters['runtime_limit_seconds'].default,25200)
+        self.assertEqual(inspect.signature(comic_start.receive).parameters['runtime_limit_seconds'].default,25200)
     def test_entry_charges_observed_precheck_time(self):
         import comic_start
         run=self.root/'receiver'

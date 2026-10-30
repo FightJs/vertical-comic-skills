@@ -71,6 +71,13 @@ def production_expected(value):
     for state,root,review,ref in production_basis(value):
         eid=state['episode_id'];index=copy.deepcopy(review)
         for row in index['panels']:
+            if not row.get('image') and row.get('outcome') in {'NETWORK_FAILED','CONTENT_REFUSED'}:
+                if row['outcome']=='CONTENT_REFUSED':
+                    from no_image_recovery import content_raw_evidence
+                    for evidence in content_raw_evidence(root,row['content_refusal']):
+                        source=checked_local(root,evidence)
+                        expected[eid+'/内容审核拒绝证据/'+row['panel_id']+'/'+evidence['sha256']+source.suffix.lower()]=evidence['sha256']
+                continue  # Validated by panel_delivery.build; no placeholder image.
             if not row.get('image'):
                 raise ValueError('DELIVERY_CONTENT_HOLD:完整成品范围缺采用图:'+row['panel_id'])
             source=checked_local(root,row['image'])
@@ -127,7 +134,10 @@ def verify_production_files(value, artifacts, members):
         or sorted(p.get('number',0) for p in parts)!=list(range(1,len(parts)+1))):
         raise ValueError('DELIVERY_PARTS_HOLD:缺卷、混卷或重复分包')
     return {'status':'PASS','kind':'ordinary_panel_zip_v1','member_count':len(members),
-        'panel_count':sum(len(i['panels']) for i in indexes.values())}
+        'panel_count':sum(len(i['panels']) for i in indexes.values()),
+        'image_count':sum(bool(r.get('delivered_image')) for i in indexes.values() for r in i['panels']),
+        'network_missing_panel_ids':[eid+'-'+r['panel_id'] for eid,i in indexes.items() for r in i['panels'] if r['outcome']=='NETWORK_FAILED'],
+        'content_refused_panel_ids':[eid+'-'+r['panel_id'] for eid,i in indexes.items() for r in i['panels'] if r['outcome']=='CONTENT_REFUSED']}
 
 
 def read_member(z,name):
@@ -135,6 +145,11 @@ def read_member(z,name):
 
 
 def verify_receipt_content(value,report):
+    from lean_delivery import enabled,check_artifact,PROFILE
+    if enabled(value):
+        if report.get('content_validation',{}).get('kind')!=PROFILE:raise ValueError('LEAN_RECEIPT_PROFILE')
+        for artifact in report['artifacts']:check_artifact(artifact)
+        return
     if value['role']=='preparation':
         source=checked(report.get('source'))
         verify_preparation_source(value,source)
@@ -156,8 +171,10 @@ def artifact(path):
 
 def _publish(identity,output,operation,*,source=None):
     from runtime_clock import require_step
-    require_step(identity)
+    require_step(identity, 'preserve-delivery')
     identity=Path(identity).resolve();value=load_identity(identity);output=Path(output).resolve()
+    from lean_delivery import enabled as lean_enabled
+    minimal=lean_enabled(value)
     if output==identity.parent or output.is_relative_to(identity.parent):
         raise ValueError('DELIVERY_OUTPUT_HOLD:发送目录须在协调记录之外')
     key=fingerprint({'requirements':value,'states':state_bindings(value),
@@ -167,27 +184,37 @@ def _publish(identity,output,operation,*,source=None):
         acquired=time.monotonic()
         if output.exists():
             if (output/REPORT).is_file():
-                report=validate_receipt(value,output/REPORT);verify_receipt_content(value,report)
-                if source is not None and report.get('source')!=reference(source):
-                    raise ValueError('DELIVERY_SOURCE_HOLD:已有交付不是本次指定原包')
-                return report
-            raise ValueError('DELIVERY_OUTPUT_HOLD:输出必须为全新目录，不覆盖候选或原件')
+                try:
+                    report=validate_receipt(value,output/REPORT);verify_receipt_content(value,report)
+                    if source is not None and report.get('source')!=reference(source):
+                        raise ValueError('DELIVERY_SOURCE_HOLD:已有交付不是本次指定原包')
+                    return report
+                except (ValueError,FileNotFoundError,zipfile.BadZipFile):
+                    if not minimal:raise
+                    old=read(output/REPORT)
+                    # Preserve only our exact prior publication. Never move an arbitrary directory.
+                    expected={REPORT,*[Path(a['path']).name for a in old.get('artifacts',[])]}
+                    if (old.get('requirements_sha256')!=fingerprint(value) or not old.get('artifacts') or
+                        any(Path(a['path']).parent!=output for a in old['artifacts']) or
+                        not {p.name for p in output.iterdir()}<=expected):raise
+                    output.rename(output.with_name(output.name+'.superseded-'+uuid.uuid4().hex[:12]))
+            else:raise ValueError('DELIVERY_OUTPUT_HOLD:输出必须为全新目录，不覆盖候选或原件')
         attempts_path=identity.parent/'打包尝试.json'
         log=read(attempts_path) if attempts_path.exists() else {'policy':POLICY,'attempts':[]}
         failures=[a for a in log['attempts'] if a.get('requirements_sha256')==fingerprint(value) and a.get('status') in {'FAILED','RUNNING'}]
-        if any(a['input_key']==key for a in failures):
+        if not minimal and any(a['input_key']==key for a in failures):
             raise ValueError('DELIVERY_REPACK_HOLD:相同输入/方案已经失败或终态未知，先查证并作实际修订')
-        if len(failures)>=1+value['max_repack_attempts']:
+        if not minimal and len(failures)>=1+value['max_repack_attempts']:
             raise ValueError('DELIVERY_REPACK_HOLD:自动整理次数已用完，需明确不同方案或交付约束决定')
         attempt={'input_key':key,'requirements_sha256':fingerprint(value),'status':'RUNNING'}
         log['attempts'].append(attempt);atomic_json(attempts_path,log)
         before=state_bindings(value)
         try:
-            require_step(identity)
+            require_step(identity, 'preserve-delivery')
             operation_started=time.monotonic()
             report=operation(value,output)
             operation_finished=time.monotonic()
-            require_step(identity)
+            require_step(identity, 'preserve-delivery')
             if before!=state_bindings(value):raise ValueError('DELIVERY_CHANGED_HOLD:打包期间权威状态变化')
             report.update(policy=POLICY,status='DELIVERY_READY',role=value['role'],scope=value['scope'],
                 requirements_sha256=fingerprint(value),states=before,image_calls=0,images_reencoded=False)
@@ -231,7 +258,7 @@ def pack_panels(value,stage,out):
     sources={p.relative_to(stage).as_posix():p for p in stage.rglob('*') if p.is_file()}
     members={name:digest(p) for name,p in sources.items()}
     _,indexes=production_expected(value)
-    images=[eid+'/'+row['delivered_image']['path'] for _,eid in value['scope'] for row in indexes[eid]['panels']]
+    images=[eid+'/'+row['delivered_image']['path'] for _,eid in value['scope'] for row in indexes[eid]['panels'] if row.get('delivered_image')]
     metadata=sorted(name for name in sources if name not in images)
     groups=[images];set_id=uuid.uuid4().hex
     pack_expired=False;next_pack_check=0.0
@@ -280,6 +307,9 @@ def pack_panels(value,stage,out):
 
 
 def publish_production(identity,output):
+    from lean_delivery import enabled,pack
+    if enabled(load_identity(identity)):
+        return _publish(identity,output,pack)
     from runtime_clock import locate,status,DELIVERY_SCHEDULE
     directory=locate(identity)
     if directory and status(directory).get('delivery_schedule')==DELIVERY_SCHEDULE:

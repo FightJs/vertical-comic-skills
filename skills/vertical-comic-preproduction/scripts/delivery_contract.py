@@ -57,6 +57,9 @@ def validate_requirements(value):
         or any(not isinstance(x,str) or not Path(x).is_absolute() for x in states)
         or len(set(states)) != len(states)):
         raise ValueError('DELIVERY_CONTRACT_HOLD:准确书话与权威状态不完整')
+    from lean_delivery import PROFILE
+    if value.get('completion_profile') not in (None,PROFILE) or value.get('completion_profile') and value['role']!='production':
+        raise ValueError('DELIVERY_PROFILE_UNKNOWN')
     cap=value.get('max_file_bytes')
     unlimited=(value.get('role')=='production' and value.get('csv_policy')==CSV_POLICY and cap is None and value.get('package_mode')=='single_zip')
     if (not unlimited and (type(cap) is not int or not 65536 <= cap <= LIMIT)
@@ -69,7 +72,7 @@ def validate_requirements(value):
     return value
 
 
-def initialize(run_root, role, states, *, package_mode=None, max_file_bytes=None, task_id=None):
+def initialize(run_root, role, states, *, package_mode=None, max_file_bytes=None, task_id=None, completion_profile=None):
     if role=='production':
         if package_mode not in (None,'single_zip') or max_file_bytes is not None:
             raise ValueError('成品交付不设容量限制、不自动分包；容量参数仅用于前期交接')
@@ -86,13 +89,15 @@ def initialize(run_root, role, states, *, package_mode=None, max_file_bytes=None
         requested = {**old,'role':role,'states':paths,'scope':scope,
             'package_mode':package_mode,'max_file_bytes':max_file_bytes}
         if task_id is not None: requested['task_id']=task_id
+        if completion_profile is not None:requested['completion_profile']=completion_profile
         if requested != old: raise ValueError('DELIVERY_CONTRACT_HOLD:交付范围已锁定，修改须显式建立新合同')
         return reference(identity)
     if (root/CONTRACT).exists(): raise ValueError('DELIVERY_CONTRACT_HOLD:已有未闭合交付合同，不能按旧模式重建')
     value = validate_requirements({'policy':POLICY,'task_id':task_id or uuid.uuid4().hex,
         'role':role,'scope':scope,'states':paths,'max_file_bytes':max_file_bytes,
         'package_mode':package_mode,'image_policy':'preserve_adopted_bytes','max_repack_attempts':1,
-        **({'csv_policy':CSV_POLICY} if role=='production' else {})})
+        **({'csv_policy':CSV_POLICY} if role=='production' else {}),
+        **({'completion_profile':completion_profile} if completion_profile else {})})
     root.mkdir(parents=True,exist_ok=True)
     # A partial initialization is a HOLD, not an implicit legacy task.
     atomic_json(root/CONTRACT,value)
@@ -152,7 +157,9 @@ def validate_artifact_set(value, artifacts):
         if row.get('bytes')!=size: raise ValueError('DELIVERY_SIZE_HOLD:大小记录不符')
         if value['max_file_bytes'] is not None and size > value['max_file_bytes']:
             raise ValueError(f"DELIVERY_SIZE_HOLD:{path.name}实际{size}字节，上限{value['max_file_bytes']}，超出{size-value['max_file_bytes']}字节")
-        checked(row)
+        from lean_delivery import enabled,check_artifact
+        if enabled(value):check_artifact(row)
+        else:checked(row)
     return artifacts
 
 
@@ -164,6 +171,10 @@ def validate_receipt(value, receipt_path):
         or report.get('states')!=state_bindings(value)
         or report.get('image_calls')!=0 or report.get('images_reencoded') is not False):
         raise ValueError('DELIVERY_RECEIPT_HOLD:验收记录未绑定当前合同/范围/采用状态')
+    from lean_delivery import enabled
+    if enabled(value):
+        from production_progress import stat
+        if any(stat(p)!=v for p,v in report.get('source_files',{}).items()):raise ValueError('LEAN_SOURCE_CHANGED')
     artifacts=validate_artifact_set(value,report.get('artifacts'))
     if report.get('total_bytes') != sum(x['bytes'] for x in artifacts):
         raise ValueError('DELIVERY_RECEIPT_HOLD:交付总量不符')
@@ -177,7 +188,9 @@ def assert_completion(value, receipt_path, archive):
     if str(Path(archive).resolve()) not in {x['path'] for x in report['artifacts']}:
         raise ValueError('DELIVERY_SET_HOLD:完成入口必须指向实际发送ZIP，不是内部原包')
     from delivery_publish import verify_receipt_content
-    verify_receipt_content(value,report)
+    from lean_delivery import enabled
+    if not enabled(value):verify_receipt_content(value,report)
+    elif report.get('content_validation',{}).get('kind')!=value['completion_profile']:raise ValueError('LEAN_RECEIPT_PROFILE')
     return report
 
 

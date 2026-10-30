@@ -7,7 +7,11 @@ from platform_io import atomic_json, file_lock, configure_stdio
 
 POLICY = 'active_runtime_clock_v1'
 CONTEXT_POLICY = 'local_execution_context_v1'
-DEADLINE_POLICY = 'three_hour_target_four_hour_active_v1'
+LEGACY_DEADLINE_POLICY = 'three_hour_target_four_hour_active_v1'
+DEADLINE_POLICY = 'four_hour_target_seven_hour_active_v2'
+DEADLINE_POLICIES = {LEGACY_DEADLINE_POLICY, DEADLINE_POLICY}
+TARGET_SECONDS = 14400
+HARD_LIMIT_SECONDS = 25200
 DELIVERY_SCHEDULE = 'four_hour_wall_delivery_v1'
 
 def initialize_context(run, role, limit, *, hard_deadline=False):
@@ -21,7 +25,8 @@ def initialize_context(run, role, limit, *, hard_deadline=False):
              **({'deadline_policy':DEADLINE_POLICY} if hard_deadline else {})}
     if hard_deadline:
         ledger=json.loads((directory/'runtime-clock.json').read_text(encoding='utf-8'))
-        if ledger.get('deadline_policy')!=DEADLINE_POLICY or ledger['limit_seconds']!=limit:raise ValueError('CLOCK_CONTEXT_CONFLICT')
+        if ledger.get('deadline_policy') not in DEADLINE_POLICIES or ledger['limit_seconds']!=limit:raise ValueError('CLOCK_CONTEXT_CONFLICT')
+        value['deadline_policy']=ledger['deadline_policy']
         value['clock_origin']=ledger['created']
         if ledger.get('delivery_schedule'):
             value['delivery_schedule']=ledger['delivery_schedule']
@@ -86,27 +91,58 @@ def elapsed(a, b):
         raise ValueError('CLOCK_TIME_UNCERTAIN: system clock changed')
     return delta
 
-def initialize(directory, role, limit=14400, *, at=None, hard_deadline=False, delivery_deadline=False):
+def initialize(directory, role, limit=None, *, at=None, hard_deadline=False, delivery_deadline=False):
     directory = Path(directory).resolve(); directory.mkdir(parents=True, exist_ok=True)
+    if limit is None:limit=HARD_LIMIT_SECONDS if hard_deadline and not delivery_deadline else 14400
+    deadline_policy=LEGACY_DEADLINE_POLICY if delivery_deadline else DEADLINE_POLICY
+    maximum=14400 if delivery_deadline else HARD_LIMIT_SECONDS
     if role not in {'preparation', 'production'} or type(limit) is not int or limit < 1:
         raise ValueError('invalid role/limit')
     if delivery_deadline and not hard_deadline:raise ValueError('delivery deadline requires hard deadline')
-    if hard_deadline and limit>14400:raise ValueError('HARD_LIMIT_MAX_14400: cannot extend the four-hour active-time budget')
+    if hard_deadline and limit>maximum:raise ValueError(f'HARD_LIMIT_MAX_{maximum}: requested limit exceeds this clock policy')
     with file_lock(directory/'clock.lock'):
         path = directory/'runtime-clock.json'
         if path.exists():
             old = json.loads(path.read_text(encoding='utf-8'))
             if (old['role'] != role or old['limit_seconds'] != limit or
-                old.get('deadline_policy') != (DEADLINE_POLICY if hard_deadline else None) or
+                old.get('deadline_policy') != (deadline_policy if hard_deadline else None) or
                 old.get('delivery_schedule') != (DELIVERY_SCHEDULE if delivery_deadline else None)):
                 raise ValueError('CLOCK_SCOPE_CONFLICT')
         else:
             atomic_json(path, {'policy': POLICY, 'role': role, 'limit_seconds': limit,
                               'created': at or instant(), 'events': [],
                               **({'delivery_schedule':DELIVERY_SCHEDULE} if delivery_deadline else {}),
-                              **({'deadline_policy':DEADLINE_POLICY,'target_seconds':min(10800,limit),
+                              **({'deadline_policy':deadline_policy,'target_seconds':min(10800 if delivery_deadline else TARGET_SECONDS,limit),
                                   'converge_seconds':min(9000,int(limit*.625))} if hard_deadline else {})})
     return status(directory, at=at)
+
+def amendment_identity(directory, value):
+    context=Path(directory)/'execution-context.json'
+    return {'role':value['role'],'created':value['created'],
+            'deadline_policy':value.get('deadline_policy'),'limit_seconds':value['limit_seconds'],
+            'context_sha256':hashlib.sha256(context.read_bytes()).hexdigest() if context.exists() else None}
+
+
+def amend_policy(directory, *, reason, source_ref):
+    """Explicit scheduling revision; preserve original ledger, context refs and events."""
+    if not isinstance(reason,str) or not reason.strip() or not isinstance(source_ref,str) or not source_ref.strip():
+        raise ValueError('CLOCK_POLICY_AUTHORIZATION_REFERENCE_REQUIRED')
+    directory=Path(directory).resolve()
+    before=status(directory)
+    if before['state'] in {'FINISHED','TIME_UNCERTAIN'}:raise ValueError('CLOCK_POLICY_REQUIRES_RECOVERABLE_RUN')
+    with file_lock(directory/'clock.lock'):
+        value=json.loads((directory/'runtime-clock.json').read_text(encoding='utf-8'))
+        if value.get('delivery_schedule') or value.get('deadline_policy') not in DEADLINE_POLICIES:
+            raise ValueError('CLOCK_POLICY_ACTIVE_ONLY')
+        amendment={'policy':DEADLINE_POLICY,'origin':amendment_identity(directory,value),
+                   'limit_seconds':HARD_LIMIT_SECONDS,'target_seconds':TARGET_SECONDS,
+                   'reason':reason,'source_ref':source_ref}
+        path=directory/'clock-policy-amendment.json'
+        if path.exists():
+            if json.loads(path.read_text(encoding='utf-8'))!=amendment:raise ValueError('CLOCK_POLICY_AMENDMENT_CONFLICT')
+        else:atomic_json(path,amendment)
+    return {'status':'POLICY_UPDATED','clock':status(directory),'history_reset':False,'image_calls':0}
+
 
 def event(directory, action, event_id, *, source='explicit', at=None):
     """Immutable spool avoids waiting on coordinator/production locks in Interrupt."""
@@ -181,12 +217,25 @@ def status(directory, *, at=None):
         if opened is not None: total += elapsed(opened, now)
     except ValueError as exc:
         uncertain = str(exc); state = 'TIME_UNCERTAIN'
-    try: wall = elapsed(value['created'], previous if state=='FINISHED' and value.get('deadline_policy')==DEADLINE_POLICY else now)
+    try: wall = elapsed(value['created'], previous if state=='FINISHED' and value.get('deadline_policy') in DEADLINE_POLICIES else now)
     except ValueError: wall = None
-    hard=value.get('deadline_policy')==DEADLINE_POLICY
-    if value.get('deadline_policy') not in (None,DEADLINE_POLICY):raise ValueError('UNKNOWN_DEADLINE_POLICY')
-    if hard and (value['limit_seconds']>14400 or value.get('target_seconds')!=min(10800,value['limit_seconds'])):
+    hard=value.get('deadline_policy') in DEADLINE_POLICIES
+    if value.get('deadline_policy') not in (None,*DEADLINE_POLICIES):raise ValueError('UNKNOWN_DEADLINE_POLICY')
+    maximum=14400 if value.get('deadline_policy')==LEGACY_DEADLINE_POLICY else HARD_LIMIT_SECONDS
+    target=10800 if value.get('deadline_policy')==LEGACY_DEADLINE_POLICY else TARGET_SECONDS
+    if hard and (value['limit_seconds']>maximum or value.get('target_seconds')!=min(target,value['limit_seconds'])):
         raise ValueError('DEADLINE_CONTRACT_CHANGED')
+    original_limit=value['limit_seconds'];original_policy=value.get('deadline_policy')
+    amendment_path=directory/'clock-policy-amendment.json'
+    if amendment_path.exists():
+        amendment=json.loads(amendment_path.read_text(encoding='utf-8'))
+        expected=amendment_identity(directory,value)
+        if (original_policy not in DEADLINE_POLICIES or amendment.get('origin')!=expected or amendment.get('policy')!=DEADLINE_POLICY
+                or amendment.get('limit_seconds')!=HARD_LIMIT_SECONDS or amendment.get('target_seconds')!=TARGET_SECONDS
+                or not amendment.get('reason') or not amendment.get('source_ref') or value.get('delivery_schedule')):
+            raise ValueError('CLOCK_POLICY_AMENDMENT_CHANGED')
+        value={**value,'deadline_policy':DEADLINE_POLICY,'limit_seconds':HARD_LIMIT_SECONDS,'target_seconds':TARGET_SECONDS}
+        hard=True
     delivery=value.get('delivery_schedule')==DELIVERY_SCHEDULE
     if value.get('delivery_schedule') not in (None,DELIVERY_SCHEDULE):raise ValueError('UNKNOWN_DELIVERY_SCHEDULE')
     if delivery and wall is None:
@@ -204,10 +253,12 @@ def status(directory, *, at=None):
     return {'binding':binding,'policy': POLICY, 'role': value['role'], 'state': state,
             'active_seconds': None if uncertain else round(total, 3),
             'confirmed_closed_seconds': round(closed, 3),
+            'active_segment':opened,
             'wall_seconds': round(wall, 3) if wall is not None else None,
             'excluded_seconds': round(max(0,wall-total), 3) if wall is not None and not uncertain else None,
             'remaining_seconds': remaining,
             'deadline_policy':value.get('deadline_policy'),'target_seconds':value.get('target_seconds'),
+            'original_deadline_policy':original_policy,'original_limit_seconds':original_limit,
             'clock_origin':value['created'] if hard else None,
             'schedule_stage':stage,'optional_work_allowed':stage=='PRODUCE',
             'deadline_includes_pauses':delivery,
@@ -219,7 +270,7 @@ def status(directory, *, at=None):
               'TARGET_OVERRUN':['continue_required_generation_and_review','diagnose_repeated_work','reuse_verified_inputs','incremental_delivery'],
               'DRAIN':['no_new_calls','save_returns','finish_available_review','publish_current_package'],
               'PACKAGE':['no_new_calls','publish_current_package','list_missing_and_unknown'],
-              'HARD_STOP':['no_new_steps','preserve_inflight_identity','save_late_returns_only','report_incomplete_scope']}[stage]),
+              'HARD_STOP':['no_new_steps','preserve_inflight_identity','save_late_returns_only','preserve_existing_delivery','report_incomplete_scope']}[stage]),
             'new_calls_allowed':state=='RUNNING' and remaining is not None and remaining>0 and stage not in {'DRAIN','PACKAGE','HARD_STOP'},
             'target_remaining_seconds':max(0,round(value['target_seconds']-total,3)) if hard and not uncertain else None,
             'limit_seconds': value['limit_seconds'], 'time_error': uncertain,
@@ -245,11 +296,11 @@ def require_running(path):
     if not (directory/'runtime-clock.json').is_file(): raise ValueError('CLOCK_REQUIRED_LEDGER_MISSING')
     value = status(directory)
     if context:
-        if (value['role'] != context['role'] or value['limit_seconds'] != context['limit_seconds'] or
-            value.get('deadline_policy')!=context.get('deadline_policy') or
+        if (value['role'] != context['role'] or value['original_limit_seconds'] != context['limit_seconds'] or
+            value.get('original_deadline_policy')!=context.get('deadline_policy') or
             value.get('delivery_schedule')!=context.get('delivery_schedule')):
             raise ValueError('CLOCK_CONTEXT_SCOPE_MISMATCH')
-        if context.get('deadline_policy')==DEADLINE_POLICY and (
+        if context.get('deadline_policy') in DEADLINE_POLICIES and (
             context.get('clock_origin')!=value['clock_origin']):
             raise ValueError('DEADLINE_ORIGIN_CHANGED')
         from runtime_clock_context import require_bound
@@ -266,15 +317,19 @@ def require_step(path, action=None, *, optional=False):
     context=execution_context(path)
     directory=Path(context['clock_directory']) if context else locate(path)
     if directory is None or not (directory/'runtime-clock.json').is_file():
-        if context and context.get('deadline_policy')==DEADLINE_POLICY:raise ValueError('CLOCK_REQUIRED_LEDGER_MISSING')
+        if context and context.get('deadline_policy') in DEADLINE_POLICIES:raise ValueError('CLOCK_REQUIRED_LEDGER_MISSING')
         return None
     if context:
-        if context.get('deadline_policy')!=DEADLINE_POLICY:return None
+        if context.get('deadline_policy') not in DEADLINE_POLICIES:return None
     else:
         marker=json.loads((directory/'runtime-clock.json').read_text(encoding='utf-8')).get('deadline_policy')
         if marker is None:return None
-        if marker!=DEADLINE_POLICY:raise ValueError('UNKNOWN_DEADLINE_POLICY')
-    value=require_running(path)
+        if marker not in DEADLINE_POLICIES:raise ValueError('UNKNOWN_DEADLINE_POLICY')
+    try:value=require_running(path)
+    except ValueError as exc:
+        if action!='preserve-delivery' or 'RUNTIME_CLOCK_LIMIT_REACHED' not in str(exc):raise
+        value=status(directory)
+        if value['state'] not in {'RUNNING','FINISHED'}:raise
     if optional and value['schedule_stage']!='PRODUCE':
         raise ValueError('RUNTIME_CONVERGE: optional work stopped; finish required review and delivery')
     return value
@@ -349,11 +404,13 @@ def attach_current(directory, *, home=None, explicit_session=None):
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument('action', choices=['init','start','pause','resume','wait_user','finish','uncertain','status','bind','attach','unbind','check-submit'])
+    p.add_argument('action', choices=['init','start','pause','resume','wait_user','finish','uncertain','status','bind','attach','unbind','check-submit','amend-policy'])
     p.add_argument('--directory', required=True); p.add_argument('--role', choices=['preparation','production'])
-    p.add_argument('--limit-seconds',type=int,default=14400); p.add_argument('--event-id'); p.add_argument('--session-id'); p.add_argument('--codex-home')
+    p.add_argument('--limit-seconds',type=int,default=HARD_LIMIT_SECONDS); p.add_argument('--event-id'); p.add_argument('--session-id'); p.add_argument('--codex-home')
+    p.add_argument('--reason');p.add_argument('--source-ref')
     a=p.parse_args(); directory=Path(a.directory).resolve()
     if a.action=='init': result=initialize(directory,a.role,a.limit_seconds,hard_deadline=True)
+    elif a.action=='amend-policy':result=amend_policy(directory,reason=a.reason,source_ref=a.source_ref)
     elif a.action in {'bind','attach'}: result=attach_current(directory,home=a.codex_home,explicit_session=a.session_id)
     elif a.action=='unbind':
         release(directory,a.session_id,a.codex_home)

@@ -26,7 +26,10 @@ def checkpoint(state_path, phase, panel_id=None, *, state=None):
         state = read_json(path)
     if not enabled(state): return None
     from runtime_clock import require_running, execution_context
-    clock = require_running(path)
+    if phase in {'review','repair','pack'}:
+        from runtime_clock import require_step
+        clock = require_step(path,'preserve-delivery')
+    else:clock = require_running(path)
     if not clock or clock.get('state') != 'RUNNING' or clock.get('active_seconds') is None:
         raise ValueError('SPEED_CLOCK_REQUIRED: no wall-time or unlimited fallback')
     context = execution_context(path)
@@ -124,6 +127,8 @@ def forecast(state_paths, clock):
     if any(c is None for c in contexts) or len({c['run_id'] for c in contexts})!=1:
         raise ValueError('FORECAST_REQUIRES_ONE_TASK_CLOCK')
     active=clock.get('active_seconds');remaining=clock.get('remaining_seconds')
+    target_remaining=clock.get('target_remaining_seconds')
+    if target_remaining is None:target_remaining=remaining
     states=[read_json(p) for p in paths]
     keys={(s['episode_id'],r['panel_id']) for s in states for r in s['panels']}
     returned={(s['episode_id'],r['panel_id']) for s in states for r in s['panels'] if r.get('output')}
@@ -145,10 +150,11 @@ def forecast(state_paths, clock):
     missing=len(keys-returned)
     seconds=missing*elapsed/count if count>=5 and elapsed>0 else None
     reserve=900
-    late=seconds is not None and seconds+reserve>remaining
+    late=missing>0 and (target_remaining<=0 or (seconds is not None and seconds+reserve>target_remaining))
     return {'status':'AT_RISK' if late else 'OBSERVING' if seconds is None else 'ON_TRACK',
             'source_panels':len(keys),'returned_panels':len(returned),'missing_panels':missing,
-            'active_seconds':active,'remaining_seconds':remaining,
+            'active_seconds':active,'remaining_seconds':remaining,'target_remaining_seconds':target_remaining,
+            'hard_stop_at_risk':seconds is not None and seconds+reserve>remaining,
             'expected_remaining_seconds':round(seconds,3) if seconds is not None else None,
             'delivery_reserve_seconds':reserve,'stop_first_round':False,
             'actions':['prioritize_missing','skip_optional_polish','inspect_idle_slots_and_local_queue'] if late else ['continue_required_production'],

@@ -29,6 +29,18 @@ class SourceInputsTests(unittest.TestCase):
             self.state['panels']=[{'status':'GENERATED'}];self.save()
         self.assertEqual(memo['source_progress_refreshes'],1)
         self.assertNotIn(str(self.path.resolve()),memo['files'])
+    def test_prepared_proof_reuses_unchanged_source_projection(self):
+        from prepared_job_store import PreparedStore,proof
+        with file_session() as memo:read(self.path)
+        saved=proof(memo,self.root/'unrelated-state.json')
+        self.assertTrue(saved['reusable'])
+        store=PreparedStore(self.root/'owner'/'state.json')
+        store.verify_files(saved)
+        self.state['panels']=[{'panel_id':'P001','status':'GENERATED','qa_report':'changed'}];self.save()
+        store.verify_files(saved)
+        self.state['gates']={};self.save()
+        with self.assertRaises(ValueError):store.verify_files(saved)
+
     def test_input_and_authority_changes_fail_closed(self):
         for key,value in [('holds',['hold']),('gates',{}),('authority_revision',2),('approval_revocations',[]),('visual_basis',{})]:
             with self.subTest(key=key):
@@ -46,6 +58,16 @@ class SourceInputsTests(unittest.TestCase):
             self.assertGreater(pool.statistics['hits'],0)
             self.state['gates']['shot_design']['status']='REVOKED';self.save()
             with file_session():self.assertTrue(load_context(self.packet,self.root)[1])
+    def test_imported_panel_order_is_bound_without_progress_statuses(self):
+        self.state['runtime_import']={'path':'import.json','sha256':'a'*64}
+        self.state['panels']=[{'panel_id':'P001','status':'GENERATED'},{'panel_id':'P002','status':'PENDING'}];self.save()
+        with file_session():
+            self.assertEqual(read(self.path).panel_order,('P001','P002'))
+            self.state['panels'][1]['status']='GENERATED';self.save()
+        with self.assertRaisesRegex(ValueError,'CHECK_SNAPSHOT_CHANGED'):
+            with file_session():
+                read(self.path);self.state['panels'].reverse();self.save()
+
     def test_full_read_dominates_in_either_order(self):
         for first in (True,False):
             with self.assertRaisesRegex(ValueError,'CHECK_SNAPSHOT_CHANGED'):

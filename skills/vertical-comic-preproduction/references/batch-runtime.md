@@ -46,7 +46,7 @@ python <scripts>/slot_leases.py --state <生产流程.json> --expected-sha256 <�
 
 ## 重新分配与异常
 
-第一版固定额度，按实际空闲事件再分配，不轮询抢占。重新分配替换所有租约，先停止旧写入者并保存状态，确认没有任何预留/在途/未知请求，再用--old-writers-stopped和真实control哈希调用allocate。旧账本和租约历史保留，旧回执不改名升级；旧epoch返回继续原carry-forward要求。
+旧入口allocate用于更换owner或重新分配租约。该操作替换所有租约，先停止旧写入者并保存状态，确认没有任何预留/在途/未知请求，再用--old-writers-stopped和真实control哈希调用allocate。旧账本和租约历史保留，旧回执不改名升级；旧epoch返回继续原carry-forward要求。
 
 快照不会让会话在休眠、退出或中断后自动后台运行。恢复核验快照、state、真实输出和未知请求，再按原授权继续。T1/T2只诊断，不增加预算、不伪造批准、不释放未知槽。人工等待不催执行者；本话仅等跨话比较时交回总控结束本轮。
 
@@ -66,3 +66,9 @@ python <scripts>/slot_leases.py --state <生产流程.json> --expected-sha256 <�
 ## 不同批准画风表述的容量衔接
 
 新control可明确`style_binding_policy=style_basis_by_job_v1`，每个job的style_basis为shared_files中已冻结的path/sha256引用；各job按自己的批准style完整匹配。所有画风样例字节仍纳入shared_files，同一control统一核对容量、租约和owner。不以同图哈希推定traits等价。无此合同的旧control继续唯一共用style_basis，不能只加job字段绕过旧规则。
+
+## 同owner动态调整
+
+新准备派发路径由resource-acquire调用slot_leases.resize，按机器当前图片额度更新本话dispatch_target。使用本话和共享控制的原短锁，核对当前owner/epoch/范围/停派及真实容量；不更换lease_id，不重置attempt或历史。slots至少覆盖已活动的RESERVED、IN_FLIGHT、RESULT_UNKNOWN，dispatch_target可以先降至较低值（包括0），停止补充直到在途自然结算。升档仍受原全局/本话生产额度约束，不推定服务容量、不扩大批准范围。租约不够时在结果production_capacity中说明限制原因。
+
+临时机器降档不修改jobs.max_inflight、清单范围或compile_workers。真实更换owner仍必须走原allocate与移交协议，不能用resize接管别人的请求。

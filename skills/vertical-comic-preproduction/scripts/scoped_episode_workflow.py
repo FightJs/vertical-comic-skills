@@ -17,7 +17,7 @@ def evaluate_episode(state, root, check='status', requested=None):
         return _evaluate_episode(state, root, check, requested)
 
 
-def _evaluate_episode(state, root, check='status', requested=None, *, prepared_sink=None, workers=4):
+def _evaluate_episode(state, root, check='status', requested=None, *, prepared_sink=None, workers='all'):
     """reservation_batch reuses status gates and checks only enough unreserved inputs.
 
     It grants no dispatch authority: receipts, final compile and submission checks
@@ -223,7 +223,8 @@ def _evaluate_episode(state, root, check='status', requested=None, *, prepared_s
                         and all(d in checked_ids for d in shot_by_id[r['panel_id']]['generation_dependencies'])
                         and (r.get('status') == 'PENDING' and r.get('round_id', 1) == 1 or r.get('status') == 'REPAIR_AUTHORIZED' and r.get('round_id') == 2 and not systemic)]
             from stage_deadlines import repair_schedule
-            schedule=repair_schedule(original,root) if any(by_id[p].get('round_id')==2 for p in eligible) else None
+            # Scheduling depends on live progress, not the immutable compiled input.
+            schedule=repair_schedule(original,root) if check!='prepare_batch' and any(by_id[p].get('round_id')==2 for p in eligible) else None
             if schedule:
                 eligible=[p for p in eligible if by_id[p].get('round_id')!=2 or
                           (schedule['repair_budget_available'] and

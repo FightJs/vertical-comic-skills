@@ -75,5 +75,19 @@ class WatchdogTests(unittest.TestCase):
         self.assertEqual(json.loads(checked.stdout)["policy"],"worker_watchdog_v1")
 
 
+
+class ExecutorLifecycleTests(unittest.TestCase):
+    def test_definitive_termination_reconciles_once_without_assuming_no_image(self):
+        from worker_watchdog import evaluate
+        snapshot={'stage':'generation','executor_lifecycle':{'state':'TERMINATED','executor_id':'synthetic-cell',
+            'source_locator':'synthetic://host-terminal','event_id':'terminal-1'},
+            'requests':[{'panel_id':'P001','attempt_id':'a1','status':'RESULT_UNKNOWN'}]}
+        result=evaluate(snapshot);self.assertEqual(result['state'],'EXECUTOR_TERMINATED')
+        event=result['alerts'][0];self.assertEqual(event['action'],'RECONCILE_CAPTURED_RETURNS_AND_REMOTE_OUTCOMES')
+        snapshot['emitted']=[event['event_id']]
+        self.assertEqual(evaluate(snapshot)['alerts'],[])
+        snapshot['executor_lifecycle'].pop('source_locator')
+        with self.assertRaises(ValueError):evaluate(snapshot)
+
 if __name__ == "__main__":
     unittest.main()

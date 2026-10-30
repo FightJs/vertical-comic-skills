@@ -136,7 +136,7 @@ def semantic_errors(state,root,batch,blocked=()):
             if p['panel_id'] in blocked:continue
             from preparation_gate_policy import enabled as light_preparation, design_errors
             if light_preparation(state):
-                errors.extend(f"{p['panel_id']}:{e}" for e in design_errors(p))
+                errors.extend(f"{p['panel_id']}:{e}" for e in design_errors(p,state,by_id[p['panel_id']]))
                 continue
             if p.get('status')!='REVIEWED' or not p.get('reviewer') or not p.get('evidence'):errors.append(f"{p['panel_id']}:尚未实际语义核对")
             for key in semantic_checks(state):
@@ -168,6 +168,9 @@ def _semantic_template(state,root,bid):
     value={'policy':AUDIT,'book_id':state['book_id'],'episode_id':state['episode_id'],**{k:state[k] for k in ('source_snapshot','visual_basis','shot_manifest')},'panel_ids':ids,'panels':[{'panel_id':pid,'status':'UNREVIEWED','reviewer':'','evidence':'','checks':{k:{'status':'UNREVIEWED','evidence':''} for k in semantic_checks(state)}} for pid in ids]}
     from preparation_gate_policy import enabled as quick, FIELD
     if quick(state): value[FIELD] = state[FIELD]
+    from preparation_gate_policy import EXCEPTION
+    if state.get(FIELD)==EXCEPTION:
+        value['panels']=[{'panel_id':pid,'status':'PENDING_TECHNICAL_CHECK'} for pid in ids]
     if 'framing_feasibility' in semantic_checks(state):
         from visual_evidence import feasibility_questions
         shots=read_json(checked_file(Path(root),state['shot_manifest']))

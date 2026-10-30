@@ -48,7 +48,7 @@ def overlay(target,patch,reviewer,path=''):
 
 def save(state_path,expected_state,proposal):
     from runtime_clock import require_step
-    require_step(state_path)
+    require_step(state_path,'preserve-delivery')
     """No CAS retries; a conflict cannot silently overwrite a peer's review."""
     if _FILE_SESSION.get() is not None:raise ValueError('WRITE_REQUIRES_OWN_READ_TRANSACTION')
     path=Path(state_path).resolve();root=path.parent.parent;started=time.monotonic()
@@ -101,6 +101,8 @@ def save(state_path,expected_state,proposal):
         elif expired and proposal['verdict'] == 'FAIL' and proposal['decision'].get('question_kind') != 'user_reserved':
             proposal['decision'] = manual_decision(proposal['decision'])
             proposal['adopt'] = True
+        from light_review import missing_scene_background
+        if missing_scene_background(items[0]):proposal['adopt']=False
     else:
         if template.get(FIELD) or proposal.get('light_observations'): raise ValueError('Frozen full review cannot be downgraded')
         overlay(items[0],proposal.get('observations',{}),proposal['reviewer'])
@@ -189,6 +191,9 @@ def save(state_path,expected_state,proposal):
                 'decision':decision_ref,'issues':copy.deepcopy(decision['issues']),
                 'quality_status':proposal['verdict'],'pending_comparisons':pending,
                 'status':'MATERIALS_ONLY_NOT_FINAL_DELIVERY'}
+    if decision is not None and adopt:
+        from lean_delivery import adopt as record_material
+        record_material(new,row,decision)
     invalidated=[]
     if qa_ref!=original.get('qa_report') and new.get('delivery_review'):
         invalidated.append(new.pop('delivery_review'))

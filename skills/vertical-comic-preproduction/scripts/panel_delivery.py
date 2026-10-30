@@ -71,6 +71,21 @@ def build(state, root):
                   'current_attempt_id': row.get('attempt_id'),
                   'current_status': row.get('status'), 'outcome': 'INCOMPLETE',
                   'issues': [], 'incomplete_reasons': []}
+        if pid not in chosen and row.get('content_refusal_delivery'):
+            from no_image_recovery import content_refusal, content_delivery_refs, content_missing_summary
+            exception=content_refusal(state,root,row)
+            result.update(outcome='CONTENT_REFUSED',content_refusal=exception,incomplete_reasons=[content_missing_summary(exception)])
+            refs.extend(content_delivery_refs(root,row))
+            if row.get('call_evidence'):refs.append(row['call_evidence'])
+            rows.append(result);continue
+        if pid not in chosen and row.get('network_retry_exhausted'):
+            from no_image_recovery import network_exhaustion, network_delivery_refs, network_missing_summary
+            exception = network_exhaustion(state, root, row)
+            result.update(outcome='NETWORK_FAILED', network_failure=exception,
+                          incomplete_reasons=[network_missing_summary(exception)])
+            refs.extend(network_delivery_refs(root,row))
+            if row.get('call_evidence'): refs.append(row['call_evidence'])
+            rows.append(result); continue
         if pid not in chosen:
             result['incomplete_reasons'] = ['缺图、未审或尚未登记采用版本；保留原状态']
             if row.get('call_evidence'):
@@ -167,6 +182,14 @@ def build(state, root):
              'all_usable': all(r['outcome'] in {'DELIVERABLE', 'MANUAL_RETOUCH'} for r in rows),
              'handoff_complete': all(r['outcome'] != 'INCOMPLETE' for r in rows),
              'image_calls': 0, 'visual_qa_changed': False, 'user_approval': 'NOT_GRANTED'}
+    if counts.get('NETWORK_FAILED'):
+        value['images_complete'] = False
+        value['network_missing_panel_ids'] = [r['panel_id'] for r in rows if r['outcome']=='NETWORK_FAILED']
+        value['completion_basis'] = 'AVAILABLE_IMAGES_WITH_AUTHORIZED_NETWORK_GAPS'
+    if counts.get('CONTENT_REFUSED'):
+        value['images_complete']=False
+        value['content_refused_panel_ids']=[r['panel_id'] for r in rows if r['outcome']=='CONTENT_REFUSED']
+        value['completion_basis']='AVAILABLE_IMAGES_WITH_AUTHORIZED_FAILURE_GAPS'
     if light:
         value['image_review_profile'] = 'light_story_review_v1'
         value['review_scope'] = '每图一次全图轻审核；仅修影响剧情理解的严重问题；未执行六项细节及整话/跨话全面复审'
@@ -217,6 +240,13 @@ def _export_candidate(state, root, review_ref, destination, *, allow_partial=Fal
         def cell(v): return str(v).replace('|', '\\|').replace('\n', ' ')
         for row in index['panels']:
             pid = row['panel_id']; target = None
+            if row.get('outcome')=='CONTENT_REFUSED':
+                if not pid or pid in {'.','..'} or '/' in pid or '\\' in pid:raise ValueError('CONTENT_EVIDENCE_PANEL_PATH_INVALID')
+                from no_image_recovery import content_raw_evidence
+                for ref in content_raw_evidence(root,row['content_refusal']):
+                    source=checked_file(root,ref);target_evidence=stage/'内容审核拒绝证据'/pid/(ref['sha256']+source.suffix.lower())
+                    target_evidence.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(source,target_evidence)
+                    if digest(target_evidence)!=ref['sha256']:raise ValueError('CONTENT_EVIDENCE_COPY_CHANGED')
             if pid in image_sources:
                 original = image_sources[pid]
                 target = f"图片/{pid}_{row['attempt_id']}{original.suffix.lower()}"
@@ -236,7 +266,7 @@ def _export_candidate(state, root, review_ref, destination, *, allow_partial=Fal
                  '| 格号／图片 | 类别 | 位置 | 当前问题 → 正确目标 | 优先级 | 处理情况 |',
                  '|---|---|---|---|---|---|', *[line for _, line in sorted(table, key=lambda p: p[0])],
                  '', '所有源格去向见交付索引；原QA中的FAIL保持原样。未完成格：']
-        lines += [f"- {cell(r['panel_id'])}：{cell('；'.join(r['incomplete_reasons']))}" for r in review['panels'] if r['outcome'] == 'INCOMPLETE']
+        lines += [f"- {cell(r['panel_id'])}：{cell('；'.join(r['incomplete_reasons']))}" for r in review['panels'] if r['outcome'] in {'INCOMPLETE','NETWORK_FAILED','CONTENT_REFUSED'}]
         (stage / '问题表.md').write_text('\n'.join(lines) + '\n', encoding='utf-8')
         (stage / '交付索引.json').write_text(json.dumps(index, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
         from delivery_csv import render

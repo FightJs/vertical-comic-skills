@@ -52,7 +52,9 @@
     "production": {
       "max_file_bytes": null,
       "package_mode": "single_zip",
-      "csv_policy": "adopted_issue_csv_v1"
+      "csv_policy": "adopted_issue_csv_v1",
+      "completion_profile": "minimal_panel_delivery_v1",
+      "members": "original_images_and_one_csv"
     }
   },
   "durable_image_submission": {
@@ -81,7 +83,7 @@
   "source_input_validation": {
     "policy": "formal_source_inputs_v1",
     "unknown_fields": "strict_full_file",
-    "final_delivery": "strict_full_file",
+    "final_delivery": "incremental_materials_streaming_image_hash",
     "legacy_auto_migration": false
   },
   "context_rebind": {
@@ -96,14 +98,16 @@
     "cross_episode_atomic": false
   },
   "deadline": {
-    "policy": "three_hour_target_four_hour_active_v1",
-    "default_limit_seconds": 14400,
-    "target_seconds": 10800,
+    "policy": "four_hour_target_seven_hour_active_v2",
+    "default_limit_seconds": 25200,
+    "target_seconds": 14400,
     "converge_seconds": 9000,
     "pause_charged": false,
-    "three_hour_dispatch_stop": false,
     "late_return_preservation": true,
-    "legacy_auto_migration": false
+    "legacy_auto_migration": false,
+    "legacy_active_policy": "three_hour_target_four_hour_active_v1",
+    "explicit_policy_amendment": true,
+    "target_dispatch_stop": false
   },
   "receiver_host": {
     "policy": "receiver_host_v1",
@@ -138,8 +142,8 @@
     "repair_min_remaining_seconds": 900,
     "compile_fallback_max_panels": 5,
     "pause_charged": false,
-    "first_round_continues_after_three_hours": true,
-    "legacy_auto_migration": false
+    "legacy_auto_migration": false,
+    "first_round_continues_after_target": true
   },
   "default_clock_mode": "active",
   "wall_delivery_opt_in": "--clock-mode wall",
@@ -160,6 +164,51 @@
     "callback": "onPrepareInvoke",
     "persistent_owner": true,
     "source_package_mutation": false,
-    "ordinary_full_preflight": false
+    "ordinary_full_preflight": false,
+    "input_source": "prepared_input_source.js",
+    "parallel_compile": "machine_adaptive_pending_scope_v1",
+    "default_compile_workers": "all",
+    "max_compile_workers": "machine_budget_and_os_hard_limit"
+  },
+  "scene_background": {
+    "policy": "scene_background_required_v2",
+    "flat_new_calls_allowed": false,
+    "historical_evidence_preserved": true,
+    "extra_review_rounds": 0
+  },
+  "exception_preparation": {
+    "policy": "exception_preparation_v2",
+    "default_new_speed_tasks": true,
+    "ordinary_observation_required": false,
+    "legacy_auto_migration": false
+  },
+  "prepared_scope": "prepared_scope_v2",
+  "image_tool_bridge": {
+    "policy": "observed_channel_dispatch_v1",
+    "entry": "image_tool_bridge.js",
+    "channel_backpressure_before_registration": true,
+    "native_start_requires_observation": true,
+    "timeout_retry": false,
+    "event_action": "invocation-event",
+    "backend_concurrency_verified": false,
+    "concurrent_requests": true,
+    "batch_entry": "batch_bootstrap.js",
+    "dispatch_mode": "all_ready",
+    "persistent_review_resume": true,
+    "ready_notifications": "revision_wait_v1",
+    "capture_admission": "bounded_client_nonblocking_reader_v1",
+    "terminal_envelope_binding": "invokeEnvelope"
+  },
+  "machine_resources": {
+    "policy": "machine_resource_admission_v1",
+    "scope": "machine_across_episode_owners",
+    "initial_compile_workers": 2,
+    "initial_image_requests": 4,
+    "unknown_probe_limits": [
+      1,
+      2
+    ],
+    "retained_originals": "release_memory_after_durable_capture",
+    "remote_authority_unchanged": true
   }
 }

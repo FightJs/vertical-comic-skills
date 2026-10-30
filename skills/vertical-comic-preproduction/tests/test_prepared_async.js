@@ -24,5 +24,28 @@ function prepare(r) {
  let release;const delayed=new Promise(r=>release=r),order=[];
  const executing=run([ref(1),ref(2)],2,async()=>({}),async j=>{if(j.panel_id==='P1')await delayed;order.push(j.panel_id)},opts);
  await new Promise(r=>setTimeout(r,15));assert.deepEqual(order,['P2']);release();await executing;
+ let claims=0;calls=0;const invoked=[];
+ const waited=await run([ref(1),ref(2)],2,async j=>{calls++;invoked.push(j.panel_id);return{}},async()=>{},
+   {...opts,capacityPollMs:100,onPrepareInvoke:r=>r.panel_id==='P1' && ++claims<3?{status:'CAPACITY_FULL'}:prepare(r)});
+ assert.equal(calls,2);assert.equal(claims,3);assert.deepEqual(invoked,['P2','P1']);
+ assert(waited.every(x=>x.saved_at),'capacity waiting must retain the original static task');
+ let pausedChecks=0;calls=0;
+ await run([ref(1)],1,async()=>{calls++;return{}},async()=>{},
+   {...opts,capacityPollMs:100,onPrepareInvoke:()=>{if(++pausedChecks===1)return{status:'CAPACITY_FULL'};throw new Error('PAUSED');}});
+ assert.equal(calls,0,'waiting does not bypass a later pause');
+ const createSource=vm.runInNewContext(fs.readFileSync(__dirname+'/../scripts/prepared_input_source.js','utf8'),{setTimeout});
+ let finishPreparation,preparationDone=false;
+ const preparing=new Promise(r=>finishPreparation=r);const available=[{...ref(1),record_digest:'1'.repeat(64)}];
+ const source=createSource({bufferSize:2,pollMs:100,request:async req=>{
+   if(req.action==='prepare-inputs'){await preparing;preparationDone=true;return{status:'READY'};}
+   return{jobs:available.filter(r=>!req.exclude_record_digests.includes(r.record_digest)).slice(0,req.limit),preparation_complete:preparationDone};
+ }});
+ calls=0;
+ const streamed=await run([],2,async()=>{
+   calls++;
+   if(calls===1){assert.equal(preparationDone,false);available.push({...ref(2),record_digest:'2'.repeat(64)});finishPreparation();}
+   return{};
+ },async()=>{}, {...opts,nextPrepared:source.nextPrepared});
+ await source.completion;assert.equal(calls,2);assert(streamed.every(x=>x.saved_at));
  console.log('Prepared callback, exact argument hash, stream and independent save lanes PASS (synthetic only)');
 })().catch(e=>{console.error(e);process.exitCode=1;});

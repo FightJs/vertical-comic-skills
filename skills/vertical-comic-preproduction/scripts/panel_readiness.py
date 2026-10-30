@@ -278,7 +278,7 @@ def _report(state,root,*,include_execution=True):
         if p.get('hold_reasons'):issues.extend(map(str,p['hold_reasons']))
         from preparation_gate_policy import enabled as light_preparation, design_errors, warnings
         if light_preparation(state):
-            issues.extend(design_errors(row))
+            issues.extend(design_errors(row,state,p))
             planning_items.extend({**w, 'panel_ids':[pid]} for w in warnings(row))
         else:
             if row.get('status')!='REVIEWED' or not row.get('reviewer') or not row.get('evidence'):issues.append('本格尚未实际语义核对')

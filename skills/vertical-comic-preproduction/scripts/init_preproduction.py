@@ -119,10 +119,10 @@ def main() -> int:
         extra["visual_evidence_policy"] = (config or {}).get("quality", {}).get("policy", VISUAL_POLICY)
     if mode == 'episode_async_v1':
         from visual_evidence import BACKGROUND_POLICY
-        bg = config.get('background') if config else {
+        bg = (config or {}).get('background') or {
             'policy': BACKGROUND_POLICY, 'selection': 'content_driven', 'closeup_preference': 'scene_softened'}
         if bg:
-            extra.update(background_policy=BACKGROUND_POLICY, requested_background=bg)
+            extra.update(background_policy=BACKGROUND_POLICY, requested_background={**bg, 'policy':BACKGROUND_POLICY})
     if mode == 'episode_async_v1':
         extra['input_quality_policy'] = 'execution_quality_v1'
         from input_semantics import PREPARED_POLICY as SEMANTICS_POLICY
@@ -136,7 +136,7 @@ def main() -> int:
             extra[FIELD] = args.image_review_profile
             from light_review import REPAIR_FIELD,REPAIR_POLICY
             extra[REPAIR_FIELD] = REPAIR_POLICY
-            from preparation_gate_policy import FIELD as PREP_FIELD, POLICY as PREP_POLICY
+            from preparation_gate_policy import FIELD as PREP_FIELD, EXCEPTION as PREP_POLICY
             extra[PREP_FIELD] = PREP_POLICY
         light_enabled(extra)
         if args.speed_policy:

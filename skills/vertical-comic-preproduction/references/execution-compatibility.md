@@ -10,7 +10,7 @@ receive返回source_manifest、executor_manifest与frozen_scripts，核对实际
 
 无图重试统一使用recover-no-image；无需现场复制兼容脚本。确认无图才增加attempt，质量round不增加；未知结果保留原尝试查证。已授权的必要技术恢复不反复询问。
 
-公共输入的真实字节及派生事实只在本进程、有界缓存中复用；文件身份、变更时间、内容哈希、路径目标和目录查询变化均导致重验。进程重启重新验证，最终交付强制完整读取。缓存不存持久PASS，当前批准撤销、容量、租约、调用身份和时钟仍检查。具体边界与验证限制见[incremental-pipeline.md](incremental-pipeline.md)。
+公共输入的真实字节及派生事实只在本进程、有界缓存中复用；文件身份、变更时间、内容哈希、路径目标和目录查询变化均导致重验。进程重启重新验证，新成品打包时读取采用原图并核对哈希，最终不再完整读取历史证据链。缓存不存持久PASS，当前批准撤销、容量、租约、调用身份和时钟仍检查。具体边界与验证限制见[incremental-pipeline.md](incremental-pipeline.md)。
 
 ## 源格号只做无损技术映射
 

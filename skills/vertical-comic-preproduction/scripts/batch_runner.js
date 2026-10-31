@@ -26,14 +26,38 @@
   const hostStartDelay=options.hostStartDelayMs ?? 2000;
   if(!Number.isInteger(hostStartDelay)||hostStartDelay<0)throw Error('HOST_START_DELAY_INVALID');
   const queue=[],waiters=[],preparationErrors=[];
-  const seen=new Set(options.seenAttempts ?? []);
+  const seen=new Set(options.seenAttempts ?? []),queuedKeys=new Set();
+  const reviewRevisions=new Map();
   const attemptKey=ref=>JSON.stringify([ref.episode_id,ref.panel_id,ref.attempt_id]);
-  let remaining=episodes.length,outstanding=0,stopped=false;
+  let remaining=episodes.length,outstanding=0,stopped=false,reviewPending=0;
+  const capacities=new Map(), resourceWait=new Set(),localBlocks=new Map();
+  let lastBlock;
+  function scheduling(event={}) {
+    const reasons=[];
+    if(ceiling<total)reasons.push('MANIFEST_LIMIT');
+    if(resourceWait.size)reasons.push('RESOURCE_PRESSURE');
+    if([...capacities.values()].some(c=>c.status==='WAIT_CAPACITY_ASSIGNMENT'||c.limiting_reason==='SERVICE_OR_JOB_CAPACITY'))reasons.push('LEASE_LIMIT');
+    if(!queue.length&&preparingCount)reasons.push('INPUT_NOT_READY');
+    if(reviewPending)reasons.push('REVIEW_BARRIER');
+    for(const source of sources){
+      const blocked=JSON.stringify(source.snapshot()?.latest?.blocked_panels??[]);
+      if(/WAIT_NEW_STATE_APPROVAL|state_review/.test(blocked))reasons.push('REVIEW_BARRIER');
+      else if(/DEPENDENCY|predecessor/.test(blocked))reasons.push('DEPENDENCY');
+      if(/user_reserved|retained_user/.test(blocked))reasons.push('USER_REVIEW');
+      if(/APPROVAL|AUTHORITY/.test(blocked)&&!/WAIT_NEW_STATE_APPROVAL/.test(blocked))reasons.push('AUTHORITY_CHANGED');
+    }
+    reasons.push(...localBlocks.values());
+    const unique=[...new Set(reasons)].sort();
+    const signature=JSON.stringify(unique);const changed=signature!==lastBlock;lastBlock=signature;
+    return {ready_jobs:queue.length,machine_allowed:machineView.limits?.image??null,manifest_limit:ceiling,
+      tool_capacity:null,actual_in_flight:event.in_flight??null,pending_save:event.returned===undefined?null:event.returned-event.persisted,
+      production_capacity:Object.fromEntries(capacities),block_reasons:unique,block_changed:changed};
+  }
   function wake(){while(waiters.length)waiters.shift()();}
   async function pump(source,index){
     try {
       while(true){const ref=await source.nextPrepared();if(ref===null)break;
-        const key=attemptKey(ref);if(seen.has(key))continue;seen.add(key);queue.push(ref);wake();}
+        const key=attemptKey(ref);if(seen.has(key)||queuedKeys.has(key))continue;queuedKeys.add(key);queue.push(ref);wake();}
       await source.completion;
     } catch(error){preparationErrors.push({episode_id:episodes[index].episode_id,error:String(error)});}
     finally {remaining--;preparingCount--;wake();}
@@ -52,7 +76,7 @@
       const target=Math.min(ceiling,machineView.limits?.image??machineView.hard.image);
       // An episode already supplying enough work needs no additional interpreter.
       // Start another only to fill a real shortage, with machine-wide host admission.
-      if(queue.length+outstanding<target && preparingCount<(machineView.hard.host??episodes.length)
+      if(queue.length+outstanding-resourceWait.size<target && preparingCount<(machineView.hard.host??episodes.length)
           && Date.now()-last>=hostStartDelay){startEpisode(next++);last=Date.now();}
       else await new Promise(resolve=>setTimeout(resolve,Math.max(1,Math.min(hostStartDelay,250))));
     }
@@ -63,15 +87,17 @@
     remaining++;startEpisode(index,[job.panel_id]);
   }
   async function nextPrepared(){
-    while(!queue.length){if(stopped || (!remaining && !outstanding))return null;await new Promise(resolve=>waiters.push(resolve));}
+    while(!queue.length){if(stopped || (!remaining && !outstanding && !reviewPending))return null;await new Promise(resolve=>waiters.push(resolve));}
     if(stopped)return null;
-    outstanding++;return queue.shift();
+    outstanding++;const ref=queue.shift();queuedKeys.delete(attemptKey(ref));seen.add(attemptKey(ref));return ref;
   }
   // Host responses remain authoritative. Jobs/raw returns are bound by the existing host.
   const host={
     acquireResource:async ref=>{
       const value=await route(ref,{action:'resource-acquire',key:JSON.stringify([ref.episode_id,ref.panel_id,ref.attempt_id])});
-      if(value.limits&&value.hard)machineView=value;return value;
+      if(value.limits&&value.hard)machineView=value;
+      if(value.production_capacity)capacities.set(ref.episode_id,value.production_capacity);
+      const key=attemptKey(ref);if(value.token)resourceWait.delete(key);else resourceWait.add(key);wake();return value;
     },
     releaseResource:(job,token,details)=>route(job,{action:'resource-release',token,...details}),
     resourceReturned:(job,token,bytes)=>route(job,{action:'resource-returned',token,bytes}),
@@ -89,15 +115,32 @@
     }
   };
   async function review(entries){
+    reviewPending++;
+    try {
     const byEpisode=new Map();
     for(const entry of entries){const e=entry.job.episode_id;if(!byEpisode.has(e))byEpisode.set(e,[]);byEpisode.get(e).push(entry);}
     const materials=await Promise.all([...byEpisode].map(async([episode_id,items])=>({episode_id,
       prepared:await request(states.get(episode_id),{action:'prepare-qa',panels:items.map(i=>i.job.panel_id)})})));
     if(onReviewBatchReady)await onReviewBatchReady(entries,materials);
+    // Read only small incremental state. Changed observed approvals/adoptions can
+    // reopen a drained source while other image requests are still running.
+    for(const [episode_id] of byEpisode){
+      const status=await request(states.get(episode_id),{action:'delivery-status'});
+      if(status.dispatch_revision && reviewRevisions.get(episode_id)!==status.dispatch_revision){
+        reviewRevisions.set(episode_id,status.dispatch_revision);
+        const panels=(status.runnable??[]).filter(r=>!seen.has(attemptKey({...r,episode_id}))&&!queuedKeys.has(attemptKey({...r,episode_id}))).map(r=>r.panel_id);
+        const index=episodes.findIndex(e=>e.episode_id===episode_id);
+        if(panels.length){remaining++;startEpisode(index,panels);}
+      }
+    }
+    } finally {reviewPending--;wake();}
   }
   const results=await bridge({run,jobs:[],confirmedConcurrency:ceiling,transport,host,
-    options:{...options,nextPrepared,onProgress:onProgress?event=>onProgress({...event,ready_episodes:new Set(queue.map(r=>r.episode_id)).size,preparing_episodes:preparingCount,machine:machineView}):undefined,onReviewBatchReady:review,
-      onJobSettled:async(job,item,event)=>{outstanding--;stopped ||= event.stopped;
+    options:{...options,nextPrepared,onProgress:onProgress?event=>onProgress({...event,ready_episodes:new Set(queue.map(r=>r.episode_id)).size,preparing_episodes:preparingCount,machine:machineView,scheduling:scheduling(event)}):undefined,onReviewBatchReady:review,
+      onJobSettled:async(job,item,event)=>{outstanding--;resourceWait.delete(attemptKey(job));stopped ||= event.stopped;
+        if(item.persistence_error)localBlocks.set(attemptKey(job),'SAVE_FAILURE');
+        else if(item.outcome_hint==='RESULT_UNKNOWN')localBlocks.set(attemptKey(job),'RESULT_UNKNOWN');
+        else if(item.status==='NOT_DISPATCHED')localBlocks.set(attemptKey(job),/AUTHORITY|APPROVAL/.test(item.reason??'')?'AUTHORITY_CHANGED':'HOST_ERROR');
         if(item.status==='REPAIR_DEFERRED')seen.delete(attemptKey(job));wake();
         if(options.onJobSettled)await options.onJobSettled(job,item,event);}}});
   // Successful raw returns already live in the host's durable store. Do not send

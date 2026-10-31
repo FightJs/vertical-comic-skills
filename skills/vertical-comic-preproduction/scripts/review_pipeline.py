@@ -54,6 +54,8 @@ def save(state_path,expected_state,proposal):
     path=Path(state_path).resolve();root=path.parent.parent;started=time.monotonic()
     # Copy actual caller observations; never default UNREVIEWED fields to PASS.
     proposal=copy.deepcopy(proposal)
+    from review_followup import operation_id
+    submission_id=operation_id(proposal)
     if any(not isinstance(proposal.get(k),str) or not proposal[k].strip() for k in ('panel_id','attempt_id','reviewer','reason')):
         raise ValueError('QA_FIELD: panel_id/attempt_id/reviewer/reason required')
     if proposal.get('verdict') not in {'PASS','FAIL'}:raise ValueError('QA_FIELD: observed verdict must be PASS or FAIL')
@@ -87,7 +89,8 @@ def save(state_path,expected_state,proposal):
         if proposal.get('observations'): raise ValueError('LIGHT_QA: use light_observations')
         from stage_deadlines import checkpoint, manual_decision
         review_budget = checkpoint(path, 'review', original['panel_id'], state=state)
-        repair_budget = checkpoint(path, 'repair', original['panel_id'], state=state)
+        repair_budget = checkpoint(path, 'repair', original['panel_id'], state=state,
+            start=state.get('repair_window_policy') != 'observed_repair_window_v2')
         expired = bool(repair_budget and repair_budget['degraded'])
         prepare_observations(items[0], proposal, original, allow_manual_critical=expired)
         if review_budget and review_budget['degraded']:
@@ -202,6 +205,13 @@ def save(state_path,expected_state,proposal):
     from execution_timing import observe
     row.pop('qa_recorded_at',None);row.get('timing_observations',{}).pop('qa_recorded_at',None)
     observe(new,row,'qa_registered')
+    if new.get('review_followup_policy') == 'observed_followup_v1':
+        row['review_submission']={'operation_id':submission_id,'qa_report':qa_ref,
+            'reviewer':proposal['reviewer'],'state_review':proposal.get('state_review')}
+    if (new.get('repair_window_policy') == 'observed_repair_window_v2' and proposal['verdict']=='FAIL'
+            and decision and decision.get('action') in {'local_edit','regenerate','rebuild_inputs','crop_candidate'}):
+        clock=require_step(path,'preserve-delivery')
+        if clock:row.setdefault('repair_planning_started_active_seconds',clock['active_seconds'])
     validated=time.monotonic()
     with state_write_lock(path):
         acquired=time.monotonic();verify_read_snapshot(initial_snapshot,refresh_views=False);verify_read_snapshot(snapshot,refresh_views=False)
@@ -211,6 +221,10 @@ def save(state_path,expected_state,proposal):
         if not old.exists():old.write_bytes(path.read_bytes())
         require_step(path)
         atomic_json(path,new);written=time.monotonic()
+    if (new.get('repair_window_policy') == 'observed_repair_window_v2' and proposal['verdict'] == 'FAIL'
+            and decision and decision.get('action') in {'local_edit','regenerate','rebuild_inputs','crop_candidate'}):
+        from stage_deadlines import checkpoint
+        checkpoint(path,'repair',row['panel_id'],state=new)
     segments={'review_validation':validated-started,'lock_wait':acquired-validated,
               'lock_hold':written-acquired,'registration_total':written-started}
     # Caller may supply actual viewing duration, never derive it from queue delay.

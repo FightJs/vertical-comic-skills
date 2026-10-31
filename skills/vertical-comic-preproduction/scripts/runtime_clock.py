@@ -79,12 +79,40 @@ def boot_id():
     except (OSError, AttributeError, subprocess.SubprocessError): pass
     return None  # No guessed boot identity on unsupported hosts.
 
+@lru_cache(maxsize=1)
+def boot_session_id():
+    # Extra identity is understood by new clocks; legacy boot wire format stays
+    # readable by already-frozen executors receiving events from installed hooks.
+    if platform.system()!='Darwin':return None
+    try:
+        return subprocess.check_output(['sysctl','-n','kern.bootsessionuuid'],timeout=.3,
+            text=True,stderr=subprocess.DEVNULL).strip() or None
+    except (OSError,subprocess.SubprocessError):return None
+
 def instant():
     return {'wall': time.time(), 'mono': time.monotonic(),
-            'host': platform.node(), 'boot': boot_id()}
+            'host': platform.node(), 'boot': boot_id(), 'boot_session':boot_session_id()}
+
+def same_boot(a, b):
+    """Identity compatibility only; callers must also verify monotonic continuity."""
+    if a == b:return True
+    if not a or not b:return False
+    import re
+    def parts(value):
+        if value.startswith('darwin-session:'):
+            _, session, seconds = value.split(':', 2)
+            return session, seconds
+        match = re.search(r'sec\s*=\s*(\d+)', value)
+        if match:return None, match.group(1)
+        match = re.fullmatch(r'darwin:(\d+)(?::\d+)?', value)
+        return (None, match.group(1)) if match else (None, None)
+    sa, ta = parts(a); sb, tb = parts(b)
+    return bool(ta and ta == tb and (not sa or not sb or sa == sb))
 
 def elapsed(a, b):
-    if a['host'] != b['host'] or (a['boot'] and b['boot'] and a['boot'] != b['boot']):
+    if a.get('boot_session') and b.get('boot_session') and a['boot_session']!=b['boot_session']:
+        raise ValueError('CLOCK_TIME_UNCERTAIN: boot session changed')
+    if a['host'] != b['host'] or (a['boot'] and b['boot'] and not same_boot(a['boot'], b['boot'])):
         raise ValueError('CLOCK_TIME_UNCERTAIN: host/boot identity unavailable or changed')
     delta = b['mono'] - a['mono']
     if delta < 0 or abs((b['wall']-a['wall'])-delta) > 2:

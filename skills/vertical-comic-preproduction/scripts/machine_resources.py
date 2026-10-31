@@ -6,7 +6,7 @@ from functools import lru_cache
 from contextlib import contextmanager
 import json,os,platform,re,shutil,subprocess,time,uuid
 from platform_io import atomic_json,file_lock,codex_home
-from runtime_clock import boot_id as _runtime_boot_id
+from runtime_clock import boot_id as _runtime_boot_id, same_boot
 
 POLICY='machine_resource_admission_v1'
 KINDS=('compile','image','host')
@@ -15,6 +15,10 @@ MiB=1024**2;GiB=1024**3
 @lru_cache(maxsize=1)
 def boot_id():
     value=_runtime_boot_id()
+    # Keep the shared legacy key format while old frozen coordinators coexist.
+    if platform.system()=='Darwin':
+        try:value=command(['sysctl','-n','kern.boottime'])
+        except (OSError,subprocess.SubprocessError):pass
     match=re.search(r'sec\s*=\s*(\d+),\s*usec\s*=\s*(\d+)',value or '')
     return 'darwin:'+':'.join(match.groups()) if match else value
 
@@ -101,7 +105,7 @@ class Coordinator:
         cached=self.home/'sample.json';now=self.clock()
         try:
             old=json.loads(cached.read_text())
-            if old.get('boot')==self.boot and 0<=now-old['at']<2:return old
+            if same_boot(old.get('boot'),self.boot) and 0<=now-old['at']<2:return old
         except (OSError,ValueError,KeyError):pass
         try:
             with file_lock(self.home/'probe.lock',timeout=0):
@@ -120,7 +124,8 @@ class Coordinator:
             if not any(self._alive(i) for i in identities):dead[token]=lease
         with file_lock(self.home/'admission.lock',timeout=5):
             state=self._read()
-            if not state or self.boot and state.get('boot')!=self.boot:
+            if (not state or self.boot and not same_boot(state.get('boot'),self.boot)
+                    or state.get('sample',{}).get('at',now)>now):
                 state={'policy':POLICY,'boot':self.boot,'leases':{},'waiters':{},'limits':{'compile':2,'image':4,'host':1},
                        'worker_bytes':256*MiB,'return_bytes':64*MiB,'history':[],
                        'windows':{k:{'at':now,'done':0,'baseline':None,'cooldown':now+30,'saturated':False} for k in KINDS}}

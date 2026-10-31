@@ -892,7 +892,7 @@ def _authorize_episode_repair(state_path, expected_sha256, authorization_ref):
         if repair_input_issues:raise ValueError(';'.join(repair_input_issues))
         new=copy.deepcopy(state);target=next(r for r in new['panels'] if r['panel_id']==pid)
         old=copy.deepcopy(target)
-        for key in ('output','qa_report','call_evidence','failure_diagnosis','ready_at','submitted_at','returned_at','save_started_at','saved_at','qa_completed_at','qa_recorded_at','registered_at','invocation_requested_at','native_started_at','native_completed_at','invocation_events','timing_observations','quality_review','qa_revisions','prepared_registration_id'):
+        for key in ('review_submission','repair_planning_started_active_seconds','output','qa_report','call_evidence','failure_diagnosis','ready_at','submitted_at','returned_at','save_started_at','saved_at','qa_completed_at','qa_recorded_at','registered_at','invocation_requested_at','native_started_at','native_completed_at','invocation_events','timing_observations','quality_review','qa_revisions','prepared_registration_id'):
             target.pop(key,None)
         target.update(status='REPAIR_AUTHORIZED',round_id=2,attempt_id=attempt,
                       package_manifest=packet_ref,shot_subset=subset_ref,attempt_history=[old])
@@ -966,7 +966,8 @@ def prepare_review(state, root, queue):
         from stage_deadlines import checkpoint
         speed = checkpoint(root/'00_输入审计/生产流程.json', 'review', row['panel_id'], state=state)
         if speed:
-            checkpoint(root/'00_输入审计/生产流程.json', 'repair', row['panel_id'], state=state)
+            if state.get('repair_window_policy') != 'observed_repair_window_v2':
+                checkpoint(root/'00_输入审计/生产流程.json', 'repair', row['panel_id'], state=state)
             item['stage_budget'] = speed
             item['review_form'] = 'single_observation' if speed['degraded'] or state.get('repair_threshold_policy')=='essential_story_only_v1' else 'light_observations'
         if item["action"] not in {"REVIEW_SIX_DIMENSIONS", "REVIEW_STORY_ONCE"}:

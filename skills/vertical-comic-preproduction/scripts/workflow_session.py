@@ -111,13 +111,15 @@ class WorkflowSession:
             elif action=='delivery-status':
                 from lean_delivery import MATERIAL,binding
                 pending=[r['panel_id'] for r in initial['panels'] if initial.get('delivery_materials',{}).get(r['panel_id'],{}).get('policy')!=MATERIAL or initial['delivery_materials'][r['panel_id']].get('binding')!=binding(r)]
-                result={'status':'CONTINUE_REQUIRED' if pending else 'MATERIALS_READY','pending_panel_ids':pending,
+                import hashlib
+                revision=hashlib.sha256(json.dumps([initial.get('approval_index'),[(r['panel_id'],r.get('adoption'),r.get('qa_report')) for r in initial['panels']]],sort_keys=True).encode()).hexdigest()
+                result={'dispatch_revision':revision,'status':'CONTINUE_REQUIRED' if pending else 'MATERIALS_READY','pending_panel_ids':pending,
                     'runnable':[{'panel_id':r['panel_id'],'attempt_id':r['attempt_id']} for r in initial['panels'] if r['status'] in {'PENDING','REPAIR_AUTHORIZED'}], 'image_calls':0}
             elif action=='prepare-qa':
                 from generation_host import prepare_qa
                 result=prepare_qa(initial,root,request.get('panels'))
             elif action in {'qa-save-batch','review-submit-batch'}:
-                from review_pipeline import save
+                from review_followup import submit
                 results=[]
                 for observation in request['observations']:
                     try:
@@ -134,7 +136,7 @@ class WorkflowSession:
                             patch=observation['observation']
                             if set(patch)&set(fields):raise ValueError('REVIEW_IDENTITY_TOOL_OWNED')
                             observation={**patch,**fields}
-                        results.append(save(path,digest(path),observation))
+                        results.append(submit(path,observation))
                     except (ValueError,KeyError,TypeError,OSError) as exc:results.append({'status':'HOLD','panel_id':observation.get('panel_id'),'error':str(exc)})
                 result={'status':'OBSERVATIONS_RECORDED','results':results,'image_calls':0}
             elif action in {'capture-return','capture-envelope'}:

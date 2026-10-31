@@ -59,8 +59,14 @@ def apply_import(state_path, plan):
     if source['state_sha256']!=plan['state_sha256']:raise ValueError('IMPORT_SOURCE_CHANGED')
     old=read(path);new=copy.deepcopy(old)
     new.update(image_review_profile='light_story_review_v1',repair_threshold_policy='essential_story_only_v1',
+               repair_window_policy='observed_repair_window_v2', review_followup_policy='observed_followup_v1',
                runtime_pipeline_policy='observed_incremental_pipeline_v1',source_input_policy='formal_source_inputs_v1',
                toolchain=new_tools)
+    stage_ledger=path.parent/'stage-runtime.json'
+    if stage_ledger.exists() and any(k.startswith('repair:') for k in read(stage_ledger).get('starts',{})):
+        # Preserve an already-running legacy window; never refund time on import.
+        if old.get('repair_window_policy'):new['repair_window_policy']=old['repair_window_policy']
+        else:new.pop('repair_window_policy',None)
     if old.get('runtime_execution_context'):
         from runtime_clock import execution_context
         context=execution_context(path,state=old)

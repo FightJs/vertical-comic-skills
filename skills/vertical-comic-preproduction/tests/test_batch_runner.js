@@ -100,5 +100,26 @@ const batch=options=>rawBatch({...options,request:async(state,p)=>{
  for(let i=0;i<100&&dynamicCalls<4;i++)await tick();
  assert.equal(dynamicCalls,4,'temporary startup hard=1 did not freeze JS workers');assert.equal(grants,4);
  releaseDynamic();await adaptive;
+ // A real review callback releases the dependent source before another slow image returns.
+ let reviewedAnchor=false,dependentStarted=false,releaseSlow;
+ const slow=new Promise(r=>releaseSlow=r),wakeEvents=[];
+ const wakeManifest={book_id:'B',dispatch_mode:'all_ready',episodes:[{episode_id:'W1',state:'w1',panel_count:2},{episode_id:'W2',state:'w2',panel_count:1}]};
+ const wakeRequest=async(state,p)=>{
+   if(p.action==='claim-and-register')return prepare(p.prepared_reference);
+   if(p.action==='invocation-event')return{status:'INVOCATION_EVENT_RECORDED'};
+   if(p.action==='capture-envelope')return{status:'RETURN_CAPTURED',capture:{}};
+   if(p.action==='register-return')return{status:'RETURN_REGISTERED'};
+   if(p.action==='prepare-qa')return{items:[]};
+   if(p.action==='delivery-status')return{status:'CONTINUE_REQUIRED',dispatch_revision:reviewedAnchor?'reviewed':'initial',runnable:state==='w1'&&reviewedAnchor?[{panel_id:'P2',attempt_id:'W1P2'}]:[]};
+   if(p.action==='source-refs')return state==='w1'?(reviewedAnchor?[ref('W1','P2')]:[ref('W1','P1')]):[ref('W2','P1')];
+ };
+ const wakeSource=({request})=>{let refs;return{nextPrepared:async()=>{refs??=await request({action:'source-refs'});return refs.shift()??null},completion:Promise.resolve(),snapshot:()=>({})}};
+ const wakeRun=batch({manifest:wakeManifest,run,bridge,request:wakeRequest,createSource:wakeSource,
+   onReviewBatchReady:async entries=>{if(entries.some(e=>e.job.episode_id==='W1'&&e.job.panel_id==='P1'))reviewedAnchor=true},
+   transport:{kind:'concurrent_requests',source_locator:'synthetic://wake',invoke:async j=>{wakeEvents.push(j.episode_id+j.panel_id);if(j.episode_id==='W2')await slow;if(j.panel_id==='P2')dependentStarted=true;return packet(j)}},
+   options:{reviewGroupSize:3,reviewMaxWaitMs:10,hostStartDelayMs:0}});
+ for(let i=0;i<40&&!dependentStarted;i++)await tick();
+ const beforeRelease=dependentStarted;releaseSlow();await wakeRun;
+ assert(beforeRelease,'review must reopen dependency while unrelated service request remains in flight');
  console.log('Batch runner: 35/165 full concurrent start, grouped review, automatic finalization, post-EOF retry, scoped failure PASS (synthetic only)');
 })().catch(e=>{console.error(e);process.exitCode=1});

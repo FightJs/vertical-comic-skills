@@ -107,6 +107,8 @@ def initialize(run_root, role, states, *, package_mode=None, max_file_bytes=None
 
 
 def load_identity(path):
+    from production_activation import recover_for
+    recover_for(path)
     marker = read(path)
     if marker.get('policy') != POLICY: raise ValueError('DELIVERY_CONTRACT_HOLD:交付身份错误')
     value = validate_requirements(read(checked(marker.get('requirements'))))

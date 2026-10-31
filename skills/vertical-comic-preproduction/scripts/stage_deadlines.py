@@ -18,7 +18,9 @@ def enabled(state):
     return policy == POLICY
 
 
-def checkpoint(state_path, phase, panel_id=None, *, state=None):
+REPAIR_POLICY = 'observed_repair_window_v2'
+
+def checkpoint(state_path, phase, panel_id=None, *, state=None, start=True):
     if phase not in LIMITS: raise ValueError('Unknown speed phase')
     path = Path(state_path).resolve()
     if state is None:
@@ -37,6 +39,11 @@ def checkpoint(state_path, phase, panel_id=None, *, state=None):
     if origin is None: raise ValueError('SPEED_CLOCK_ORIGIN_REQUIRED')
     active = clock['active_seconds']
     key = phase + ':' + (panel_id or 'episode')
+    if phase == 'repair' and state.get('repair_window_policy') == REPAIR_POLICY:
+        row = next(r for r in state['panels'] if r['panel_id'] == panel_id)
+        key += ':' + row['attempt_id']
+        # Only a persisted observed repair decision may start a new window.
+        start = start and row.get('status') == 'VISUAL_FAIL' and bool(row.get('qa_report'))
     ledger_path = path.parent/'stage-runtime.json'
     # Operational scheduling metadata, not part of the creative-evidence read snapshot.
     with file_lock(path.parent/'stage-runtime.lock'):
@@ -44,8 +51,14 @@ def checkpoint(state_path, phase, panel_id=None, *, state=None):
             'policy':POLICY, 'clock_origin':origin, 'starts':{}}
         if ledger.get('policy') != POLICY or ledger.get('clock_origin') != origin:
             raise ValueError('SPEED_CLOCK_ORIGIN_CHANGED')
+        if key not in ledger['starts'] and not start:
+            return {'policy':REPAIR_POLICY, 'phase':phase, 'panel_id':panel_id, 'started':False,
+                    'active_elapsed_seconds':0, 'limit_seconds':LIMITS[phase],
+                    'degraded':clock['remaining_seconds'] <= 900, 'remaining_task_seconds':clock['remaining_seconds']}
         if key not in ledger['starts']:
-            ledger['starts'][key] = 0 if phase in {'preparation','intake'} else active
+            ledger['starts'][key] = (row.get('repair_planning_started_active_seconds',active)
+                if phase=='repair' and state.get('repair_window_policy')==REPAIR_POLICY
+                else 0 if phase in {'preparation','intake'} else active)
             atomic_json(ledger_path, ledger)
         start = ledger['starts'][key]
     if active < start: raise ValueError('SPEED_ACTIVE_CLOCK_RESET')

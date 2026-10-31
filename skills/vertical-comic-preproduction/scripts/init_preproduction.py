@@ -141,6 +141,8 @@ def main() -> int:
         light_enabled(extra)
         if args.speed_policy:
             extra['speed_policy'] = args.speed_policy
+            extra['repair_window_policy'] = 'observed_repair_window_v2'
+            extra['review_followup_policy'] = 'observed_followup_v1'
             from stage_deadlines import enabled as speed_enabled
             speed_enabled(extra)
     if memory_source is not None:

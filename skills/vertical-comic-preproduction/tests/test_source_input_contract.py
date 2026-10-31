@@ -23,6 +23,16 @@ class SourceInputsTests(unittest.TestCase):
         src.update(approval_resolution='source_runtime_gates_v1',source_state_file='state.json')
         self.packet['continuity_context']=write(self.root,'runtime-context.json',ctx)
     def save(self):self.path.write_text(json.dumps(self.state),encoding='utf-8')
+    def test_new_review_policies_keep_projected_progress_isolation(self):
+        self.state.update(repair_window_policy='observed_repair_window_v2',review_followup_policy='observed_followup_v1')
+        self.save()
+        with file_session() as memo:
+            value=read(self.path)
+            from source_input_contract import SourceView
+            self.assertIsInstance(value,SourceView)
+            self.state['panels']=[{'panel_id':'P001','status':'VISUAL_PASS','review_submission':{'operation_id':'observed'}}];self.save()
+        self.assertNotIn(str(self.path.resolve()),memo['files'])
+
     def test_real_context_survives_progress_at_transaction_boundary(self):
         with file_session() as memo:
             self.assertEqual(load_context(self.packet,self.root)[1],[])

@@ -290,6 +290,7 @@ def main():
     p.add_argument('--reuse-selection',help='用户明确选中的旧成果来源、准确格号与证据引用JSON数组；不自动发现旧任务')
     p=sub.add_parser('receive');source=p.add_mutually_exclusive_group(required=True);source.add_argument('--zip');source.add_argument('--package-root',help='已解压正式交接包根目录，含ZIP文件清单.json');p.add_argument('--output');p.add_argument('--audit-timeout',type=int,default=900);p.add_argument('--eager-audit',action='store_true',help='显式诊断才重复全包审计；默认逐格编译时校验')
     p=sub.add_parser('receive-resume');p.add_argument('--run-root',required=True);p.add_argument('--audit-timeout',type=int,default=900)
+    p=sub.add_parser('activate');p.add_argument('--manifest',required=True);p.add_argument('--authorizations');p.add_argument('--expected-manifest',required=True)
     preparation=sub.choices['prepare']
     preparation.add_argument('--image-review-profile', choices=('light_story_review_v1',), default='light_story_review_v1', help='新制作默认单次轻审核，仅严重剧情问题最多返修一轮')
     preparation.add_argument('--delivery-mode',choices=['single_zip','allow_parts'],default='allow_parts',help='默认单包优先、超限自动分包；仅用户明确限制单文件时选择single_zip')
@@ -300,6 +301,10 @@ def main():
         command.add_argument('--clock-session-id', help='经核实的宿主session_id；需已信任Interrupt Hook')
     a=parser.parse_args()
     try:
+        if a.action=='activate':
+            from production_activation import activate
+            result=activate(a.manifest,read(a.authorizations) if a.authorizations else {},a.expected_manifest)
+            print(json.dumps(result,ensure_ascii=False));return int(result['status']=='PARTIAL_HOLD')
         if a.action=='receive-resume':
             result=receive_resume(a.run_root,audit_timeout=a.audit_timeout)
             print(json.dumps(result,ensure_ascii=False));return int(result['status']=='HOLD')

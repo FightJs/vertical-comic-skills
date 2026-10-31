@@ -24,6 +24,14 @@ class RuntimeImportTests(unittest.TestCase):
         self.assertEqual(after['image_review_profile'],'light_story_review_v1')
         saved=self.path.read_bytes();apply_import(self.path,plan_import(self.path,self.executor))
         self.assertEqual(saved,self.path.read_bytes())
+    def test_import_never_restarts_existing_legacy_repair_clock(self):
+        ledger=self.path.parent/'stage-runtime.json'
+        ledger.write_text(json.dumps({'starts':{'repair:P001':123}}))
+        before=ledger.read_bytes()
+        apply_import(self.path,plan_import(self.path,self.executor))
+        self.assertNotIn('repair_window_policy',read_json(self.path))
+        self.assertEqual(ledger.read_bytes(),before)
+
     def test_imported_real_compile_and_submit_use_new_pinned_executor(self):
         apply_import(self.path,plan_import(self.path,self.executor))
         job=self.f.host('compile','--panels','P001')['jobs'][0]

@@ -137,3 +137,12 @@ receive默认单话审计技术超时900秒，可用`--audit-timeout`覆盖，�
 接包出现确认无图且原包没有重试入口时，按[确认无图恢复](submission-runtime.md#确认无图恢复)执行。已有用户明确授权时，宿主用当前恢复入口保全原快照、批准及计时；不为每格恢复再询问。
 
 正式前期和接包入口先按[子agent容量检查](usage-configuration.md#启动时子agent配置与实际容量)处理当前用户配置；配置与本会话实际容量分开报告。查看、安装、更新和旧运行恢复不修改该配置。
+
+
+## 接包后一次生产激活
+
+`comic_start.py activate --manifest <整批执行清单.json> --expected-manifest <清单SHA256> --authorizations <按话映射的已有真实生产批准.json>` 将已有准确批准、原源序、唯一 owner 和本话租约接线。authorizations 可省略以复用状态内有效生产批准；前期授权不能替代生产授权。返回逐话 ACTIVATED / ALREADY_BOUND / HOLD，独立话可继续。该入口不调用图片服务、不扩大既有 owner、不执行第二遍整包创作审查，真实输入仍在首次逐格编译时核验并缓存。
+
+执行路径切换使用 `production_activation.py --switch-run <运行根> --old-state <旧状态> --new-state <新执行视图> --expected-identity <交付身份SHA256>`。它只接受相同图片/QA/历史/授权及已验证输入引用；使用可恢复事务同步交付要求、身份、清单、显示和协调记录。关联在途或 UNKNOWN 先保全/对账；共享多话 control 的 owner 移交仍走原正式移交流程。禁止临时手改其中一个路径。中断后 `production_activation.py --recover <运行根>` 可重放未完成写入。
+
+背景方案真正变化必须沿现有 scoped preparation 输入采用入口处理；纯编译表示变化也必须通过原语义验证，不能仅替换诊断文字跳过。未变输入沿 prepared_job_store 复用，不添加另一套兼容缓存。

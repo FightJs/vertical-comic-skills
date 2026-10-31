@@ -26,6 +26,8 @@ def protocol(scripts,caps):
 
 
 def activate(state_path, *, recovery_only=False):
+    from production_activation import recover_for
+    recover_for(state_path)
     state_path=Path(state_path).resolve();state=read(state_path)
     runtime_ref=state['runtime_snapshot']
     if state.get('runtime_import'):
@@ -392,6 +394,12 @@ def prepare_qa(state,root,panels=None):
         ticket={'policy':'observed_review_ticket_v1','book_id':state['book_id'],'episode_id':state['episode_id'],
             'panel_id':row['panel_id'],'attempt_id':row['attempt_id'],'output':row['output'],
             'qa_template':item['qa_template'],'base_qa':row.get('qa_report')}
+        if state.get('review_followup_policy') == 'observed_followup_v1':
+            from review_followup import barrier_info
+            ticket['state_review']=barrier_info(state,root,row['panel_id'])
+            item['state_review']=ticket['state_review']
+            from review_followup import available_authorities
+            ticket['state_review']['available_authorities']=(available_authorities(state,root,row['panel_id']) if ticket['state_review']['required'] else [])
         raw=json.dumps(ticket,ensure_ascii=False,sort_keys=True).encode()
         path=Path(root)/'06_图片验收/review-tickets'/(hashlib.sha256(raw).hexdigest()+'.json')
         put(path,raw);item['review_ticket']=reference(path,root)

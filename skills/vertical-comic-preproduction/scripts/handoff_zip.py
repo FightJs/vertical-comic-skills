@@ -512,7 +512,7 @@ def rehearse(zip_path,package_root,run_root,run_index,report,*,timeout=900,budge
                     from runtime_import import verify_binding
                     import_receipt,original=verify_binding(state,state_path.parent.parent)
                     changed={'runtime_import','image_review_profile','repair_threshold_policy','runtime_pipeline_policy',
-                             'source_input_policy','toolchain','speed_policy'}
+                             'source_input_policy','toolchain','speed_policy','repair_window_policy','review_followup_policy'}
                     if {k:v for k,v in state.items() if k not in changed}!={k:v for k,v in original.items() if k not in changed}:
                         raise ValueError('IMPORT_BIND_STATE_CHANGED: original bind proof cannot approve later changes')
                     bound_sha=import_receipt['source_state']['sha256']

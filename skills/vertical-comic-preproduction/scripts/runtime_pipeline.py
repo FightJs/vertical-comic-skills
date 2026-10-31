@@ -140,6 +140,8 @@ def metrics(state_paths):
 def claim_and_register(state_path, prepared_reference):
     """One owner transaction. Input preparation and file hashing happen before locks."""
     import copy
+    from production_activation import require_active
+    require_active(state_path)
     from prepared_job_store import store,state_basis
     from submission_contract import prepared_panel_job,registration,prepared_acknowledgement
     from runtime_clock import require_dispatch
@@ -167,7 +169,10 @@ def claim_and_register(state_path, prepared_reference):
             return {'status':'REPAIR_DEFERRED','image_calls':0,'dispatch_authorized':False}
     waiting=time.monotonic()
     with state_write_lock(path,force_shared=True):
-        locked=time.monotonic();state=read_json(path)
+        locked=time.monotonic()
+        from production_activation import assert_current_route
+        assert_current_route(path)
+        state=read_json(path)
         if state.get('parallel_context')!=initial.get('parallel_context'):raise ValueError('OWNER_CHANGED')
         if state_basis(state)!=value.get('_current_guard',value)['state_basis']:raise ValueError('PREPARED_INPUT_OR_AUTHORITY_CHANGED')
         if state.get('cancelled'):raise ValueError('DISPATCH_HELD')

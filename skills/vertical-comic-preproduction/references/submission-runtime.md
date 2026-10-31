@@ -224,3 +224,14 @@ python -X utf8 -B <安装scripts>/generation_host.py recover-no-image --state <�
 新版本交付保留无图恢复证据，最终仍须每个源格都有实际采用图；无图、未知结果或坏文件不因恢复记录存在而通过。
 
 常驻宿主的 `recover-no-image` 可接收 `panel_id`、`terminal`、`authorization` 和原有 `expected_state`，由工具自动生成恢复身份与稳定请求 ID。`terminal` 是内容绑定的真实终态文件，必须包含准确 attempt、registration_id、无图结论与来源定位；工具保留内容限制标识和未知解析原证据。该入口仍要求先结算实际失败/解析未知，不把网络报错直接升级成无图证明。旧 `recovery` 请求格式继续可用。
+
+
+## 审核后立即衔接（v2026.10.31.2）
+
+新运行启用 `observed_followup_v1`。沿用 prepare-qa → review-submit-batch；票据列出首状态屏障、受影响格及已登记证明中的可用委托。审核者在同次实际看图后可附 `state_review: {verdict: "PASS", observed: "实际观察", authority: {path, sha256}}`。程序复用 review_policy 的准确委托决定和 authority_updates，不将普通 QA PASS 冒充首状态通过。用户保留亲审和已撤销授权继续阻塞。
+
+完全相同的票据和观察可重放：已提交 QA 的身份存于原格记录，后续放行失败只重放衔接。修改观察必须使用新票据及当前 QA 引用。严重问题的 repair_request 绑定原图、原 attempt、QA、诊断、修复目标及保留约束；沿现有准确范围输入和 repair-authorize 入口继续，不手工拼 repair-plan 的诊断路径，不凭请求自动增加尝试。
+
+新 `observed_repair_window_v2` 在严重问题 QA 成功保存时记录有效运行起点；准备审核材料不启动返修窗口。起点与原 attempt 一同持久化，重启、重放、诊断改字不重置。暂停按原任务时钟排除，内部等待计时。旧运行已有窗口保持原规则。
+
+审核回调完成后，batch_runner 比较批准/采用修订并重新打开受影响待生产源；不等待其他慢请求返回。进度中的 scheduling 区分机器额度、清单额度、租约限制、实际在途及阻塞原因。tool_capacity 未知时为 null；不得将本机额度称为服务能力。

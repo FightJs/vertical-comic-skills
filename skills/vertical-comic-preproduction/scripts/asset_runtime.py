@@ -61,6 +61,8 @@ def compile_job(run_root, definition):
                 proof.get('episode_id')!=spec['episode_id'] or not proof.get('evidence') or
                 (spec['operation']=='retry' and proof.get('no_image_confirmed') is not True)):
                 raise ValueError('ASSET_HOLD: exact scoped diagnosis/no-image evidence required')
+        from asset_format import compiled_arguments
+        args=compiled_arguments(args,needs[0])
         job={'kind':'asset','book_id':spec['book_id'],'episode_id':spec['episode_id'],
              'job_id':'ASSET:'+spec['episode_id'],'asset_id':spec['asset_id'],'attempt_id':spec['attempt_id'],
              'arguments':args,'candidate_only':False,'input_audit_only':False,
@@ -111,7 +113,7 @@ def submit(run_root, job):
         attempts[key]={**record,'asset_id':actual['asset_id'],'episode_id':actual['episode_id'],
                        'attempt_id':actual['attempt_id'],'status':'IN_FLIGHT','budget_scope':scope,
                        'definition':definition,'operation':spec['operation'],
-                       'source_attempt_id':spec.get('source_attempt_id'),'observed_tool_call':False}
+                       'source_attempt_id':spec.get('source_attempt_id'),'observed_tool_call':False,'arguments':actual['arguments']}
         atomic_json(path,ledger)
         try: require_dispatch(root)
         except (OSError,ValueError) as exc:
@@ -138,7 +140,7 @@ def save(run_root, registration_id, result, *, resolution=None):
             if (evidence.get('source_kind')!='observed_tool_result' or evidence.get('status')!='COMPLETED' or
                 output not in evidence.get('outputs',[]) or request.get('source_kind')!='observed_tool_call' or
                 not request.get('source_locator') or request.get('attempt_id')!=row['attempt_id'] or
-                request.get('arguments')!=definition['arguments']):
+                request.get('arguments')!=row.get('arguments',definition['arguments'])):
                 raise ValueError('ASSET_SAVE_HOLD: output not bound to actual return')
         elif evidence.get('source_kind') not in {'observed_tool_error','observed_executor_outcome'}:
             raise ValueError('ASSET_SAVE_HOLD: actual failure/unknown evidence required')

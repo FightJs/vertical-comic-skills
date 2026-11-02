@@ -75,14 +75,22 @@ def prepare(project,book,ids,*,script=None,assets=None,output=None,workers=None,
     require_ready(probe_root=project)
     import hashlib
     profile_dir=project/'.comic/books';profile=profile_dir/(hashlib.sha256(book.encode()).hexdigest()[:16]+'.json')
-    old=read(profile) if profile.exists() else None
+    old_bytes=profile.read_bytes() if profile.exists() else None
+    old=json.loads(old_bytes.decode('utf-8-sig')) if old_bytes is not None else None
     if old and old['book']!=book:raise ValueError('本书配置归属错误')
-    inputs={'script_path':str(Path(script).resolve()) if script else (old or {}).get('script_path'),
+    selected_script = Path(script).resolve() if script else None
+    source_key = ('script_root' if selected_script.is_dir() else 'script_path') if selected_script else ('script_root' if (old or {}).get('script_root') else 'script_path')
+    inputs={source_key:str(selected_script) if selected_script else (old or {}).get(source_key),
             'asset_root':str(Path(assets).resolve()) if assets else (old or {}).get('asset_root')}
-    for key,isdir in [('script_path',False),('asset_root',True)]:
+    for key,isdir in [(source_key,source_key=='script_root'),('asset_root',True)]:
         p=Path(inputs[key] or '')
         if not inputs[key] or not p.is_absolute() or not (p.is_dir() if isdir else p.is_file()):raise ValueError('首次使用缺少有效'+key)
-        if old and old[key]!=inputs[key]:raise ValueError('已有书配置路径不同；先明确更新本书配置，不自动覆盖')
+        if old and old.get(key)!=inputs[key] and not (script if key==source_key else assets):
+            raise ValueError('已有书配置路径不同；需要明确的新输入')
+    source_catalog = None
+    if source_key == 'script_root':
+        from script_catalog import discover
+        source_catalog = discover(inputs[source_key], book, ids, cache_root=project/'.comic/cache/script-catalog')
     task=fresh(book,ids,request_source)
     if reuse_selection is not None:
         task.update(origin='reuse_selected',imports=reuse_selection)
@@ -98,6 +106,7 @@ def prepare(project,book,ids,*,script=None,assets=None,output=None,workers=None,
     run=output_base/('RV_'+stamp+'_'+uuid.uuid4().hex[:6]);run.mkdir(parents=True)
     clock = start_clock(run, 'preparation', runtime_limit_seconds, clock_session_id, started=started, wall_delivery=wall_delivery)
     task_path=run/'任务来源.json';write(task_path,task)
+    if source_catalog is not None: write(run/'脚本来源索引.json',source_catalog)
     cfg=run/'本次配置.json';write(cfg,config);read_config(cfg)
     snap=create(run/'00_总控/运行版本',memory_source=memory_source(config))
     for eid in ids:
@@ -105,9 +114,34 @@ def prepare(project,book,ids,*,script=None,assets=None,output=None,workers=None,
         if image_review_profile != 'full': cmd.extend(['--image-review-profile',image_review_profile,'--speed-policy','bounded_stage_fallback_v1'])
         proc=subprocess.run(cmd,capture_output=True,text=True, encoding='utf-8')
         if proc.returncode:raise ValueError('初始化失败，保留诊断运行目录:'+eid+':'+proc.stderr[-1000:])
-    if old is None:
-        profile_dir.mkdir(parents=True,exist_ok=True);write(profile,{'policy':'comic_book_profile_v1','book':book,**inputs})
+    profile_update={'status':'UNCHANGED'}
+    desired_profile={**(old or {}),'policy':'comic_book_profile_v1','book':book,**inputs}
+    desired_profile.pop('script_path' if source_key=='script_root' else 'script_root',None)
+    if old!=desired_profile:
+        from platform_io import file_lock,atomic_json
+        profile_dir.mkdir(parents=True,exist_ok=True)
+        with file_lock(profile.with_suffix('.lock')):
+            current=profile.read_bytes() if profile.exists() else None
+            if current!=old_bytes:
+                profile_update={'status':'PROFILE_CONFLICT','reason':'本书配置被其他任务更新；本次运行仍使用已保存配置'}
+            else:
+                if old_bytes is not None:
+                    backup_dir=profile_dir/'backups';backup_dir.mkdir(exist_ok=True)
+                    backup=backup_dir/(profile.stem+'_'+hashlib.sha256(old_bytes).hexdigest()+'.json')
+                    if not backup.exists():
+                        with backup.open('xb') as stream:stream.write(old_bytes)
+                    profile_update['backup']=str(backup)
+                atomic_json(profile,desired_profile);profile_update['status']='UPDATED' if old else 'CREATED'
     result={'status':'INITIALIZED_NOT_PRODUCTION_APPROVAL','book':book,'episode_ids':ids,'task_context':task,'run_root':str(run),'config':str(cfg),'profile':str(profile),'image_calls':0,'next':'仅审本次脚本与资产需求；不查无关旧生产账。核对实际格数/格序并按A及B/包审查；模板没有批准'}
+    result['profile_update']=profile_update
+    from handoff_continuity import resolve as resolve_boundary
+    try:boundary = resolve_boundary(inputs['asset_root'],book,ids[0])
+    except (OSError,ValueError,TypeError,KeyError) as exc:
+        boundary={'status':'CONTINUITY_HOLD','error':str(exc),'not_approval':True}
+    result['incoming_continuity'] = boundary
+    if source_catalog is not None:
+        result['script_catalog'] = str(run/'脚本来源索引.json')
+        result['next'] = '先核定脚本目录的书话、版本与源格，再处理本批资产；目录扫描不构成选稿或批准'
     from delivery_contract import initialize as initialize_delivery
     result['delivery_identity']=initialize_delivery(run,'preparation',[run/e/'00_输入审计/生产流程.json' for e in ids],
         package_mode=delivery_mode,max_file_bytes=max_file_bytes,task_id=task['task_id'])
@@ -285,7 +319,7 @@ def receive_resume(run_root, *, audit_timeout=900):
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__);sub=parser.add_subparsers(dest='action',required=True)
-    p=sub.add_parser('prepare');p.add_argument('--project',required=True);p.add_argument('--book',required=True);p.add_argument('--episodes',nargs='+',required=True);p.add_argument('--script');p.add_argument('--assets');p.add_argument('--output');p.add_argument('--workers',type=int)
+    p=sub.add_parser('prepare');p.add_argument('--project',required=True);p.add_argument('--book',required=True);p.add_argument('--episodes',nargs='+',required=True);p.add_argument('--script',help='脚本文件或脚本目录');p.add_argument('--assets');p.add_argument('--output');p.add_argument('--workers',type=int)
     p.add_argument('--request-source',help='真实用户原话及source_locator的JSON；程序调用不冒充批准')
     p.add_argument('--reuse-selection',help='用户明确选中的旧成果来源、准确格号与证据引用JSON数组；不自动发现旧任务')
     p=sub.add_parser('receive');source=p.add_mutually_exclusive_group(required=True);source.add_argument('--zip');source.add_argument('--package-root',help='已解压正式交接包根目录，含ZIP文件清单.json');p.add_argument('--output');p.add_argument('--audit-timeout',type=int,default=900);p.add_argument('--eager-audit',action='store_true',help='显式诊断才重复全包审计；默认逐格编译时校验')

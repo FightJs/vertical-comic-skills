@@ -31,6 +31,8 @@ description: Coordinate first-batch per-panel comic production for further human
 
 首次进入运行读[共同约束](references/production-foundation.md)、[固定流程](references/staged-workflow.md)和[规则归属](references/rule-ownership.md)。具体规则只在共享正式来源维护；运行按冻结版本读取，不在生产中更新规则库。
 
+前期脚本文件夹、衣装复用与跨交接衔接按[衣装补齐和跨交接状态](references/costume-handoff.md)执行；脚本扫描、复用候选和边界记录均不代替实际核定。
+
 ## 简易入口（首次使用优先）
 
 前期 prepare / 接包 receive 的安装版入口自动检查并配置[子agent容量](references/usage-configuration.md#启动时子agent配置与实际容量)：默认目标总控1＋子agent最多6；仅检查配置、无需创建空agent。修改配置不证明当前会话生效，按真实工具容量调度。用户明确要求更低的执行者数时只检查、不扩大配置。旧运行恢复不改配置。

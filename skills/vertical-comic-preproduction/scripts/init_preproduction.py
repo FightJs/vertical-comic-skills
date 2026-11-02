@@ -221,6 +221,7 @@ def main() -> int:
         "input_priority_policy": "physical_scene_priority_v1",
         **extra,
         "execution_mode": mode,
+        "asset_format_policy": __import__("asset_format").POLICY,
         "batch_plan": None, "batch_reviews": {},
 
         **({"repair_authorizations": {}, "episode_failure_diagnosis": {}} if mode == "episode_async_v1" else {}),

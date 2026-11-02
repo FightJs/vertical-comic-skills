@@ -110,6 +110,14 @@ def audit_index(root):
         raise ValueError('缺交接验收索引策略、包ID或书ID')
     for name in REQUIRED:
         if not (root/name).is_file() or not (root/name).read_text(encoding='utf-8-sig').strip():raise ValueError('缺交接入口或内容为空:'+name)
+    boundary_ref=data.get('continuity_boundary')
+    if boundary_ref is not None:
+        from handoff_continuity import validate as validate_boundary, require_format_policy
+        boundary=read(reference(root,boundary_ref))
+        if boundary.get('book_id')!=data.get('book_id') or boundary.get('source_package_id')!=data.get('package_id'):
+            raise ValueError('CONTINUITY_HOLD: boundary book/package mismatch')
+        require_format_policy(data,boundary)
+        validate_boundary(boundary,root)
     whole=episode_mode(data)
     if whole and data.get('delivery_policy')!='direct_delivery_v2':raise ValueError('新版整话交接须完整direct_delivery_v2')
     episodes=data.get('episodes')
@@ -165,6 +173,8 @@ def audit_index(root):
             plan=read(reference(root,episode['run_template']))
             template=inside(root,plan['root']);state=read(inside(template,plan['state_file']))
             errors=handoff_history_errors(root,episode,context,state,template)
+            if episode.get("asset_format_policy")!=state.get("asset_format_policy"):
+                errors.append(eid+":ASSET_FORMAT_HOLD: index/template policy mismatch")
             from input_semantics import enabled as semantics_enabled
             if semantics_enabled(state):
                 if episode.get('input_semantics_policy')!=state['input_semantics_policy']:
@@ -610,6 +620,7 @@ def release(candidate_zip,rehearsal_report,approval_file,output):
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp)
             refs=[]
+            if delivery_index.get('continuity_boundary'):refs.append(delivery_index['continuity_boundary'])
             for e in delivery_index['episodes']:
                 refs.extend(e.get(k) for k in ('run_template','source_script','production_source_snapshot','visual_basis','shot_manifest','runtime_manifest'))
                 refs.extend(e.get('generation_review_packages',[]))
@@ -679,7 +690,7 @@ def release(candidate_zip,rehearsal_report,approval_file,output):
             with zipfile.ZipFile(output) as z:zip_inventory(z)
             check_delivery_archive(output)
         except Exception:output.unlink(missing_ok=True);raise
-    return {'status':'RELEASED_DIRECT_DELIVERY_ZIP','zip':str(output),'sha256':sha(output),count_key(delivery_index):report[count_key(delivery_index)],'not_production_authorization':True}
+    return {'status':'RELEASED_DIRECT_DELIVERY_ZIP','zip':str(output),'package_id':delivery_index['package_id'],'sha256':sha(output),count_key(delivery_index):report[count_key(delivery_index)],'not_production_authorization':True}
 
 
 def publish(source_zip,contract,output):
@@ -694,7 +705,7 @@ def main():
     q=sub.add_parser('pack');q.add_argument('--root',required=True);q.add_argument('--output',required=True)
     q=sub.add_parser('extract');q.add_argument('--zip',required=True);q.add_argument('--destination',required=True);q.add_argument('--reserve-bytes',type=int,default=256*1024*1024);q.add_argument('--sha256-file')
     q=sub.add_parser('rehearse');q.add_argument('--zip',help='省略时核验已解压正式目录及内置发布证据');q.add_argument('--package-root',required=True);q.add_argument('--run-root',required=True);q.add_argument('--run-index',required=True);q.add_argument('--report-dir',required=True);q.add_argument('--timeout',type=int,default=900);q.add_argument('--budget-root',help='实际职责计时根目录；所有话共用剩余预算，不重置')
-    q=sub.add_parser('release');q.add_argument('--zip',required=True);q.add_argument('--rehearsal-report',help='仅显式要求独立演练时提供；省略则核验内容闭环并使用准确的内容导出委托');q.add_argument('--approval',required=True);q.add_argument('--output',required=True);q.add_argument('--transport-output',help='正式发布后自动导出微信运输包到全新目录')
+    q=sub.add_parser('release');q.add_argument('--zip',required=True);q.add_argument('--rehearsal-report',help='仅显式要求独立演练时提供；省略则核验内容闭环并使用准确的内容导出委托');q.add_argument('--approval',required=True);q.add_argument('--output',required=True);q.add_argument('--transport-output',help='正式发布后自动导出微信运输包到全新目录');q.add_argument('--asset-root',help='正式发布后同步跨交接衔接记录；失败可从正式ZIP恢复')
     q=sub.add_parser('assemble');q.add_argument('--root',required=True);q.add_argument('--plan',required=True);q.add_argument('--output',required=True)
     q=sub.add_parser('publish');q.add_argument('--zip',required=True);q.add_argument('--contract',required=True);q.add_argument('--output',required=True)
     a=p.parse_args()
@@ -716,10 +727,15 @@ def main():
         elif a.action=='rehearse':r=rehearse(a.zip,a.package_root,a.run_root,a.run_index,a.report_dir,timeout=a.timeout,budget_path=a.budget_root)
         else:
             r=release(a.zip,a.rehearsal_report,a.approval,a.output)
+            if a.asset_root:
+                from handoff_continuity import publish_from_archive
+                try:r['continuity']=publish_from_archive(a.asset_root,a.output)
+                except (OSError,ValueError,KeyError,TypeError,zipfile.BadZipFile) as exc:
+                    r['continuity']={'status':'PENDING_RECOVERY','error':str(exc),'archive_preserved':str(a.output)}
             if a.transport_output:
                 from handoff_transport import export
                 r['transport']=export(a.output,a.transport_output)
-        print(json.dumps(r,ensure_ascii=False));return 1 if r['status']=='HOLD' else 0
+        print(json.dumps(r,ensure_ascii=False));return 1 if r['status']=='HOLD' or r.get('continuity',{}).get('status')=='PENDING_RECOVERY' else 0
     except (OSError,ValueError,KeyError,TypeError,zipfile.BadZipFile) as exc:
         print(json.dumps({'status':'HOLD','errors':[str(exc)]},ensure_ascii=False));return 1
 

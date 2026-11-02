@@ -27,7 +27,11 @@ def read_config(path, *, frozen_memory_source=None):
         config.setdefault('inputs',{})['memory_root']=resolved['root']
         config.setdefault('memory',{}).update(index=resolved['index'],loading_policy=resolved['loading_policy'],index_sha256=resolved['index_sha256'])
         inputs=config['inputs']
-    for key, directory in (("script_path", False), ("asset_root", True), ("memory_root", True)):
+    script_keys = [key for key in ('script_path', 'script_root') if inputs.get(key)]
+    if len(script_keys) != 1:
+        raise ValueError('必须且只能指定script_path或script_root')
+    script_key = script_keys[0]
+    for key, directory in ((script_key, script_key == 'script_root'), ("asset_root", True), ("memory_root", True)):
         p = Path(inputs.get(key, ""))
         if not p.is_absolute() or not (p.is_dir() if directory else p.is_file()):
             raise ValueError(f"{key}必须是存在的绝对{'目录' if directory else '文件'}路径")

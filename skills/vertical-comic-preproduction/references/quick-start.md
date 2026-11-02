@@ -146,3 +146,7 @@ receive默认单话审计技术超时900秒，可用`--audit-timeout`覆盖，�
 执行路径切换使用 `production_activation.py --switch-run <运行根> --old-state <旧状态> --new-state <新执行视图> --expected-identity <交付身份SHA256>`。它只接受相同图片/QA/历史/授权及已验证输入引用；使用可恢复事务同步交付要求、身份、清单、显示和协调记录。关联在途或 UNKNOWN 先保全/对账；共享多话 control 的 owner 移交仍走原正式移交流程。禁止临时手改其中一个路径。中断后 `production_activation.py --recover <运行根>` 可重放未完成写入。
 
 背景方案真正变化必须沿现有 scoped preparation 输入采用入口处理；纯编译表示变化也必须通过原语义验证，不能仅替换诊断文字跳过。未变输入沿 prepared_job_store 复用，不添加另一套兼容缓存。
+
+前期 `--script` 也接受脚本目录；目录来源选择及未来范围处理见[衣装补齐与跨交接状态](costume-handoff.md)。正式制作范围仍只用用户指定话号。
+
+前期已有书籍配置时，用户本次明确提供的新脚本文件／目录或资产路径用于本次新运行；成功初始化后保留旧配置备份并更新所给路径，未指定的偏好保留。并发配置变化报告冲突，不覆盖他人更新。

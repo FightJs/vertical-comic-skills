@@ -210,5 +210,16 @@
     ],
     "retained_originals": "release_memory_after_durable_capture",
     "remote_authority_unchanged": true
-  }
+  },
+  "costume_handoff": {
+    "policy": "handoff_costume_continuity_v1",
+    "directory_script_inventory": "script_catalog_v1",
+    "source_selection": "explicit_evidence",
+    "reuse_audit": "costume_reuse_v1",
+    "long_term_asset_append": "costume_asset_append_v1",
+    "future_visible_occurrences_required": 2,
+    "boundary_publication": "released_zip_replay",
+    "legacy_auto_migration": false
+  },
+  "character_costume_reference": "character_costume_reference_v1"
 }

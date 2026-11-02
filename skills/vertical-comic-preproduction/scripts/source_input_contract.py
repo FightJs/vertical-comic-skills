@@ -14,7 +14,7 @@ POLICY='formal_source_inputs_v1'
 _STRICT=ContextVar('comic_strict_source_inputs',default=False)
 # Explicit versioned schema. All non-progress fields remain dependencies, even
 # where current approval readers only use a subset. Unknown fields fall back.
-FIELDS=frozenset('''policy book_id episode_id input_priority_policy batch_strategy
+FIELDS=frozenset('''asset_format_policy policy book_id episode_id input_priority_policy batch_strategy
 review_policy optimization_policy state_dispatch_policy preparation_policy
 semantic_audit readiness_policy frame_ratio_policy frame_ratio_plan requested_framing
 execution_contract toolchain continuity_sources episode_order runtime_snapshot runtime

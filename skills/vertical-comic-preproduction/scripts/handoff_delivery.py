@@ -16,6 +16,12 @@ def closure(root,index,*,verify_runtime=True):
     errors=[];known={(e['episode_id'],p) for e in index['episodes'] for p in e['panel_ids']}
     for e in index['episodes']:
         eid=e['episode_id']
+        from asset_format import POLICY as FORMAT, panel_errors as format_errors
+        if e.get('asset_format_policy') is not None:
+            if e['asset_format_policy']!=FORMAT:errors.append(eid+':ASSET_FORMAT_HOLD: unknown policy')
+            basis=json.loads(reference(root,e['visual_basis']).read_text(encoding='utf-8-sig'))
+            for pid,issues in format_errors(e,basis).items():
+                if pid in e['panel_ids']:errors.append(eid+'/'+pid+':'+ ';'.join(issues))
         if not e.get('run_template'):errors.append(eid+':缺可自动绑定的运行模板')
         else:reference(root,e['run_template'])
         for p in e['panels']:
@@ -195,6 +201,7 @@ def input_review(root,index):
     for e in index['episodes']:
         selected={k:e[k] for k in (('episode_id','panel_ids') if episode_mode(index) else ('episode_id','panel_ids','halves'))}
         selected['production_scope']=e['panels']
+        if 'asset_format_policy' in e:selected['asset_format_policy']=e['asset_format_policy']
         for k in ('source_script','production_source_snapshot','visual_basis','shot_manifest','runtime_manifest'):
             reference(root,e.get(k));selected[k]=e[k]
         packages=e.get('generation_review_packages')
@@ -211,6 +218,9 @@ def input_review(root,index):
     if episode_mode(index):
         value.update(handoff_policy=index['policy'],production_window_policy=index['production_window_policy'])
     if 'task_context' in index:value['task_context']=index['task_context']
+    if index.get('continuity_boundary'):
+        reference(root,index['continuity_boundary'])
+        value['continuity_boundary']=index['continuity_boundary']
     return {**value,'approved_input_digest':hashlib.sha256(json.dumps(value,ensure_ascii=False,sort_keys=True,separators=(',',':')).encode()).hexdigest()}
 
 

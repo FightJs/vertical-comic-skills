@@ -198,6 +198,11 @@ def _basis(state, root, shot):
                 or not isinstance(row.get('identity_observable'), bool) or not row.get('subject_name') or not row.get('evidence')):
             raise ValueError(f'INPUT_SEMANTICS_HOLD:{subject}:缺逐人物面部/身份可观察性及依据')
     basis = checked_file(root, state['visual_basis'])
+    from asset_format import POLICY as FORMAT, panel_errors as format_errors
+    if state.get('asset_format_policy') is not None:
+        if state['asset_format_policy']!=FORMAT:raise ValueError('ASSET_FORMAT_HOLD: unknown policy')
+        issues=format_errors(state,read_json(basis)).get(shot['panel_id'],[])
+        if issues:raise ValueError(';'.join(issues))
     from panel_readiness import design_signature
     memory = state.get('memory_source') or {}
     rule_hash = digest(Path(memory['root']) / memory.get('index', '记忆索引.json')) if memory.get('root') else None
@@ -209,6 +214,7 @@ def _basis(state, root, shot):
             toolchain=original.get('toolchain') or {}
     from preparation_gate_policy import enabled as light_preparation, FIELD
     return {**({FIELD: state[FIELD]} if light_preparation(state) else {}),
+            **({'asset_format_policy':state['asset_format_policy']} if state.get('asset_format_policy') else {}),
             'book_id': state['book_id'], 'episode_id': state['episode_id'],
             'panel_id': shot['panel_id'], 'source': source['locked_scripts'][shot['panel_id']],
             'shot_signature': design_signature(shot), 'visual_basis_sha256': digest(basis),
@@ -219,7 +225,7 @@ def _basis(state, root, shot):
 def actual_input(state, root, shot, packet, package_root):
     from audit_cache import derived, content_key
     authority = {k: state.get(k) for k in ('book_id', 'episode_id', 'source_snapshot',
-                 'visual_basis', 'shot_manifest', 'toolchain', 'memory_source', 'input_semantics_policy', 'preparation_gate_policy','runtime_import')}
+                 'visual_basis', 'shot_manifest', 'toolchain', 'memory_source', 'input_semantics_policy', 'preparation_gate_policy','runtime_import','asset_format_policy')}
     from panel_readiness import review_scope
     return derived('final_semantic_input', content_key([str(root), str(package_root), authority, shot, packet, review_scope()]),
                    lambda: _actual_input(state, root, shot, packet, package_root))

@@ -30,3 +30,7 @@ description: Lock episode-specific character identities, costume states, scenes 
 前期资产观察须锁定本人物当前衣装及重要配饰的款式、总数量、角色自身佩戴侧、身体锚点/手指和真实附着方式；未知细节不凭对称推测。复用原appearance_details，跨格/跨话同状态沿同一依据，详见[服饰定位](../vertical-comic-preproduction/references/appearance-and-single-frame.md)。
 
 资产生成与资产返修按[统一提交登记](../vertical-comic-preproduction/references/submission-runtime.md)使用asset_runtime.py和必传onBeforeInvoke，共用当前职责剩余计时；不额外获得四小时。保存调用结果不授予批准或入库。
+
+前期衣装缺口、未来复用和跨交接状态执行[衣装补齐与接续](../vertical-comic-preproduction/references/costume-handoff.md)，沿用本阶段原资产任务和实际审图。
+
+临时人物衣装参考与长期资产均须独立全身主图＋正面/真侧面90°/背面三视图，全部头到鞋完整、纯白空白背景；实际观察与放行沿[人物衣装最低版式](../vertical-comic-preproduction/references/stage-asset-production.md#人物衣装参考最低版式)，不以“临时”降低规范。

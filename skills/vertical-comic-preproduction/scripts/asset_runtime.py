@@ -5,7 +5,7 @@ All inputs and authorization are explicit scoped references. Never calls imagege
 import argparse
 import json
 from pathlib import Path
-from codex_reference_contract import checked_file, digest, read_json, file_session
+from codex_reference_contract import checked_file, digest, read_json, file_session, verify_read_snapshot, path_exists
 from platform_io import atomic_json, file_lock, configure_stdio
 from submission_contract import POLICY, fingerprint, registration, acknowledgement, validate_job
 from runtime_clock import execution_context, require_dispatch
@@ -18,6 +18,8 @@ def compile_job(run_root, definition):
     context=execution_context(root)
     if context is None: raise ValueError('ASSET_HOLD: explicit local execution context required')
     with file_session():
+        if digest(Path(context['reference']['path']))!=context['reference']['sha256']:
+            raise ValueError('CLOCK_CONTEXT_MISSING_OR_CHANGED')
         spec=read_json(checked_file(root,definition))
         if spec.get('policy')!='asset_call_definition_v1' or spec.get('operation') not in {'generate','repair','retry'}:
             raise ValueError('ASSET_HOLD: explicit asset generation/repair definition required')
@@ -63,6 +65,7 @@ def compile_job(run_root, definition):
                 raise ValueError('ASSET_HOLD: exact scoped diagnosis/no-image evidence required')
         from asset_format import compiled_arguments
         args=compiled_arguments(args,needs[0])
+        if spec.get('shared_asset') is not None:shared_asset_key(spec,arguments=args)
         job={'kind':'asset','book_id':spec['book_id'],'episode_id':spec['episode_id'],
              'job_id':'ASSET:'+spec['episode_id'],'asset_id':spec['asset_id'],'attempt_id':spec['attempt_id'],
              'arguments':args,'candidate_only':False,'input_audit_only':False,
@@ -76,14 +79,68 @@ def ledger_path(root):
     return Path(root).resolve()/'00_任务协调'/LEDGER
 
 
-def submit(run_root, job):
+def shared_asset_key(spec, *, arguments=None):
+    """Exact opt-in content identity; applicable episodes never inferred."""
+    shared=spec.get('shared_asset') or {}
+    episodes=shared.get('episode_ids')
+    if (not isinstance(episodes,list) or not episodes or len(set(episodes))!=len(episodes) or
+        any(not isinstance(e,str) or not e.strip() for e in episodes) or
+        spec.get('episode_id') not in episodes or shared.get('owner_episode_id') not in episodes or
+        any(not isinstance(shared.get(k),str) or not shared[k].strip() for k in ('subject_id','state_id','owner_episode_id')) or
+        not isinstance(shared.get('definition'),dict) or not shared['definition'] or
+        not isinstance(shared.get('usage_basis'),dict) or not shared['usage_basis'] or
+        not shared['usage_basis'].get('source_locator')):
+        raise ValueError('ASSET_SHARED_HOLD: explicit subject/state/definition/usage and unique owner scope required')
+    refs=spec.get('reference_files')
+    if not isinstance(refs,list) or not refs or any(not isinstance(r,dict) or not isinstance(r.get('sha256'),str) or
+        len(r['sha256'])!=64 or any(c not in '0123456789abcdef' for c in r['sha256']) for r in refs):
+        raise ValueError('ASSET_SHARED_HOLD: exact ordered reference hashes required')
+    arguments={k:v for k,v in (arguments if arguments is not None else spec.get('arguments',{})).items() if k!='referenced_image_paths'}
+    return fingerprint({'book_id':spec['book_id'],'subject_id':shared['subject_id'],'state_id':shared['state_id'],
+        'definition':shared['definition'],'reference_hashes':[r['sha256'] for r in refs],
+        'arguments':arguments,'usage_basis':shared['usage_basis'],'owner_episode_id':shared['owner_episode_id'],
+        'episode_ids':sorted(episodes)})
+
+
+def _epoch_guard(root, epoch_guard):
+    marker=Path(root)/'00_任务协调/preparation-host.json'
+    required=path_exists(marker) and read_json(marker).get('policy')=='preparation_scheduler_v1'
+    if required and not callable(epoch_guard):raise ValueError('ASSET_EPOCH_GUARD_REQUIRED')
+    if epoch_guard is not None:
+        if not callable(epoch_guard):raise ValueError('ASSET_EPOCH_GUARD_REQUIRED')
+        if epoch_guard() is False:raise ValueError('ASSET_STALE_OWNER')
+
+
+def final_invoke_guard(run_root, job, *, epoch_guard=None):
+    """Native host calls this immediately before invoking the real image tool."""
+    root=Path(run_root).resolve();require_dispatch(root)
+    definition=job.get('submission',{}).get('definition')
+    with file_session() as snapshot:
+        actual,_,_=compile_job(root,definition);validate_job(job,actual)
+        _epoch_guard(root,epoch_guard)
+    key,record=registration(actual)
+    with file_lock(ledger_path(root).with_suffix('.lock')):
+        verify_read_snapshot(snapshot,refresh_views=False)
+        ledger=read_json(ledger_path(root));row=ledger['attempts'].get(key)
+        if not row or row['job_digest']!=record['job_digest'] or row['status']!='IN_FLIGHT':
+            raise ValueError('ASSET_INVOKE_HOLD: exact outstanding registered attempt required')
+        require_dispatch(root);_epoch_guard(root,epoch_guard)
+    return {'status':'ASSET_INVOKE_GUARD_PASSED','registration_id':key,'image_calls':0}
+
+
+def submit(run_root, job, *, epoch_guard=None):
     root=Path(run_root).resolve();require_dispatch(root)
     definition=job.get('submission',{}).get('definition')
     if not isinstance(definition,dict): raise ValueError('SUBMISSION_HOLD: asset definition missing')
     path=ledger_path(root)
-    with file_lock(path.with_suffix('.lock')):
+    with file_session() as snapshot:
         actual,auth,spec=compile_job(root,definition);validate_job(job,actual)
-        key,record=registration(actual)
+        _epoch_guard(root,epoch_guard)
+    key,record=registration(actual)
+    shared_key=shared_asset_key(spec,arguments=actual['arguments']) if spec.get('shared_asset') is not None else None
+    with file_lock(path.with_suffix('.lock')):
+        verify_read_snapshot(snapshot,refresh_views=False)
+        _epoch_guard(root,epoch_guard)
         run_id=actual['submission']['task_id']
         ledger=read_json(path) if path.exists() else {'policy':'asset_call_ledger_v1','run_id':run_id,'attempts':{}}
         if ledger.get('policy')!='asset_call_ledger_v1' or ledger.get('run_id')!=run_id:
@@ -92,8 +149,16 @@ def submit(run_root, job):
         if key in attempts:
             if attempts[key]['job_digest']!=record['job_digest']:raise ValueError('SUBMISSION_HOLD: asset input conflict')
             return acknowledgement(actual,attempts[key],fresh=False,state_sha256=digest(path))
-        # Bind the authorization's identity and scope, not a changed file hash,
-        # so editing an allowance record cannot reset previous consumption.
+        if shared_key and spec['operation']=='generate':
+            same=[r for r in attempts.values() if r.get('shared_asset_key')==shared_key]
+            if same:
+                owner=same[-1]
+                return {**acknowledgement(actual,owner,fresh=False,state_sha256=digest(path)),
+                    'status':'SHARED_ASSET_REGISTERED','asset_approval':'NOT_GRANTED',
+                    'owner_episode_id':owner['shared_owner_episode_id'],'source_attempt_id':owner['attempt_id'],
+                    'shared_asset_status':owner['status']}
+            if spec['episode_id']!=spec['shared_asset']['owner_episode_id']:
+                raise ValueError('ASSET_SHARED_HOLD: only explicit owner may generate shared asset')
         scope=fingerprint([actual['submission']['task_id'],auth['book_id'],sorted(auth['episode_ids']),
                            sorted(auth['asset_ids']),auth['source_locator']])
         relevant=[r for r in attempts.values() if r['budget_scope']==scope]
@@ -114,22 +179,26 @@ def submit(run_root, job):
                        'attempt_id':actual['attempt_id'],'status':'IN_FLIGHT','budget_scope':scope,
                        'definition':definition,'operation':spec['operation'],
                        'source_attempt_id':spec.get('source_attempt_id'),'observed_tool_call':False,'arguments':actual['arguments']}
+        if shared_key:attempts[key].update(shared_asset_key=shared_key,shared_owner_episode_id=spec['shared_asset']['owner_episode_id'])
         atomic_json(path,ledger)
-        try: require_dispatch(root)
+        try:require_dispatch(root);_epoch_guard(root,epoch_guard)
         except (OSError,ValueError) as exc:
             raise ValueError('SUBMISSION_REGISTERED_NO_INVOKE: '+str(exc)) from exc
         return acknowledgement(actual,record,fresh=True,state_sha256=digest(path))
 
 
 def save(run_root, registration_id, result, *, resolution=None):
-    """No clock admission here: already-submitted returns must remain savable."""
+    """Validate return bytes outside the write lock; keep admission clock-free."""
     root=Path(run_root).resolve();path=ledger_path(root)
     if not isinstance(result,dict) or result.get('status') not in {'GENERATED','CALL_FAILED','RESULT_UNKNOWN'}:
         raise ValueError('ASSET_SAVE_HOLD: explicit actual outcome required')
-    with file_lock(path.with_suffix('.lock')):
-        ledger=read_json(path);row=ledger['attempts'][registration_id]
+    # The original attempt row is the source of truth; compare it after I/O.
+    row=read_json(path)['attempts'][registration_id]
+    row_snapshot=fingerprint(row)
+    with file_session() as snapshot:
         if result.get('attempt_id')!=row['attempt_id']:raise ValueError('ASSET_SAVE_HOLD: old attempt')
         evidence=read_json(checked_file(root,result['response_evidence']))
+        if evidence.get('raw_return') is not None:checked_file(root,evidence['raw_return'])
         if evidence.get('attempt_id')!=row['attempt_id'] or not evidence.get('source_locator'):
             raise ValueError('ASSET_SAVE_HOLD: exact returned evidence required')
         output=result.get('output')
@@ -148,9 +217,13 @@ def save(run_root, registration_id, result, *, resolution=None):
             raise ValueError('ASSET_SAVE_HOLD: uncertain request must remain RESULT_UNKNOWN')
         value={k:result.get(k) for k in ('status','attempt_id','request_evidence','response_evidence','output')}
         token=fingerprint(value)
+        proof=read_json(checked_file(root,resolution)) if resolution else {}
+    with file_lock(path.with_suffix('.lock')):
+        verify_read_snapshot(snapshot,refresh_views=False)
+        ledger=read_json(path);row=ledger['attempts'][registration_id]
         if row.get('result_digest')==token:return {'status':'ASSET_RESULT_ALREADY_SAVED','registration_id':registration_id}
+        if fingerprint(row)!=row_snapshot:raise ValueError('ASSET_SAVE_HOLD: attempt changed during return validation; replay registration')
         if row['status']=='RESULT_UNKNOWN':
-            proof=read_json(checked_file(root,resolution)) if resolution else {}
             if (proof.get('registration_id')!=registration_id or proof.get('attempt_id')!=row['attempt_id'] or
                 proof.get('source_kind')!='observed_resolution' or not proof.get('source_locator') or
                 proof.get('result_digest')!=token):raise ValueError('ASSET_SAVE_HOLD: unknown result requires exact resolution evidence')
@@ -160,6 +233,79 @@ def save(run_root, registration_id, result, *, resolution=None):
         if result['status']=='GENERATED':row['observed_tool_call']=True
         atomic_json(path,ledger)
     return {'status':'ASSET_RESULT_SAVED','registration_id':registration_id,'asset_approval':'NOT_GRANTED'}
+
+
+def _capture_directory(root, registration_id):
+    if not isinstance(registration_id,str) or len(registration_id)!=64 or any(c not in '0123456789abcdef' for c in registration_id):
+        raise ValueError('ASSET_CAPTURE_HOLD: exact registration id required')
+    return root/'00_任务协调'/'asset-returns'/registration_id
+
+
+def _reference(root, path):
+    return {'path':Path(path).relative_to(root).as_posix(),'sha256':digest(path)}
+
+
+def _immutable_json(path, value):
+    from image_return_io import put
+    put(path,(json.dumps(value,ensure_ascii=False,sort_keys=True,indent=2)+'\n').encode())
+
+
+def capture(run_root, registration_id, raw_path, *, request_evidence, response_source_locator,
+            selected_index=None, resolution=None):
+    """Save raw bytes first. The caller supplies actual call and return locators."""
+    from image_return_io import put
+    root=Path(run_root).resolve();directory=_capture_directory(root,registration_id)
+    put(directory/'raw-return.json',Path(raw_path).read_bytes())
+    row=read_json(ledger_path(root))['attempts'][registration_id]
+    request=read_json(checked_file(root,request_evidence))
+    if (request.get('source_kind')!='observed_tool_call' or not request.get('source_locator') or
+        request.get('attempt_id')!=row['attempt_id'] or request.get('arguments')!=row['arguments'] or
+        not isinstance(response_source_locator,str) or not response_source_locator.strip()):
+        raise ValueError('ASSET_CAPTURE_HOLD: exact actual call and return evidence required')
+    # Intent makes a crash after image persistence resumable without a model call.
+    intent={'policy':'asset_return_capture_v1','registration_id':registration_id,'attempt_id':row['attempt_id'],
+        'run_id':execution_context(root)['run_id'],'request_evidence':request_evidence,
+        'response_source_locator':response_source_locator,'selected_index':selected_index,'resolution':resolution}
+    _immutable_json(directory/'capture-intent.json',intent)
+    return _finish_capture(root,directory,intent)
+
+
+def _finish_capture(root, directory, intent):
+    import image_return_io
+    receipt=image_return_io.persist(directory/'raw-return.json',directory,selected_index=intent['selected_index'])
+    outputs=[{'path':(directory/r['path']).relative_to(root).as_posix(),'sha256':r['sha256']} for r in receipt['outputs']]
+    response={'source_kind':'observed_tool_result','source_locator':intent['response_source_locator'],
+        'attempt_id':intent['attempt_id'],'status':'COMPLETED','outputs':outputs,
+        'raw_return':_reference(root,directory/'raw-return.json')}
+    _immutable_json(directory/'response-evidence.json',response)
+    result={'status':'GENERATED','attempt_id':intent['attempt_id'],'request_evidence':intent['request_evidence'],
+        'response_evidence':_reference(root,directory/'response-evidence.json'),'output':outputs[receipt['selected_index']]}
+    capture={'policy':'asset_return_capture_v1','registration_id':intent['registration_id'],'run_id':intent['run_id'],
+        'result':result,'resolution':intent['resolution'],'image_receipt':_reference(root,directory/'receipt.json')}
+    _immutable_json(directory/'capture.json',capture)
+    return _reference(root,directory/'capture.json')
+
+
+def register_capture(run_root, capture_reference, *, resolution=None, release_service=None):
+    """Replay a durable return only. Unknown calls retain service occupancy."""
+    root=Path(run_root).resolve()
+    captured=read_json(checked_file(root,capture_reference))
+    if captured.get('policy')!='asset_return_capture_v1' or captured.get('run_id')!=execution_context(root)['run_id']:
+        raise ValueError('ASSET_CAPTURE_HOLD: capture belongs to another runtime')
+    checked_file(root,captured['image_receipt'])
+    result=save(root,captured['registration_id'],captured['result'],resolution=resolution or captured.get('resolution'))
+    if release_service is not None:release_service()
+    return result
+
+
+def recover(run_root, registration_id, *, resolution=None, release_service=None):
+    """Rebuild the local capture receipt then replay registration, never generate."""
+    root=Path(run_root).resolve();directory=_capture_directory(root,registration_id)
+    intent=read_json(directory/'capture-intent.json')
+    if (intent.get('policy')!='asset_return_capture_v1' or intent.get('registration_id')!=registration_id or
+        intent.get('run_id')!=execution_context(root)['run_id']):raise ValueError('ASSET_CAPTURE_HOLD: recovery scope mismatch')
+    reference=_finish_capture(root,directory,intent)
+    return register_capture(root,reference,resolution=resolution,release_service=release_service)
 
 
 def main():

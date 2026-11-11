@@ -5,6 +5,8 @@ description: Coordinate first-batch per-panel comic production for further human
 
 # 条漫第一批逐格图片生产总控
 
+**新前期统一调度**：`comic_start.py prepare` 返回 `preparation_scheduler_v1` 时，优先执行[统一前期宿主](references/preparation-scheduler.md)，使用一个全批宿主串接片段、派生、工作绑定、技术核验与增量归集。模型主控批量派发原生子agent、回传真实宿主ID；必要资产经原调用账本和可靠保存入口执行。普通格仍为 `exception_preparation_v2`，具体风险才提交观察。未声明该协议的旧冻结运行沿原合同；接包和正文生产继续下述入口。
+
 统一入口为整话轻审核：新任务与旧包导入后都固定当前执行器，旧包代码仅作证据。每话启动一个 `generation_host.py serve` 常驻进程；默认按[一次派发](references/submission-runtime.md)使用prepare-inputs/ready-inputs/claim-and-register，普通格不再reserve→compile→submit；输入未变复用，局部修改只处理受影响格；全批已就绪引用通过[固定调用适配入口](references/submission-runtime.md#固定调用适配入口)交错派发，取得真实调用通道后才登记，不等前话结束；返回立即保存并释放已结算槽位。每图快速看一次，仅严重剧情问题或严重空背景最多返修一轮。暂停和等待用户不计时，多话共用四小时完成目标、七小时有效运行硬限，暂停不计时，四小时后继续必要生产。完整约定见[统一执行与恢复](references/execution-compatibility.md)与[轻审核流程](references/light-review.md)。
 
 编译和生图按[并行编译与流式输入](references/submission-runtime.md#并行编译与流式输入)衔接：每话一次批量准备，多进程只传格号、逐格发布；prepared_input_source.js向调用桥持续提供就绪引用。多子agent共用本机编译预算和核定服务容量，分别分配，不为每格重启编译池。

@@ -207,13 +207,146 @@ def draft_metrics(paths, atlas_paths=None):
             'note':'只统计提供的实际派生记录；不推算未记录的设计/审核/服务耗时，不代表生图提速'}
 
 
+def preparation_metrics(events):
+    """Pure accounting of supplied preparation observations (never tool estimates).
+
+    Event schema: {event_id?, action, at?, task_id?, payload?}. ``at`` and
+    interval bounds accept finite epoch seconds or timezone-qualified ISO times.
+    payload {phase, started_at, completed_at} records an observed interval.
+    ready/technically_ready/task_ready -> dispatch/claimed records queue spans;
+    dispatchable/admitted -> claim measures an observed capacity-offer gap.
+    wait_resource/dispatch_unavailable revokes an unconsumed capacity offer;
+    native_started -> native_completed records native spans, not service time.
+    compile payload {compiled, reused} contains actual integer receipt counts.
+    task_registered payload {lane: model} and model_action are explicit evidence.
+    Duplicate identical event_ids count once; conflicting IDs are excluded.
+    """
+    import math
+    def stamp(value):
+        if type(value) in (int, float):
+            return value if math.isfinite(value) else None
+        return instant(value)
+    def stats(windows):
+        return {'samples': len(windows),
+                'sum_seconds_not_wall_time': sum(b-a for a,b in windows) if windows else None,
+                'union_seconds': union_seconds(windows) if windows else None}
+    records=[];seen={};conflicts=set();duplicates=0;warnings=[]
+    for event in events:
+        if not isinstance(event,dict) or not isinstance(event.get('action'),str):
+            warnings.append('invalid event omitted');continue
+        identity=event.get('event_id')
+        if identity:
+            signature=json.dumps(event,sort_keys=True,ensure_ascii=False)
+            if identity in seen:
+                if signature==seen[identity]:duplicates+=1
+                else:conflicts.add(identity)
+                continue
+            seen[identity]=signature
+        records.append(event)
+    if conflicts:warnings.append('conflicting event_ids excluded: '+', '.join(sorted(map(str,conflicts))))
+    records=[e for e in records if e.get('event_id') not in conflicts]
+    phases={};waits=Counter();actions=Counter();model_tasks=set();compiled=[];reused=[]
+    milestones={k:None for k in ('first_fragment_at','first_ready_at','sealed_at','published_at')}
+    milestone_actions={'fragment_submitted':'first_fragment_at','submit_fragments':'first_fragment_at',
+                       'technically_ready':'first_ready_at','ready':'first_ready_at','task_ready':'first_ready_at',
+                       'sealed':'sealed_at','seal':'sealed_at','published':'published_at','publish':'published_at'}
+    def occupied(task):
+        return task.get('status') in {'LEASED','RUNNING','UNKNOWN'} or task.get('native_inflight',False)
+    timed=[];scheduler_tasks={};scheduler_curve=[];model_registration_observed=False
+    # Journal sequence is authoritative; do not infer native starts from leases.
+    for e in records:
+        action=e['action'].lower().replace('-','_');actions[action]+=1
+        p=e.get('payload') if isinstance(e.get('payload'),dict) else {}
+        at=stamp(e.get('at',e.get('timestamp')));task=e.get('task_id',p.get('task_id'))
+        if action in {'register','task_registered'}:model_registration_observed=True
+        if action=='register':
+            for registered in e.get('tasks',[]):
+                if not isinstance(registered,dict) or not registered.get('task_id'):continue
+                scheduler_tasks[registered['task_id']]=dict(registered)
+                if registered.get('lane')=='model':model_tasks.add(registered['task_id'])
+        if action=='owner':
+            for registered in scheduler_tasks.values():
+                if occupied(registered):registered.update(status='UNKNOWN',wait_reason='OWNER_CHANGED_RECONCILE_REQUIRED')
+        if action=='task' and isinstance(e.get('changes'),dict):
+            changes=e['changes'];scheduler_tasks.setdefault(task,{}).update(changes)
+            p={**changes,**p}
+            status=changes.get('status')
+            if status=='READY':timed.append((at,'task_ready',task,p)) if at is not None else None
+            if status=='LEASED' and at is not None:
+                ready_at=stamp(changes.get('timestamps',{}).get('ready'))
+                if ready_at is not None and ready_at<=at:timed.append((ready_at,'task_ready',task,p))
+                timed.append((at,'claimed',task,p))
+        if action in {'owner','task'} and at is not None:
+            scheduler_curve.append({'at':at,**dict(Counter(t.get('lane','unknown') for t in scheduler_tasks.values() if occupied(t)))})
+        if at is not None:timed.append((at,action,task,p))
+        key=milestone_actions.get(action)
+        if key and at is not None:milestones[key]=min(milestones[key],at) if milestones[key] is not None else at
+        reason=p.get('wait_reason',p.get('reason'))
+        if reason is not None and (action in {'wait','blocked','task_waiting','wait_resource','dispatch_unavailable'} or p.get('wait_reason')):waits[str(reason)]+=1
+        if action=='task_registered' and p.get('lane')=='model' and task is not None:model_tasks.add(task)
+        for name,values in (('compiled',compiled),('reused',reused)):
+            value=p.get(name)
+            if type(value) is int and value>=0:values.append(value)
+        phase=p.get('phase');start=stamp(p.get('started_at'));end=stamp(p.get('completed_at'))
+        if isinstance(phase,str) and start is not None and end is not None:
+            if end>=start:phases.setdefault(phase,[]).append((start,end))
+            else:warnings.append('negative interval omitted: '+phase)
+    ready={};dispatchable={};native={};gaps=[];dispatchable_gaps=[];native_windows=[];edges=[]
+    for at,action,task,p in sorted(timed,key=lambda x:x[0]):
+        token=p.get('operation_id',task)
+        if task is not None and action in {'task_ready','technically_ready','ready'}:ready.setdefault(task,at)
+        if task is not None and action in {'dispatchable','admitted'}:dispatchable.setdefault(task,at)
+        if task is not None and action in {'wait_resource','dispatch_unavailable'}:dispatchable.pop(task,None)
+        if task is not None and action in {'dispatch','dispatched','claimed','claim'}:
+            if task in ready:gaps.append((ready.pop(task),at))
+            if task in dispatchable:dispatchable_gaps.append((dispatchable.pop(task),at))
+        if token is not None and action=='native_started' and token not in native:
+            native[token]=at;edges.append((at,1))
+        if token is not None and action=='native_completed' and token in native:
+            native_windows.append((native.pop(token),at));edges.append((at,-1))
+    inflight=[];level=0
+    deltas=Counter()
+    for at,delta in edges:deltas[at]+=delta
+    for at in sorted(deltas):
+        level+=deltas[at]
+        inflight.append({'at':at,'inflight':level})
+    timestamps=[row[0] for row in timed]
+    return {'policy':'preparation_metrics_v1','event_count':len(records),'duplicate_events_ignored':duplicates,
+            'wall_seconds':max(timestamps)-min(timestamps) if timestamps else None,
+            'milestones':milestones,'phase_windows':{k:stats(v) for k,v in phases.items()},
+            'ready_to_claim':stats(gaps),'dispatch_gap':stats(gaps),
+            'dispatchable_to_claim':stats(dispatchable_gaps),'native_call':stats(native_windows),
+            'inflight_curve':inflight,'scheduler_inflight_curve':scheduler_curve,'peak_observed_inflight':max((v['inflight'] for v in inflight),default=None),
+            'unclosed_native_calls':len(native),'compiled':sum(compiled) if compiled else None,
+            'reused':sum(reused) if reused else None,'model_tasks':len(model_tasks) if model_registration_observed else None,
+            'model_actions':actions.get('model_action'),'action_counts':dict(actions),'wait_reasons':dict(waits),
+            'warnings':warnings,'note':'Only supplied observed events. Native spans include host/transport/service wait, not pure drawing. Concurrent phase durations are not summed as wall time. ready_to_claim (legacy dispatch_gap) includes queue/resource/host delay; dispatchable_to_claim requires an actual capacity offer. Missing availability/native timing remains unknown.'}
+
+
 def main():
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--state',action='append',required=True);p.add_argument('--native-events');p.add_argument('--verify-images',action='store_true');p.add_argument('--capacity',type=int);p.add_argument('--draft-receipt',action='append');p.add_argument('--atlas-receipt',action='append');p.add_argument('--delivery-identity');a=p.parse_args()
-    value=build(a.state,native_events=a.native_events,verify_images=a.verify_images,capacity=a.capacity,delivery_identity=a.delivery_identity)
-    value['draft_preparation']=draft_metrics(a.draft_receipt,a.atlas_receipt)
-    from runtime_clock import locate, status as clock_status
-    clocks = {locate(path) for path in a.state} - {None}
-    value['task_runtime_clocks'] = [dict(directory=str(d), **clock_status(d)) for d in sorted(clocks)]
+    p=argparse.ArgumentParser(description=__doc__)
+    p.add_argument('--state',action='append');p.add_argument('--preparation-events',type=Path)
+    p.add_argument('--native-events');p.add_argument('--verify-images',action='store_true');p.add_argument('--capacity',type=int)
+    p.add_argument('--draft-receipt',action='append');p.add_argument('--atlas-receipt',action='append');p.add_argument('--delivery-identity')
+    a=p.parse_args()
+    if not a.state and not a.preparation_events:p.error('--state or --preparation-events is required')
+    preparation=None
+    if a.preparation_events:
+        raw=a.preparation_events.read_text(encoding='utf-8-sig')
+        try:document=json.loads(raw)
+        except json.JSONDecodeError:document=[json.loads(line) for line in raw.splitlines() if line.strip()]
+        if isinstance(document,dict):document=document.get('events',[document])
+        if not isinstance(document,list):p.error('preparation events must be a JSON list, journal snapshot, or JSONL records')
+        events=[entry.get('event',entry) if isinstance(entry,dict) else entry for entry in document]
+        preparation=preparation_metrics(events)
+    if a.state:
+        value=build(a.state,native_events=a.native_events,verify_images=a.verify_images,capacity=a.capacity,delivery_identity=a.delivery_identity)
+        value['draft_preparation']=draft_metrics(a.draft_receipt,a.atlas_receipt)
+        from runtime_clock import locate, status as clock_status
+        clocks = {locate(path) for path in a.state} - {None}
+        value['task_runtime_clocks'] = [dict(directory=str(d), **clock_status(d)) for d in sorted(clocks)]
+        if preparation is not None:value['preparation']=preparation
+    else:value=preparation
     print(json.dumps(value,ensure_ascii=False,indent=2))
 if __name__=='__main__':
     from platform_io import configure_stdio

@@ -37,6 +37,7 @@ def main() -> int:
     parser.add_argument("--runtime-snapshot", help="本批一次创建、各话共用的manifest.json绝对路径")
     parser.add_argument("--task-context", help="本批唯一任务来源JSON；恢复/接包保留原任务，不重新初始化")
     parser.add_argument('--execution-context', help='本机职责计时上下文；不是创作批准')
+    parser.add_argument('--preparation-scheduler-policy', choices=('preparation_scheduler_v1',), help='仅新前期批次声明统一调度；不迁移已有状态')
     parser.add_argument("--memory-root", help="通用规则记忆库绝对路径")
     parser.add_argument("--memory-loading-policy", choices=("stage_baseline_loading_v1",), help="无配置的新库须显式绑定读取合同；旧库省略")
     parser.add_argument("--batch-size", type=int, choices=range(1, 6), default=None)
@@ -158,6 +159,8 @@ def main() -> int:
             'path': str(Path(args.execution_context).resolve()),
             'sha256': __import__('hashlib').sha256(Path(args.execution_context).read_bytes()).hexdigest()}})
         extra['runtime_execution_context'] = context['reference']
+    if args.preparation_scheduler_policy:
+        extra['preparation_scheduler_policy']=args.preparation_scheduler_policy
     if mode == 'episode_async_v1':
         from task_context import fresh, validate as validate_task, ORIGIN_FILE
         if (root/'00_输入审计/生产流程.json').exists():

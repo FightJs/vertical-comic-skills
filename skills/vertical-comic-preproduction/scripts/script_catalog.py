@@ -15,38 +15,38 @@ def digest(path):
             h.update(chunk)
     return h.hexdigest()
 
-def workbook_hints(path):
-    """Read workbook sheet titles and panel identifiers as raw evidence."""
-    from openpyxl import load_workbook
+def workbook_hints(path, cache_root=None, *, metrics=None):
+    """Derive catalogue hints from the shared raw snapshot; no extra XLSX parse."""
+    from source_workbook import snapshot
+    from openpyxl.utils.cell import coordinate_from_string, column_index_from_string
     result=[]
-    with Path(path).open('rb') as stream:
-        workbook=load_workbook(stream,read_only=True,data_only=False)
-        try:
-            for sheet in workbook:
-                title=sheet.title
-                match=re.fullmatch(r'第\s*(\d+)\s*话',title) or re.fullmatch(r'(?i)E(\d+)',title)
-                if not match:continue
-                episode='E'+str(int(match.group(1))).zfill(3); panel_col=None;panels=[];panel_rows=[];columns={}
-                for row_number,row in enumerate(sheet.iter_rows(values_only=True),1):
-                    if panel_col is None:
-                        for i,value in enumerate(row):
-                            if isinstance(value,str) and value.strip()=='格号':panel_col=i;break
-                        if panel_col is not None:
-                            columns={str(v).strip():i for i,v in enumerate(row) if isinstance(v,str) and v.strip()}
-                        continue
-                    value=row[panel_col] if panel_col<len(row) else None
-                    number=None
-                    if isinstance(value,int) and not isinstance(value,bool) and value>0:number=value
-                    elif isinstance(value,str) and re.fullmatch(r'(?:P)?\d+',value.strip(),re.I):number=int(value.strip().lstrip('Pp'))
-                    if number is None:continue
-                    panels.append(number);record={'panel_id':'P'+str(number).zfill(3),'source_panel':value,'row':row_number}
-                    for label in ('出现角色','当前场景','当前天气','当前时间','景别','画面内容','台词','画面备注'):
-                        i=columns.get(label)
-                        if i is not None and i<len(row) and row[i] is not None:record[label]=str(row[i])
-                    panel_rows.append(record)
-                result.append({'episode_id':episode,'sheet':title,'panel_numbers':panels,'panel_evidence':panel_rows,
-                               'status':'RAW_EVIDENCE_NOT_SEMANTIC_APPROVAL'})
-        finally:workbook.close()
+    for sheet in snapshot(path, cache_root=cache_root, metrics=metrics)['sheets']:
+        title=sheet['name']
+        match=re.fullmatch(r'第\s*(\d+)\s*话',title) or re.fullmatch(r'(?i)E(\d+)',title)
+        if not match:continue
+        episode='E'+str(int(match.group(1))).zfill(3);panel_col=None;panels=[];panel_rows=[];columns={}
+        for cells in sheet['rows']:
+            row={}; row_number=None
+            for cell in cells:
+                column,row_number=coordinate_from_string(cell['coordinate'])
+                value=cell['value']
+                # Preserve legacy str(datetime) hints; raw evidence retains ISO/type.
+                if cell['type']=='d' and isinstance(value,str):value=value.replace('T',' ',1)
+                row[column_index_from_string(column)-1]=value
+            if panel_col is None:
+                panel_col=next((i for i,value in row.items() if isinstance(value,str) and value.strip()=='格号'),None)
+                if panel_col is not None:columns={v.strip():i for i,v in row.items() if isinstance(v,str) and v.strip()}
+                continue
+            value=row.get(panel_col);number=None
+            if isinstance(value,int) and not isinstance(value,bool) and value>0:number=value
+            elif isinstance(value,str) and re.fullmatch(r'(?:P)?\d+',value.strip(),re.I):number=int(value.strip().lstrip('Pp'))
+            if number is None:continue
+            panels.append(number);record={'panel_id':'P'+str(number).zfill(3),'source_panel':value,'row':row_number}
+            for label in ('出现角色','当前场景','当前天气','当前时间','景别','画面内容','台词','画面备注'):
+                if columns.get(label) in row:record[label]=str(row[columns[label]])
+            panel_rows.append(record)
+        result.append({'episode_id':episode,'sheet':title,'panel_numbers':panels,'panel_evidence':panel_rows,
+                       'status':'RAW_EVIDENCE_NOT_SEMANTIC_APPROVAL'})
     return result
 
 def discover(root, book, episodes, *, cache_root=None):
@@ -54,6 +54,7 @@ def discover(root, book, episodes, *, cache_root=None):
     if not root.is_dir() or not book or not episodes:
         raise ValueError('SCRIPT_CATALOG_HOLD: directory, book and production episodes required')
     rows = []; parsed = {}; first_by_hash = {}; cache_hits=0; parses=0
+    raw_metrics={'raw_workbook_parses':0,'raw_snapshot_cache_reuses':0}
     cache_root=Path(cache_root).resolve() if cache_root else None
     for path in sorted(root.rglob('*')):
         if path.is_symlink():
@@ -75,11 +76,11 @@ def discover(root, book, episodes, *, cache_root=None):
                     workbook=entry['workbook'];cache_hits+=1
                 except (OSError,ValueError,TypeError,KeyError):workbook=[]
                 if not workbook:
-                    try:workbook=workbook_hints(path);parses+=1;refresh_cache=True
+                    try:workbook=workbook_hints(path,cache_root=cache_root,metrics=raw_metrics);parses+=1;refresh_cache=True
                     except Exception as exc:error=str(exc)
                 parsed[before]=(workbook,error)
             else:
-                try:workbook=workbook_hints(path);parses+=1;refresh_cache=True
+                try:workbook=workbook_hints(path,cache_root=cache_root,metrics=raw_metrics);parses+=1;refresh_cache=True
                 except Exception as exc:error=str(exc)
                 parsed[before]=(workbook,error)
             if digest(path)!=before:raise ValueError('SCRIPT_CATALOG_HOLD: source changed while scanning')
@@ -105,7 +106,7 @@ def discover(root, book, episodes, *, cache_root=None):
     return {'policy': POLICY, 'book_id': book, 'root': str(root),
             'production_episode_ids': list(episodes), 'files': rows,'episode_candidates':candidates,
             'selected_sources': {}, 'future_reference_episode_ids': [],
-            'coverage': 'UNKNOWN', 'status': 'DISCOVERED_NOT_VERIFIED', 'metrics': {'workbook_parses':parses,'cache_reuses':cache_hits}}
+            'coverage': 'UNKNOWN', 'status': 'DISCOVERED_NOT_VERIFIED', 'metrics': {'workbook_parses':parses,'cache_reuses':cache_hits,**raw_metrics}}
 
 def select(catalog, selections, *, evidence):
     """Bind an explicit semantic selection to file hashes, never infer latest version."""

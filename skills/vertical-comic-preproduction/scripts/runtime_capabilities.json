@@ -221,5 +221,28 @@
     "boundary_publication": "released_zip_replay",
     "legacy_auto_migration": false
   },
-  "character_costume_reference": "character_costume_reference_v1"
+  "character_costume_reference": "character_costume_reference_v1",
+  "preparation_scheduler": {
+    "policy": "preparation_scheduler_v1",
+    "new_prepare_default": true,
+    "legacy_auto_migration": false,
+    "entry": "preparation_host.py",
+    "scope_source": "preparation_scope_source_v1",
+    "native_driver": "model_tool_calls_required",
+    "background_model_calls": false,
+    "business_contracts": "preserved",
+    "clock": "same_batch_active_context",
+    "lanes": [
+      "model",
+      "local",
+      "image"
+    ],
+    "visual_basis_observation": {
+      "action": "submit-basis-observation",
+      "policy": "visual_basis_observation_v1",
+      "native_observation_required": true,
+      "delegation_phase": "visual_basis",
+      "unobserved_auto_approval": false
+    }
+  }
 }

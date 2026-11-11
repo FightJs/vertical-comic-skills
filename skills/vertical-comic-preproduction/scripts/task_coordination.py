@@ -31,8 +31,29 @@ def verify(ref):
         raise ValueError('证据须为准确绝对文件路径和SHA256')
     if digest(ref['path']) != ref.get('sha256'): raise ValueError('证据内容已变化')
 
+def scheduler_projection(directory):
+    """New preparation uses one scheduling journal; this is a read-only view."""
+    directory=Path(directory).resolve();marker=directory/'preparation-host.json'
+    if not marker.exists():return None
+    descriptor=read(marker)
+    if descriptor.get('policy')!='preparation_scheduler_v1':raise ValueError('UNKNOWN_PREPARATION_SCHEDULER')
+    from preparation_scheduler import Scheduler
+    scheduler=Scheduler(directory/'preparation-scheduler')
+    if not scheduler.journal.meta_path.exists():
+        return {'policy':descriptor['policy'],'revision':0,'scope':{'book_id':descriptor['book_id'],
+                'episode_ids':descriptor['episode_ids']},'tasks':{},'status':'HOST_NEEDED',
+                'blockers':[{'reason':'HOST_NEEDED'}],'dispatch_authorized':False}
+    value=scheduler.status()
+    blockers=[{'task_id':key,'reason':task['status'],'wait_reason':task.get('wait_reason')}
+              for key,task in value['tasks'].items() if task['status'] not in {'COMMITTED','SUPERSEDED'}
+              and not (task['status']=='STOPPED' and task.get('required') is False)]
+    return {**value,'status':'CONTINUE_REQUIRED' if blockers else 'SCHEDULER_TASKS_COMMITTED',
+            'blockers':blockers,'dispatch_authorized':False,'next':'沿原preparation_host恢复；调度完成不代表正式交付'}
+
 def initialize(directory, display):
     directory, display = Path(directory).resolve(), Path(display).resolve()
+    projection=scheduler_projection(directory)
+    if projection is not None:return projection
     task = read(display/'task.json')
     directory.mkdir(parents=True, exist_ok=True)
     with file_lock(directory/'coordination.lock'):
@@ -53,6 +74,8 @@ def initialize(directory, display):
 
 def update(directory, expected_revision, event):
     directory = Path(directory)
+    if scheduler_projection(directory) is not None:
+        raise ValueError('PREPARATION_SCHEDULER_SINGLE_WRITER: use preparation_host; legacy events cannot mutate its projection')
     with file_lock(directory/'coordination.lock'):
         path = directory/'coordination.json'; value = read(path)
         if value['policy'] != POLICY: raise ValueError('未知协调协议')
@@ -138,6 +161,8 @@ def pending(value):
     return blockers
 
 def resume(directory):
+    projection=scheduler_projection(directory)
+    if projection is not None:return projection
     value = read(Path(directory)/'coordination.json')
     from runtime_clock import status as clock_status
     clock = clock_status(directory) if (Path(directory)/'runtime-clock.json').is_file() else None
@@ -147,6 +172,18 @@ def resume(directory):
 
 def finish(directory, expected_revision, archive, *, delivery_report=None):
     directory = Path(directory)
+    projection=scheduler_projection(directory)
+    if projection is not None:
+        if projection['revision']!=expected_revision:raise ValueError('STALE_COORDINATOR')
+        if projection['blockers']:return {'status':'CONTINUE_REQUIRED','blockers':projection['blockers']}
+        if delivery_report is None:raise ValueError('PREPARATION_DELIVERY_RECEIPT_REQUIRED')
+        before=reference(archive)
+        from production_progress import complete
+        result=complete(directory.parent/'00_显示进度',archive,delivery_report=delivery_report,_coordination_checked=True)
+        verify(before)
+        if result.get('percent')!=100:raise ValueError('交付尚未完成')
+        return {'status':'READY_TO_DELIVER','archive':before,'revision':projection['revision'],
+                'delivery_report':reference(delivery_report),'completion_basis':'VALIDATED_FORMAL_HANDOFF'}
     with file_lock(directory/'coordination.lock'):
         path = directory/'coordination.json'; value = read(path)
         if value['revision'] != expected_revision: raise ValueError('STALE_COORDINATOR')

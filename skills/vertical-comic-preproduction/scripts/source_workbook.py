@@ -4,13 +4,46 @@ import argparse
 import datetime
 import hashlib
 import json
-from platform_io import configure_stdio
+from platform_io import configure_stdio, atomic_json
 
 
-def snapshot(path):
-    from openpyxl import load_workbook
+CACHE_SCHEMA = 'raw_workbook_snapshot_cache_v1'
+
+
+def _payload_hash(value):
+    return hashlib.sha256(json.dumps(value, ensure_ascii=False, sort_keys=True,
+                                     separators=(',', ':')).encode()).hexdigest()
+
+
+def snapshot(path, cache_root=None, *, metrics=None):
+    """Read immutable raw evidence; optional cache is content/parser/schema bound.
+
+    Returned dictionaries are fresh values. Cache metadata never grants semantic
+    approval; corrupt/incompatible entries are reparsed from the current source.
+    """
+    from openpyxl import load_workbook, __version__ as parser_version
     path = Path(path).resolve()
     before = hashlib.sha256(path.read_bytes()).hexdigest()
+    parser = 'openpyxl/' + parser_version + '/read_only/data_only=false'
+    cache_key = _payload_hash([before, parser, CACHE_SCHEMA])
+    cache_path = Path(cache_root) / 'raw-workbooks' / ('raw-workbook-' + cache_key + '.json') if cache_root is not None else None
+    if cache_path and cache_path.is_file():
+        try:
+            entry = json.loads(cache_path.read_text(encoding='utf-8-sig'))
+            result = entry['snapshot']
+            payload = {k: v for k, v in result.items() if k != 'payload_sha256'}
+            if (entry.get('schema') != CACHE_SCHEMA or entry.get('parser') != parser
+                    or result.get('source_sha256') != before
+                    or result.get('payload_sha256') != _payload_hash(payload)):
+                raise ValueError('invalid raw workbook cache')
+        except (OSError, ValueError, TypeError, KeyError, AttributeError):
+            pass
+        else:
+            if hashlib.sha256(path.read_bytes()).hexdigest() != before:
+                raise ValueError('源工作簿读取期间变化，请重新读取')
+            if metrics is not None:metrics['raw_snapshot_cache_reuses']=metrics.get('raw_snapshot_cache_reuses',0)+1
+            return result
+    if metrics is not None:metrics['raw_workbook_parses']=metrics.get('raw_workbook_parses',0)+1
     sheets = []
     # Explicit binary stream guarantees closure on Windows, including read errors.
     with path.open('rb') as stream:
@@ -34,8 +67,13 @@ def snapshot(path):
             book.close()
     if hashlib.sha256(path.read_bytes()).hexdigest() != before:
         raise ValueError('源工作簿读取期间变化，请重新读取')
-    return {'policy': 'raw_workbook_evidence_v1', 'source_sha256': before,
-            'sheets': sheets, 'status': 'RAW_EVIDENCE_NOT_SEMANTIC_APPROVAL'}
+    result = {'policy': 'raw_workbook_evidence_v1', 'source_sha256': before,
+              'sheets': sheets, 'status': 'RAW_EVIDENCE_NOT_SEMANTIC_APPROVAL'}
+    result['payload_sha256'] = _payload_hash(result)
+    if cache_path:
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        atomic_json(cache_path, {'schema': CACHE_SCHEMA, 'parser': parser, 'snapshot': result})
+    return result
 
 
 if __name__ == '__main__':
@@ -43,8 +81,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source', required=True, type=Path)
     parser.add_argument('--output', required=True, type=Path)
+    parser.add_argument('--cache-root', type=Path)
     args = parser.parse_args()
-    result = snapshot(args.source)
+    result = snapshot(args.source, cache_root=args.cache_root)
     with args.output.open('x', encoding='utf-8', newline='\n') as stream:
         json.dump(result, stream, ensure_ascii=False, indent=2)
         stream.write('\n')

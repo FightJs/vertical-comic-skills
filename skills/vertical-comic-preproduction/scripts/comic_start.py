@@ -109,9 +109,12 @@ def prepare(project,book,ids,*,script=None,assets=None,output=None,workers=None,
     if source_catalog is not None: write(run/'脚本来源索引.json',source_catalog)
     cfg=run/'本次配置.json';write(cfg,config);read_config(cfg)
     snap=create(run/'00_总控/运行版本',memory_source=memory_source(config))
+    frozen_scripts=Path(snap['path']).parent/'skills/vertical-comic-preproduction/scripts'
+    scheduler_policy=read(frozen_scripts/'runtime_capabilities.json').get('preparation_scheduler',{}).get('policy')
     for eid in ids:
         cmd=[sys.executable, '-X', 'utf8','-B',str(Path(snap['path']).parent/'skills/vertical-comic-preproduction/scripts/init_preproduction.py'),'--book',book,'--episode',eid,'--config',str(cfg),'--runtime-snapshot',snap['path'],'--task-context',str(task_path),'--execution-context',clock['runtime_execution_context']['path'],'--output',str(run/eid),'--backend','codex_builtin_imagegen']
         if image_review_profile != 'full': cmd.extend(['--image-review-profile',image_review_profile,'--speed-policy','bounded_stage_fallback_v1'])
+        if scheduler_policy=='preparation_scheduler_v1':cmd.extend(['--preparation-scheduler-policy',scheduler_policy])
         proc=subprocess.run(cmd,capture_output=True,text=True, encoding='utf-8')
         if proc.returncode:raise ValueError('初始化失败，保留诊断运行目录:'+eid+':'+proc.stderr[-1000:])
     profile_update={'status':'UNCHANGED'}
@@ -145,6 +148,21 @@ def prepare(project,book,ids,*,script=None,assets=None,output=None,workers=None,
     from delivery_contract import initialize as initialize_delivery
     result['delivery_identity']=initialize_delivery(run,'preparation',[run/e/'00_输入审计/生产流程.json' for e in ids],
         package_mode=delivery_mode,max_file_bytes=max_file_bytes,task_id=task['task_id'])
+    if scheduler_policy=='preparation_scheduler_v1':
+        from platform_io import atomic_json
+        from codex_reference_contract import digest
+        manifest=run/'00_任务协调/preparation-host.json'
+        descriptor={'policy':scheduler_policy,'book_id':book,'episode_ids':ids,'config':str(cfg),
+                    'source_cache_root':str(project/'.comic/cache/script-catalog'),
+                    'states':[str(run/e/'00_输入审计/生产流程.json') for e in ids],
+                    'runtime_manifest':snap,'runtime_execution_context':clock['runtime_execution_context'],
+                    'scripts':str(frozen_scripts),'python':sys.executable,
+                    'asset_ledger_root':str(run),'preparation_only':True}
+        atomic_json(manifest,descriptor)
+        entry=frozen_scripts/'preparation_host.py'
+        result['preparation_host']={'policy':scheduler_policy,'manifest':{'path':str(manifest),'sha256':digest(manifest)},
+                                    'entry':str(entry),'command':[sys.executable,'-B',str(entry),'serve','--run-root',str(run)],
+                                    'native_driver':'model_tool_calls_required','dispatch_authorized':False,'image_calls':0}
     result.update(start_display(run/'00_显示进度','preparation',[run/e/'00_输入审计/生产流程.json' for e in ids],config=config.get('progress')))
     result.update(clock)
     from deadline_delivery import start_watch
